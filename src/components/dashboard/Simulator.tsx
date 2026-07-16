@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Slider } from "@/components/ui/slider";
-import { Play, Cpu, ShieldCheck, Building2, Users } from "lucide-react";
+import { Play, Cpu, ShieldCheck, Building2, Users, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 interface Row {
   label: string;
@@ -9,14 +10,29 @@ interface Row {
 }
 
 const rows: Row[] = [
-  { label: "Patrol Density", icon: Users, hint: "Active units per km²" },
+  { label: "Patrol Density", icon: Users, hint: "Active units per km² · Bengaluru City" },
   { label: "Infrastructure Health", icon: Building2, hint: "Critical asset integrity" },
-  { label: "Rapid Response Units", icon: ShieldCheck, hint: "Deployable within 8min" },
+  { label: "Rapid Response Units", icon: ShieldCheck, hint: "Deployable within 8min · Hoysala fleet" },
 ];
 
 export function Simulator() {
   const [vals, setVals] = useState([62, 78, 45]);
+  const [running, setRunning] = useState(false);
+  const [lastImpact, setLastImpact] = useState<number | null>(null);
   const impact = Math.round((vals[0] * 0.4 + vals[1] * 0.35 + vals[2] * 0.25) / 1.2);
+
+  const run = () => {
+    if (running) return;
+    setRunning(true);
+    toast("Running causal simulation…", { description: "Computing counterfactual across BLR sectors." });
+    setTimeout(() => {
+      setRunning(false);
+      setLastImpact(impact);
+      toast.success(`Simulation complete · −${impact}% incidents`, {
+        description: "Model: causal-v2.4 · 30d rolling window",
+      });
+    }, 1200);
+  };
 
   return (
     <div className="overflow-hidden rounded-xl border border-white/5 bg-card">
@@ -31,7 +47,7 @@ export function Simulator() {
           </span>
         </div>
         <div className="font-mono text-[10px] text-muted-foreground">
-          Baseline · 30d rolling window
+          {lastImpact !== null ? `Last run · −${lastImpact}%` : "Baseline · 30d rolling window"}
         </div>
       </div>
 
@@ -63,7 +79,6 @@ export function Simulator() {
           </div>
         ))}
 
-        {/* Run button + impact */}
         <div className="flex flex-col items-stretch justify-between rounded-lg border border-white/5 bg-background/40 p-4">
           <div>
             <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
@@ -74,9 +89,13 @@ export function Simulator() {
               <span className="ml-1 text-xs text-emerald-400">incidents</span>
             </div>
           </div>
-          <button className="group mt-4 flex items-center justify-center gap-2 rounded-md bg-primary/15 px-4 py-2.5 text-sm font-medium text-primary ring-glow-electric transition hover:bg-primary/25">
-            <Play className="h-3.5 w-3.5 fill-current" />
-            Run Simulation
+          <button
+            onClick={run}
+            disabled={running}
+            className="group mt-4 flex items-center justify-center gap-2 rounded-md bg-primary/15 px-4 py-2.5 text-sm font-medium text-primary ring-glow-electric transition hover:bg-primary/25 disabled:opacity-60"
+          >
+            {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5 fill-current" />}
+            {running ? "Simulating…" : "Run Simulation"}
           </button>
         </div>
       </div>
