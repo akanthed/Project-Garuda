@@ -1,13 +1,14 @@
 'use client';
 
 import { useEffect, useState } from "react";
-import { AlertTriangle, ArrowUpRight, ShieldAlert, Info } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, ShieldAlert, Info, ClipboardCheck } from "lucide-react";
 import { fetchAnomalies } from "@/lib/mock-api";
 import type { StationAnomaly } from "@/lib/types";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ActionBrief } from "@/components/dashboard/ActionBrief";
 
 interface AlertsFeedProps {
   /** Jump the dashboard to a full view (geospatial/network) when a row is clicked */
@@ -18,6 +19,7 @@ export function AlertsFeed({ onOpenView }: AlertsFeedProps) {
   const { locale } = useLanguage();
   const [anomalies, setAnomalies] = useState<StationAnomaly[]>([]);
   const [loading, setLoading] = useState(true);
+  const [briefAnomaly, setBriefAnomaly] = useState<StationAnomaly | null>(null);
 
   useEffect(() => {
     fetchAnomalies().then(({ data }) => {
@@ -54,11 +56,11 @@ export function AlertsFeed({ onOpenView }: AlertsFeedProps) {
           anomalies.slice(0, 5).map((a) => (
             <div
               key={a.station_id}
-              className="flex items-center gap-2 rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2.5 transition hover:border-[var(--danger)]/30 hover:bg-white/[0.04]"
+              className="rounded-lg border border-white/5 bg-white/[0.02] p-3 transition hover:border-[var(--danger)]/30 hover:bg-white/[0.04]"
             >
               <button
                 onClick={() => onOpenView?.("network")}
-                className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left"
+                className="flex w-full min-w-0 items-center justify-between gap-3 text-left"
               >
                 <div className="flex min-w-0 items-center gap-2.5">
                   <div
@@ -79,15 +81,25 @@ export function AlertsFeed({ onOpenView }: AlertsFeedProps) {
                   </div>
                 </div>
                 <div className={cn(
-                  "flex shrink-0 items-center gap-1.5 font-mono text-[10px] font-medium",
+                  "flex shrink-0 items-center gap-1.5 text-right font-mono text-[10px] font-medium",
                   a.severity === "critical" ? "text-[var(--danger)]" : "text-orange-400"
                 )}>
-                  {t(a.severity === "critical" ? "alerts_critical_spike" : "alerts_unusual_spike", locale)}
+                  <span className="max-w-24 leading-tight">{t(a.severity === "critical" ? "alerts_critical_spike" : "alerts_unusual_spike", locale)}</span>
                   <ArrowUpRight className="h-3 w-3" />
                 </div>
               </button>
-              <Popover>
-                <PopoverTrigger asChild>
+              <div className="mt-3 flex items-center gap-2 border-t border-white/5 pt-2.5">
+                <button
+                  type="button"
+                  onClick={() => setBriefAnomaly(a)}
+                  title={t("action_brief_open", locale)}
+                  className="flex h-7 min-w-0 flex-1 items-center justify-center gap-1 rounded-md border border-primary/20 px-2 text-primary transition hover:bg-primary/10"
+                >
+                  <ClipboardCheck className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate text-[10px]">{t("action_brief_open", locale)}</span>
+                </button>
+                <Popover>
+                  <PopoverTrigger asChild>
                   <button
                     type="button"
                     title={t("alerts_anomaly_help", locale)}
@@ -96,16 +108,17 @@ export function AlertsFeed({ onOpenView }: AlertsFeedProps) {
                   >
                     <Info className="h-3.5 w-3.5" />
                   </button>
-                </PopoverTrigger>
-                <PopoverContent align="end" className="w-80 border-white/10 bg-background/95 p-4 text-xs backdrop-blur-sm">
-                  <div className="font-medium text-foreground">{t("alerts_anomaly_help", locale)}</div>
-                  <p className="mt-2 leading-relaxed text-muted-foreground">{t("alerts_anomaly_explainer", locale)}</p>
-                  <p className="mt-2 border-t border-white/5 pt-2 text-muted-foreground">{t("alerts_anomaly_action", locale)}</p>
-                  <div className="mt-3 font-mono text-[10px] text-muted-foreground">
-                    {t("alerts_diagnostic", locale)}: z={a.z_score}
-                  </div>
-                </PopoverContent>
-              </Popover>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-80 border-white/10 bg-background/95 p-4 text-xs backdrop-blur-sm">
+                    <div className="font-medium text-foreground">{t("alerts_anomaly_help", locale)}</div>
+                    <p className="mt-2 leading-relaxed text-muted-foreground">{t("alerts_anomaly_explainer", locale)}</p>
+                    <p className="mt-2 border-t border-white/5 pt-2 text-muted-foreground">{t("alerts_anomaly_action", locale)}</p>
+                    <div className="mt-3 font-mono text-[10px] text-muted-foreground">
+                      {t("alerts_diagnostic", locale)}: z={a.z_score}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
             </div>
           ))
         )}
@@ -119,6 +132,7 @@ export function AlertsFeed({ onOpenView }: AlertsFeedProps) {
           {t("overview_open_network", locale)}
         </button>
       )}
+      <ActionBrief anomaly={briefAnomaly} open={briefAnomaly !== null} onOpenChange={(open) => { if (!open) setBriefAnomaly(null); }} />
     </div>
   );
 }
