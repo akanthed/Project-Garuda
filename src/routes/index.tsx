@@ -1,6 +1,6 @@
-import { useState, lazy, Suspense } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { Network, MapPin, TrendingDown, ShieldCheck } from "lucide-react";
+import { Network, MapPin, TrendingDown, ShieldCheck, type LucideIcon } from "lucide-react";
 import { Toaster } from "@/components/ui/sonner";
 import { Sidebar, type ViewKey } from "@/components/dashboard/Sidebar";
 import { TopBar } from "@/components/dashboard/TopBar";
@@ -8,9 +8,20 @@ import { KpiCard } from "@/components/dashboard/KpiCard";
 import { Simulator } from "@/components/dashboard/Simulator";
 import { ReportsView } from "@/components/dashboard/ReportsView";
 import { SettingsView } from "@/components/dashboard/SettingsView";
+import { fetchKpiMetrics } from "@/lib/mock-api";
+import type { KpiMetric } from "@/lib/types";
 import { getSession, isAuthenticated, type Officer } from "@/lib/auth";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { t } from "@/lib/i18n";
+import { t, type TranslationKey } from "@/lib/i18n";
+
+// Maps backend KPI ids -> local icon + translated label (backend labels are
+// plain English only; we still want the simplified/Kannada label locally).
+const KPI_META: Record<string, { icon: LucideIcon; labelKey: TranslationKey }> = {
+  "criminal-nodes":      { icon: Network,      labelKey: "kpi_criminal_nodes" },
+  "hotspot-alerts":      { icon: MapPin,        labelKey: "kpi_hotspot_alerts" },
+  "risk-volatility":     { icon: TrendingDown,  labelKey: "kpi_risk_volatility" },
+  "resource-readiness":  { icon: ShieldCheck,   labelKey: "kpi_readiness" },
+};
 
 // Lazy-load heavy canvas components — keeps login/dashboard first paint instant
 const GeoMap = lazy(() =>
@@ -87,58 +98,50 @@ function Dashboard() {
   const officer = getSession() as Officer;
   const [view, setView] = useState<ViewKey>("dashboard");
   const { locale } = useLanguage();
+  const [kpis, setKpis] = useState<KpiMetric[]>([]);
+  const [kpisLoading, setKpisLoading] = useState(true);
+
+  useEffect(() => {
+    fetchKpiMetrics().then(({ data }) => {
+      setKpis(data);
+      setKpisLoading(false);
+    });
+  }, []);
 
   return (
     <div className="flex min-h-screen bg-background text-foreground">
       <Toaster theme="dark" position="bottom-right" />
       <Sidebar active={view} onChange={setView} />
       <div className="flex flex-1 flex-col">
-        <TopBar officer={officer} />
+        <TopBar officer={officer} kpis={kpis} />
         <main className="flex-1 space-y-4 p-5">
           {view === "dashboard" && (
             <>
               <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <KpiCard
-                  label={t("kpi_criminal_nodes", locale)}
-                  value="1,284"
-                  delta="4.2%"
-                  trend="up"
-                  positive={false}
-                  icon={Network}
-                  data={[8, 12, 10, 14, 13, 16, 15, 18, 17, 20, 22, 21]}
-                  accent="electric"
-                />
-                <KpiCard
-                  label={t("kpi_hotspot_alerts", locale)}
-                  value="27"
-                  delta="12.1%"
-                  trend="up"
-                  positive={false}
-                  icon={MapPin}
-                  data={[10, 12, 11, 14, 16, 15, 18, 17, 22, 24, 26, 27]}
-                  accent="danger"
-                />
-                <KpiCard
-                  label={t("kpi_risk_volatility", locale)}
-                  value="0.74"
-                  delta="3.4%"
-                  trend="down"
-                  positive={true}
-                  icon={TrendingDown}
-                  data={[90, 88, 85, 82, 84, 81, 80, 79, 77, 76, 75, 74]}
-                  accent="electric"
-                />
-                <KpiCard
-                  label={t("kpi_readiness", locale)}
-                  value="92%"
-                  delta="1.8%"
-                  trend="up"
-                  positive
-                  icon={ShieldCheck}
-                  data={[80, 82, 85, 84, 87, 89, 88, 90, 91, 90, 92, 92]}
-                  accent="electric"
-                />
+                {kpisLoading ? (
+                  Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="h-[122px] animate-pulse rounded-xl border border-white/5 bg-card" />
+                  ))
+                ) : (
+                  kpis.map((k) => {
+                    const meta = KPI_META[k.id];
+                    return (
+                      <KpiCard
+                        key={k.id}
+                        label={meta ? t(meta.labelKey, locale) : k.label}
+                        value={k.value}
+                        delta={k.delta}
+                        trend={k.trend}
+                        positive={k.positive}
+                        icon={meta?.icon ?? Network}
+                        data={k.sparkline}
+                        accent={k.accent}
+                      />
+                    );
+                  })
+                )}
               </section>
+
 
               <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
                 <Suspense fallback={<MapPlaceholder />}>
@@ -192,7 +195,7 @@ function Dashboard() {
           {view === "settings" && <SettingsView />}
 
           <footer className="flex items-center justify-between pt-2 font-mono text-[10px] text-muted-foreground">
-            <div>SENTINEL BLR v4.2.1 · secure channel</div>
+            <div>GARUDA BLR v4.2.1 · secure channel</div>
             <div>build 0a4f9f · region ap-south-blr</div>
           </footer>
         </main>

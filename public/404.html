@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Garuda BLR</title>
+  </head>
+  <body>
+    <script>
+      // Catalyst's static Web Client Hosting has no SPA fallback rule, so a
+      // direct/deep link under /app/* (e.g. /app/login) that isn't an actual
+      // file on disk lands here instead of Catalyst's generic "page doesn't
+      // exist" placeholder. Redirect to the real app shell (index.html),
+      // stashing the intended path in a query param so client.tsx can restore
+      // it via history.replaceState before the router mounts and matches
+      // routes. This is the standard "SPA on static hosting" redirect trick.
+      (function () {
+        var basePath = "/app/";
+        var pathname = window.location.pathname;
+        var sub = pathname.indexOf(basePath) === 0 ? pathname.slice(basePath.length - 1) : pathname;
+        var search = window.location.search ? "&q=" + encodeURIComponent(window.location.search.slice(1)) : "";
+        var target = basePath + "index.html?p=" + encodeURIComponent(sub) + search + window.location.hash;
+        window.location.replace(target);
+      })();
+    </script>
+  </body>
+</html>

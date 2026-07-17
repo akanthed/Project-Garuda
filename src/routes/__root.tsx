@@ -6,6 +6,7 @@ import {
   useRouter,
 } from "@tanstack/react-router";
 import { LanguageProvider } from "@/contexts/LanguageContext";
+import { ThemeProvider } from "@/contexts/ThemeContext";
 
 function NotFoundComponent() {
   return (
@@ -74,10 +75,12 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
   return (
-    <LanguageProvider>
-      <QueryClientProvider client={queryClient}>
-        <Outlet />
-      </QueryClientProvider>
-    </LanguageProvider>
+    <ThemeProvider>
+      <LanguageProvider>
+        <QueryClientProvider client={queryClient}>
+          <Outlet />
+        </QueryClientProvider>
+      </LanguageProvider>
+    </ThemeProvider>
   );
 }

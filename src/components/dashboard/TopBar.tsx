@@ -1,19 +1,23 @@
 ﻿import { useState } from "react";
-import { Search, Bell, Command, LogOut, FileDown, Loader2 } from "lucide-react";
+import { Search, Bell, Command, LogOut, FileDown, Loader2, Sun, Moon } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "@tanstack/react-router";
 import { logout, type Officer } from "@/lib/auth";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { t } from "@/lib/i18n";
 import { exportBrief } from "@/lib/mock-api";
+import type { KpiMetric } from "@/lib/types";
 
 interface TopBarProps {
   officer: Officer;
+  kpis?: KpiMetric[];
 }
 
-export function TopBar({ officer }: TopBarProps) {
+export function TopBar({ officer, kpis }: TopBarProps) {
   const navigate = useNavigate();
   const { locale, toggle } = useLanguage();
+  const { theme, toggle: toggleTheme } = useTheme();
   const [q, setQ] = useState("");
   const [exporting, setExporting] = useState(false);
 
@@ -28,14 +32,16 @@ export function TopBar({ officer }: TopBarProps) {
     setExporting(true);
     toast("Generating Intelligence Brief…", { description: "Powered by Zoho Catalyst SmartBrowz" });
     try {
+      const kpiMap = Object.fromEntries((kpis ?? []).map((k) => [k.label, k.value]));
+      const hotspotValue = kpis?.find((k) => k.id === "hotspot-alerts")?.value;
       const blob = await exportBrief({
-        kpis: {
+        kpis: Object.keys(kpiMap).length > 0 ? kpiMap : {
           "Criminal Nodes": "1,284",
           "Hotspot Alerts": "27",
           "Risk Volatility": "0.74",
           "Resource Readiness": "92%",
         },
-        hotspot_count: 27,
+        hotspot_count: hotspotValue ? parseInt(hotspotValue, 10) || 0 : 27,
         top_crime_types: ["Cyber Crime", "Property Theft", "Narcotics", "Assault"],
         simulation_impact: 58,
       });
@@ -113,7 +119,16 @@ export function TopBar({ officer }: TopBarProps) {
           ) : (
             <FileDown className="h-3.5 w-3.5" />
           )}
-          <span className="hidden sm:inline">Brief</span>
+          <span className="hidden sm:inline">{t("topbar_brief", locale)}</span>
+        </button>
+
+        {/* Theme toggle */}
+        <button
+          onClick={toggleTheme}
+          title={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+          className="flex h-8 w-8 items-center justify-center rounded-md border border-white/5 bg-white/[0.02] text-muted-foreground transition hover:border-primary/30 hover:text-primary"
+        >
+          {theme === "dark" ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
         </button>
 
         {/* Language toggle */}
@@ -141,7 +156,7 @@ export function TopBar({ officer }: TopBarProps) {
         {/* Logout */}
         <button
           onClick={handleLogout}
-          title="End session"
+          title={t("topbar_logout_tt", locale)}
           className="flex h-8 w-8 items-center justify-center rounded-md border border-white/5 text-muted-foreground transition hover:border-[var(--danger)]/30 hover:text-[var(--danger)]"
         >
           <LogOut className="h-3.5 w-3.5" />

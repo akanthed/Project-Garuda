@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { FileText, Search, Filter, ChevronDown, ExternalLink, RefreshCw, Languages, Loader2 } from "lucide-react";
 import { fetchCaseReports } from "@/lib/mock-api";
 import { translateTexts } from "@/lib/translate";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { t } from "@/lib/i18n";
 import type { CaseReport, CaseSeverity, CaseStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -42,6 +44,7 @@ function StatusBadge({ status }: { status: CaseStatus }) {
 // ─── Case detail drawer ────────────────────────────────────────────────────────
 
 function CaseDetailDrawer({ report, onClose }: { report: CaseReport; onClose: () => void }) {
+  const { locale } = useLanguage();
   const [translated, setTranslated] = useState<string | null>(null);
   const [translating, setTranslating] = useState(false);
   const [translateSource, setTranslateSource] = useState<"zia" | "fallback" | null>(null);
@@ -67,7 +70,7 @@ function CaseDetailDrawer({ report, onClose }: { report: CaseReport; onClose: ()
           <div className="mt-1 text-base font-medium leading-snug">{translated ?? report.title}</div>
           {translateSource && (
             <div className="mt-1 font-mono text-[9px] uppercase tracking-widest text-muted-foreground/60">
-              {translateSource === "zia" ? "Translated via Catalyst Zia" : "Translation unavailable — showing original"}
+              {translateSource === "zia" ? t("reports_translate_zia", locale) : t("reports_translate_fallback", locale)}
             </div>
           )}
         </div>
@@ -84,20 +87,20 @@ function CaseDetailDrawer({ report, onClose }: { report: CaseReport; onClose: ()
             onClick={onClose}
             className="rounded-md border border-white/5 px-3 py-1.5 text-xs text-muted-foreground transition hover:border-white/15 hover:text-foreground"
           >
-            Close
+            {t("common_close", locale)}
           </button>
         </div>
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-x-8 gap-y-3 md:grid-cols-3">
         {[
-          { label: "District", value: report.district },
-          { label: "Station", value: report.station },
-          { label: "IPC Section", value: report.ipc_section },
-          { label: "Crime Type", value: report.crime_type },
-          { label: "Date Filed", value: new Date(report.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) },
-          { label: "Assigned Officer", value: report.assigned_officer },
-          { label: "Suspects Named", value: String(report.suspects) },
+          { label: t("reports_detail_area", locale), value: report.district },
+          { label: t("reports_detail_station", locale), value: report.station },
+          { label: t("reports_detail_section", locale), value: report.ipc_section },
+          { label: t("reports_detail_type", locale), value: report.crime_type },
+          { label: t("reports_detail_filed", locale), value: new Date(report.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) },
+          { label: t("reports_detail_officer", locale), value: report.assigned_officer },
+          { label: t("reports_detail_suspects", locale), value: String(report.suspects) },
         ].map(({ label, value }) => (
           <div key={label}>
             <div className="text-[10px] uppercase tracking-widest text-muted-foreground">{label}</div>
@@ -131,6 +134,7 @@ function StatCard({ label, value, sub }: { label: string; value: string | number
 const SEVERITY_ORDER: CaseSeverity[] = ["critical", "high", "medium", "low"];
 
 export function ReportsView() {
+  const { locale } = useLanguage();
   const [reports, setReports] = useState<CaseReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -175,9 +179,9 @@ export function ReportsView() {
         <div className="flex items-center gap-3">
           <FileText className="h-4 w-4 text-primary" />
           <div>
-            <div className="text-base font-medium">Case Reports</div>
+            <div className="text-base font-medium">{t("reports_title", locale)}</div>
             <div className="font-mono text-[11px] text-muted-foreground">
-              Karnataka State Police · KSP-BLR Intelligence Digest
+              {t("reports_subtitle", locale)}
             </div>
           </div>
         </div>
@@ -187,16 +191,16 @@ export function ReportsView() {
           className="flex items-center gap-2 rounded-md border border-white/5 bg-white/[0.02] px-3 py-1.5 text-xs text-muted-foreground transition hover:border-white/15 hover:text-foreground disabled:opacity-50"
         >
           <RefreshCw className={cn("h-3 w-3", refreshing && "animate-spin")} />
-          Refresh
+          {t("reports_refresh", locale)}
         </button>
       </div>
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatCard label="Total Cases" value={reports.length} sub="all districts" />
-        <StatCard label="Active / Investigating" value={openCount} sub="require attention" />
-        <StatCard label="Critical Severity" value={criticalCount} sub="immediate action" />
-        <StatCard label="Stations Covered" value="1,100+" sub="KSP network" />
+        <StatCard label={t("reports_total", locale)} value={reports.length} sub="all districts" />
+        <StatCard label={t("reports_active", locale)} value={openCount} sub="require attention" />
+        <StatCard label={t("reports_critical", locale)} value={criticalCount} sub="immediate action" />
+        <StatCard label={t("reports_stations", locale)} value="1,100+" sub="KSP network" />
       </div>
 
       {/* Filters */}
@@ -206,7 +210,7 @@ export function ReportsView() {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search cases, IDs, districts…"
+            placeholder={t("reports_search", locale)}
             className="flex-1 bg-transparent text-foreground outline-none placeholder:text-muted-foreground/60"
           />
         </div>
@@ -218,7 +222,7 @@ export function ReportsView() {
             onChange={(e) => setFilterSeverity(e.target.value as CaseSeverity | "all")}
             className="appearance-none rounded-md border border-white/5 bg-card pl-8 pr-7 py-2 font-mono text-xs text-foreground outline-none"
           >
-            <option value="all">All Severities</option>
+            <option value="all">{t("reports_all_severities", locale)}</option>
             {SEVERITY_ORDER.map((s) => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
           </select>
           <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
@@ -230,7 +234,7 @@ export function ReportsView() {
             onChange={(e) => setFilterStatus(e.target.value as CaseStatus | "all")}
             className="appearance-none rounded-md border border-white/5 bg-card px-3 pr-7 py-2 font-mono text-xs text-foreground outline-none"
           >
-            <option value="all">All Statuses</option>
+            <option value="all">{t("reports_all_statuses", locale)}</option>
             {(["open", "investigating", "resolved", "closed"] as CaseStatus[]).map((s) => (
               <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
             ))}
@@ -249,13 +253,22 @@ export function ReportsView() {
         {loading ? (
           <div className="flex h-48 items-center justify-center gap-3">
             <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary/20 border-t-primary" />
-            <span className="font-mono text-sm text-muted-foreground">Loading case index…</span>
+            <span className="font-mono text-sm text-muted-foreground">{t("reports_loading", locale)}</span>
           </div>
         ) : (
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-white/5 text-left">
-                {["Case ID", "Title", "District", "Crime Type", "Date", "Severity", "Status", ""].map((h) => (
+                {[
+                  t("reports_col_case", locale),
+                  t("reports_col_title", locale),
+                  t("reports_col_area", locale),
+                  t("reports_col_type", locale),
+                  t("reports_col_date", locale),
+                  t("reports_col_severity", locale),
+                  t("reports_col_status", locale),
+                  "",
+                ].map((h) => (
                   <th key={h} className="px-4 py-3 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
                     {h}
                   </th>
@@ -266,7 +279,7 @@ export function ReportsView() {
               {filtered.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-12 text-center font-mono text-sm text-muted-foreground">
-                    No cases match the current filters.
+                    {t("reports_no_match", locale)}
                   </td>
                 </tr>
               ) : (
@@ -303,8 +316,8 @@ export function ReportsView() {
         )}
         {!loading && filtered.length > 0 && (
           <div className="flex items-center justify-between border-t border-white/5 px-4 py-2.5 font-mono text-[10px] text-muted-foreground">
-            <span>Showing {filtered.length} of {reports.length} cases</span>
-            <span>KSP Intelligence Digest · {new Date().toLocaleDateString("en-IN")}</span>
+            <span>{t("reports_showing", locale)} {filtered.length} {t("reports_of", locale)} {reports.length}</span>
+            <span>KSP · {new Date().toLocaleDateString("en-IN")}</span>
           </div>
         )}
       </div>

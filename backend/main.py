@@ -312,17 +312,23 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Restrict CORS to known frontend origin(s) via env var (comma-separated).
-# Catalyst API Gateway cannot front AppSail apps directly (it only supports
-# Basic/Advanced I/O Functions and the Web Client as targets), so origin
-# restriction + the rate limiter below are the in-app substitute.
-_allowed_origins = os.environ.get("ALLOWED_ORIGINS", "*")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"] if _allowed_origins == "*" else [o.strip() for o in _allowed_origins.split(",")],
-    allow_methods=["GET", "POST"],
-    allow_headers=["*"],
-)
+# NOTE on CORS: Catalyst's AppSail gateway already injects a correct
+# Access-Control-Allow-Origin header itself, scoped to the project's linked
+# Web Client origin(s) (verified: an arbitrary Origin gets no ACAO header at
+# all, so it's a real restriction, not a permissive reflect-any-origin).
+# Adding our own CORSMiddleware on top of THAT caused the platform's header
+# and ours to both be sent, producing an invalid duplicated ACAO value that
+# real browsers reject outright. So only add our own CORS middleware for
+# local dev (no Catalyst gateway in front of us there) — detect that via
+# X_ZOHO_CATALYST_LISTEN_PORT, which Catalyst always injects for AppSail.
+if not os.environ.get("X_ZOHO_CATALYST_LISTEN_PORT"):
+    _allowed_origins = os.environ.get("ALLOWED_ORIGINS", "*")
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"] if _allowed_origins == "*" else [o.strip() for o in _allowed_origins.split(",")],
+        allow_methods=["GET", "POST"],
+        allow_headers=["*"],
+    )
 
 @app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next):

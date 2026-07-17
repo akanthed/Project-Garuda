@@ -1,9 +1,12 @@
 'use client';
 
 import { useState } from "react";
-import { Settings, Shield, Bell, Monitor, Globe2, Key, ChevronRight, Check } from "lucide-react";
+import { Settings, Shield, Bell, Monitor, Globe2, Key, ChevronRight, Check, Sun, Moon } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { useTheme } from "@/contexts/ThemeContext";
+import { t, type TranslationKey } from "@/lib/i18n";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -18,27 +21,27 @@ type SettingsSection = "profile" | "alerts" | "display" | "integrations" | "secu
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
 
-const NAV_ITEMS: { id: SettingsSection; label: string; icon: typeof Settings }[] = [
-  { id: "profile", label: "Officer Profile", icon: Shield },
-  { id: "alerts", label: "Alert Preferences", icon: Bell },
-  { id: "display", label: "Display & Theme", icon: Monitor },
-  { id: "integrations", label: "Integrations", icon: Globe2 },
-  { id: "security", label: "Security & Access", icon: Key },
+const NAV_ITEMS: { id: SettingsSection; labelKey: TranslationKey; icon: typeof Settings }[] = [
+  { id: "profile", labelKey: "settings_nav_profile", icon: Shield },
+  { id: "alerts", labelKey: "settings_nav_alerts", icon: Bell },
+  { id: "display", labelKey: "settings_nav_display", icon: Monitor },
+  { id: "integrations", labelKey: "settings_nav_integrations", icon: Globe2 },
+  { id: "security", labelKey: "settings_nav_security", icon: Key },
 ];
 
 const ALERT_TOGGLES: ToggleSetting[] = [
-  { id: "critical-incidents", label: "Critical Incident Alerts", description: "Push notification on THREATCON escalation.", default: true },
-  { id: "hotspot-change", label: "Hotspot Delta Notifications", description: "Alert when hotspot intensity changes >15%.", default: true },
-  { id: "network-flag", label: "Network Node Flags", description: "Notify when a suspect node is re-activated.", default: false },
-  { id: "patrol-gap", label: "Patrol Coverage Gaps", description: "Alert on zones uncovered > 45 minutes.", default: true },
-  { id: "daily-digest", label: "Daily Intelligence Digest", description: "Summary email at 07:00 IST every day.", default: false },
+  { id: "critical-incidents", label: "Serious Incident Alerts", description: "Notify me right away for high-danger events.", default: true },
+  { id: "hotspot-change", label: "Danger Area Changes", description: "Alert when a danger area gets much worse.", default: true },
+  { id: "network-flag", label: "Suspect Flags", description: "Notify when a known suspect shows up again.", default: false },
+  { id: "patrol-gap", label: "Patrol Coverage Gaps", description: "Alert if an area has no patrol for over 45 minutes.", default: true },
+  { id: "daily-digest", label: "Daily Summary", description: "Get a summary email every day at 7:00 AM.", default: false },
 ];
 
 const DISPLAY_TOGGLES: ToggleSetting[] = [
-  { id: "animations", label: "Map Animations", description: "Pulse and glow effects on threat heatmap.", default: true },
-  { id: "compact-kpi", label: "Compact KPI Mode", description: "Reduce KPI card height for more canvas space.", default: false },
-  { id: "auto-refresh", label: "Auto-Refresh Data", description: "Reload intelligence feed every 60 seconds.", default: true },
-  { id: "kannada", label: "Kannada Label Overlay", description: "Show Kannada district names via Zia Services.", default: false },
+  { id: "animations", label: "Map Animations", description: "Show moving effects on the danger map.", default: true },
+  { id: "compact-kpi", label: "Compact Cards", description: "Make the top summary cards smaller.", default: false },
+  { id: "auto-refresh", label: "Auto-Refresh Data", description: "Reload the latest data every 60 seconds.", default: true },
+  { id: "kannada", label: "Kannada Place Names", description: "Show area names in Kannada on the map.", default: false },
 ];
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -83,6 +86,7 @@ function SectionCard({ title, children }: { title: string; children: React.React
 
 function ProfileSection() {
   const [saved, setSaved] = useState(false);
+  const { locale } = useLanguage();
 
   const save = () => {
     toast.success("Profile updated", { description: "Changes saved to KSP identity store." });
@@ -92,7 +96,7 @@ function ProfileSection() {
 
   return (
     <div className="space-y-4">
-      <SectionCard title="Identity">
+      <SectionCard title={t("settings_section_identity", locale)}>
         {[
           { label: "Full Name", value: "Cpt. R. Vance", type: "text" },
           { label: "Badge Number", value: "KSP-BLR-7741", type: "text" },
@@ -110,11 +114,11 @@ function ProfileSection() {
         ))}
       </SectionCard>
 
-      <SectionCard title="Clearance">
+      <SectionCard title={t("settings_section_clearance", locale)}>
         {[
-          { label: "Clearance Level", value: "CLR-7 (Restricted)" },
-          { label: "Node Designation", value: "BLR-A1 · AP-South" },
-          { label: "Last Authentication", value: "2026-07-16 18:42 IST" },
+          { label: "Access Level", value: "CLR-7 (Full Access)" },
+          { label: "Team", value: "BLR-A1 · South Zone" },
+          { label: "Last Login", value: "2026-07-16 18:42 IST" },
         ].map(({ label, value }) => (
           <div key={label} className="flex items-center justify-between py-3 text-sm">
             <span className="text-muted-foreground">{label}</span>
@@ -128,15 +132,16 @@ function ProfileSection() {
         className="flex items-center gap-2 rounded-md bg-primary/15 px-4 py-2.5 text-sm font-medium text-primary transition hover:bg-primary/25"
       >
         {saved ? <Check className="h-4 w-4" /> : null}
-        {saved ? "Saved" : "Save Profile"}
+        {saved ? t("settings_saved", locale) : t("settings_save", locale)}
       </button>
     </div>
   );
 }
 
 function AlertsSection({ toggles, values, onChange }: { toggles: ToggleSetting[]; values: Record<string, boolean>; onChange: (id: string, v: boolean) => void }) {
+  const { locale } = useLanguage();
   return (
-    <SectionCard title="Notification Rules">
+    <SectionCard title={t("settings_section_alerts", locale)}>
       {toggles.map((s) => (
         <ToggleRow key={s.id} setting={s} value={values[s.id] ?? s.default} onChange={onChange} />
       ))}
@@ -144,15 +149,52 @@ function AlertsSection({ toggles, values, onChange }: { toggles: ToggleSetting[]
   );
 }
 
+function ThemeRow() {
+  const { theme, setTheme } = useTheme();
+  const { locale } = useLanguage();
+  return (
+    <div className="flex items-center justify-between py-3">
+      <div>
+        <div className="text-sm">{t("settings_theme_label", locale)}</div>
+        <div className="mt-0.5 text-[11px] text-muted-foreground">{t("settings_theme_desc", locale)}</div>
+      </div>
+      <div className="flex items-center gap-1 rounded-md border border-white/5 bg-background/40 p-0.5">
+        <button
+          onClick={() => setTheme("dark")}
+          className={cn(
+            "flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs transition",
+            theme === "dark" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <Moon className="h-3.5 w-3.5" /> {t("settings_theme_dark", locale)}
+        </button>
+        <button
+          onClick={() => setTheme("light")}
+          className={cn(
+            "flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs transition",
+            theme === "light" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <Sun className="h-3.5 w-3.5" /> {t("settings_theme_light", locale)}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function DisplaySection({ toggles, values, onChange }: { toggles: ToggleSetting[]; values: Record<string, boolean>; onChange: (id: string, v: boolean) => void }) {
+  const { locale } = useLanguage();
   return (
     <div className="space-y-4">
-      <SectionCard title="UI Preferences">
+      <SectionCard title={t("settings_theme_label", locale)}>
+        <ThemeRow />
+      </SectionCard>
+      <SectionCard title={t("settings_section_ui", locale)}>
         {toggles.map((s) => (
           <ToggleRow key={s.id} setting={s} value={values[s.id] ?? s.default} onChange={onChange} />
         ))}
       </SectionCard>
-      <SectionCard title="Data Density">
+      <SectionCard title={t("settings_section_density", locale)}>
         {(["Compact", "Standard", "Comfortable"] as const).map((opt) => (
           <div key={opt} className="flex items-center justify-between py-3 text-sm">
             <span>{opt}</span>
@@ -165,15 +207,16 @@ function DisplaySection({ toggles, values, onChange }: { toggles: ToggleSetting[
 }
 
 function IntegrationsSection() {
+  const { locale } = useLanguage();
   const integrations = [
-    { id: "zoho-ds", name: "Zoho Catalyst Data Store", status: "connected", desc: "ZCQL-backed synthetic crime records" },
-    { id: "zia", name: "Catalyst Zia Services", status: "connected", desc: "Kannada translation engine" },
-    { id: "appsail", name: "AppSail FastAPI Backend", status: "pending", desc: "causal-v2.4 inference engine" },
-    { id: "mapbox", name: "Mapbox GL (3D Canvas)", status: "pending", desc: "Hexagonal prism crime density tiles" },
+    { id: "zoho-ds", name: "Zoho Catalyst Data Store", status: "connected", desc: "Stores all case records" },
+    { id: "zia", name: "Catalyst Zia Services", status: "connected", desc: "Kannada translation" },
+    { id: "appsail", name: "AppSail Backend", status: "pending", desc: "Runs the crime analysis" },
+    { id: "mapbox", name: "Mapbox GL (3D Map)", status: "pending", desc: "Powers the city map" },
   ];
 
   return (
-    <SectionCard title="Connected Services">
+    <SectionCard title={t("settings_section_services", locale)}>
       {integrations.map((i) => (
         <div key={i.id} className="flex items-center justify-between py-3">
           <div>
@@ -193,14 +236,15 @@ function IntegrationsSection() {
 }
 
 function SecuritySection() {
+  const { locale } = useLanguage();
   return (
     <div className="space-y-4">
-      <SectionCard title="Session">
+      <SectionCard title={t("settings_section_session", locale)}>
         {[
           { label: "Session Token", value: "eyJ...BLR-A1 (active)" },
           { label: "IP Address", value: "10.14.22.4 · KSP-Intranet" },
           { label: "Session Expires", value: "2026-07-16 23:59 IST" },
-          { label: "2FA Status", value: "Enabled · TOTP" },
+          { label: "2FA Status", value: "Enabled" },
         ].map(({ label, value }) => (
           <div key={label} className="flex items-center justify-between py-3 text-sm">
             <span className="text-muted-foreground">{label}</span>
@@ -212,7 +256,7 @@ function SecuritySection() {
         onClick={() => toast("Session logged out", { description: "Redirecting to auth portal…" })}
         className="rounded-md border border-rose-500/20 bg-rose-500/10 px-4 py-2.5 text-sm text-rose-400 transition hover:bg-rose-500/20"
       >
-        End Session
+        {t("settings_end_session", locale)}
       </button>
     </div>
   );
@@ -221,6 +265,7 @@ function SecuritySection() {
 // ─── Main component ────────────────────────────────────────────────────────────
 
 export function SettingsView() {
+  const { locale } = useLanguage();
   const [active, setActive] = useState<SettingsSection>("profile");
   const [alertValues, setAlertValues] = useState<Record<string, boolean>>(
     Object.fromEntries(ALERT_TOGGLES.map((t) => [t.id, t.default]))
@@ -247,10 +292,10 @@ export function SettingsView() {
       <div className="w-52 shrink-0">
         <div className="flex items-center gap-2 mb-4">
           <Settings className="h-4 w-4 text-primary" />
-          <div className="text-sm font-medium">Settings</div>
+          <div className="text-sm font-medium">{t("settings_title", locale)}</div>
         </div>
         <nav className="space-y-0.5">
-          {NAV_ITEMS.map(({ id, label, icon: Icon }) => (
+          {NAV_ITEMS.map(({ id, labelKey, icon: Icon }) => (
             <button
               key={id}
               onClick={() => setActive(id)}
@@ -263,7 +308,7 @@ export function SettingsView() {
             >
               <div className="flex items-center gap-2.5">
                 <Icon className="h-3.5 w-3.5" strokeWidth={1.75} />
-                {label}
+                {t(labelKey, locale)}
               </div>
               {active === id && <ChevronRight className="h-3 w-3" />}
             </button>
@@ -271,8 +316,8 @@ export function SettingsView() {
         </nav>
 
         <div className="mt-6 rounded-lg border border-white/5 bg-card p-3">
-          <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Version</div>
-          <div className="mt-1 font-mono text-xs">Sentinel BLR v4.2.1</div>
+          <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">{t("settings_version", locale)}</div>
+          <div className="mt-1 font-mono text-xs">Garuda BLR v4.2.1</div>
           <div className="font-mono text-[10px] text-muted-foreground">build 0a4f9f · ap-south</div>
         </div>
       </div>

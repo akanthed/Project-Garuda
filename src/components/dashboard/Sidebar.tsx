@@ -39,7 +39,7 @@ export function Sidebar({ active, onChange }: SidebarProps) {
           {!collapsed && (
             <div className="ml-2 flex-1 min-w-0">
               <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-primary truncate">
-                Sentinel
+                Garuda
               </div>
               <div className="font-mono text-[9px] text-muted-foreground truncate">BLR · KSP</div>
             </div>
