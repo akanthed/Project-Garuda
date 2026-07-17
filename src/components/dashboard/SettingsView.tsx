@@ -12,8 +12,8 @@ import { t, type TranslationKey } from "@/lib/i18n";
 
 interface ToggleSetting {
   id: string;
-  label: string;
-  description: string;
+  labelKey: TranslationKey;
+  descriptionKey: TranslationKey;
   default: boolean;
 }
 
@@ -30,18 +30,18 @@ const NAV_ITEMS: { id: SettingsSection; labelKey: TranslationKey; icon: typeof S
 ];
 
 const ALERT_TOGGLES: ToggleSetting[] = [
-  { id: "critical-incidents", label: "Serious Incident Alerts", description: "Notify me right away for high-danger events.", default: true },
-  { id: "hotspot-change", label: "Danger Area Changes", description: "Alert when a danger area gets much worse.", default: true },
-  { id: "network-flag", label: "Suspect Flags", description: "Notify when a known suspect shows up again.", default: false },
-  { id: "patrol-gap", label: "Patrol Coverage Gaps", description: "Alert if an area has no patrol for over 45 minutes.", default: true },
-  { id: "daily-digest", label: "Daily Summary", description: "Get a summary email every day at 7:00 AM.", default: false },
+  { id: "critical-incidents", labelKey: "settings_alert_critical", descriptionKey: "settings_alert_critical_desc", default: true },
+  { id: "hotspot-change", labelKey: "settings_alert_hotspot", descriptionKey: "settings_alert_hotspot_desc", default: true },
+  { id: "network-flag", labelKey: "settings_alert_network", descriptionKey: "settings_alert_network_desc", default: false },
+  { id: "patrol-gap", labelKey: "settings_alert_patrol", descriptionKey: "settings_alert_patrol_desc", default: true },
+  { id: "daily-digest", labelKey: "settings_alert_digest", descriptionKey: "settings_alert_digest_desc", default: false },
 ];
 
 const DISPLAY_TOGGLES: ToggleSetting[] = [
-  { id: "animations", label: "Map Animations", description: "Show moving effects on the danger map.", default: true },
-  { id: "compact-kpi", label: "Compact Cards", description: "Make the top summary cards smaller.", default: false },
-  { id: "auto-refresh", label: "Auto-Refresh Data", description: "Reload the latest data every 60 seconds.", default: true },
-  { id: "kannada", label: "Kannada Place Names", description: "Show area names in Kannada on the map.", default: false },
+  { id: "animations", labelKey: "settings_display_animations", descriptionKey: "settings_display_animations_desc", default: true },
+  { id: "compact-kpi", labelKey: "settings_display_compact", descriptionKey: "settings_display_compact_desc", default: false },
+  { id: "auto-refresh", labelKey: "settings_display_refresh", descriptionKey: "settings_display_refresh_desc", default: true },
+  { id: "kannada", labelKey: "settings_display_kannada", descriptionKey: "settings_display_kannada_desc", default: false },
 ];
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -60,11 +60,12 @@ function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void 
 }
 
 function ToggleRow({ setting, value, onChange }: { setting: ToggleSetting; value: boolean; onChange: (id: string, v: boolean) => void }) {
+  const { locale } = useLanguage();
   return (
     <div className="flex items-center justify-between py-3">
       <div>
-        <div className="text-sm">{setting.label}</div>
-        <div className="mt-0.5 text-[11px] text-muted-foreground">{setting.description}</div>
+        <div className="text-sm">{t(setting.labelKey, locale)}</div>
+        <div className="mt-0.5 text-[11px] text-muted-foreground">{t(setting.descriptionKey, locale)}</div>
       </div>
       <Toggle on={value} onChange={(v) => onChange(setting.id, v)} />
     </div>
@@ -89,7 +90,7 @@ function ProfileSection() {
   const { locale } = useLanguage();
 
   const save = () => {
-    toast.success("Profile updated", { description: "Changes saved to KSP identity store." });
+    toast.success(t("settings_profile_updated", locale), { description: t("settings_profile_saved", locale) });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -98,13 +99,13 @@ function ProfileSection() {
     <div className="space-y-4">
       <SectionCard title={t("settings_section_identity", locale)}>
         {[
-          { label: "Full Name", value: "Cpt. R. Vance", type: "text" },
-          { label: "Badge Number", value: "KSP-BLR-7741", type: "text" },
-          { label: "Designation", value: "Circle Inspector", type: "text" },
-          { label: "Station", value: "Bengaluru City Police HQ", type: "text" },
-        ].map(({ label, value, type }) => (
-          <div key={label} className="py-3">
-            <label className="mb-1.5 block text-[10px] uppercase tracking-widest text-muted-foreground">{label}</label>
+          { labelKey: "settings_full_name", value: "Cpt. R. Vance", type: "text" },
+          { labelKey: "settings_badge_number", value: "KSP-BLR-7741", type: "text" },
+          { labelKey: "settings_designation", value: "Circle Inspector", type: "text" },
+          { labelKey: "settings_station", value: "Bengaluru City Police HQ", type: "text" },
+        ].map(({ labelKey, value, type }) => (
+          <div key={labelKey} className="py-3">
+            <label className="mb-1.5 block text-[10px] uppercase tracking-widest text-muted-foreground">{t(labelKey, locale)}</label>
             <input
               type={type}
               defaultValue={value}
@@ -116,12 +117,12 @@ function ProfileSection() {
 
       <SectionCard title={t("settings_section_clearance", locale)}>
         {[
-          { label: "Access Level", value: "CLR-7 (Full Access)" },
-          { label: "Team", value: "BLR-A1 · South Zone" },
-          { label: "Last Login", value: "2026-07-16 18:42 IST" },
-        ].map(({ label, value }) => (
-          <div key={label} className="flex items-center justify-between py-3 text-sm">
-            <span className="text-muted-foreground">{label}</span>
+          { labelKey: "settings_access_level", value: "CLR-7 (Full Access)" },
+          { labelKey: "settings_team", value: "BLR-A1 · South Zone" },
+          { labelKey: "settings_last_login", value: "2026-07-16 18:42 IST" },
+        ].map(({ labelKey, value }) => (
+          <div key={labelKey} className="flex items-center justify-between py-3 text-sm">
+            <span className="text-muted-foreground">{t(labelKey, locale)}</span>
             <span className="font-mono text-xs">{value}</span>
           </div>
         ))}
@@ -195,10 +196,10 @@ function DisplaySection({ toggles, values, onChange }: { toggles: ToggleSetting[
         ))}
       </SectionCard>
       <SectionCard title={t("settings_section_density", locale)}>
-        {(["Compact", "Standard", "Comfortable"] as const).map((opt) => (
+        {(["settings_density_compact", "settings_density_standard", "settings_density_comfortable"] as const).map((opt) => (
           <div key={opt} className="flex items-center justify-between py-3 text-sm">
-            <span>{opt}</span>
-            {opt === "Standard" && <span className="rounded-full bg-primary/20 px-2 py-0.5 font-mono text-[10px] text-primary">Active</span>}
+            <span>{t(opt, locale)}</span>
+            {opt === "settings_density_standard" && <span className="rounded-full bg-primary/20 px-2 py-0.5 font-mono text-[10px] text-primary">{t("settings_active", locale)}</span>}
           </div>
         ))}
       </SectionCard>
@@ -209,10 +210,10 @@ function DisplaySection({ toggles, values, onChange }: { toggles: ToggleSetting[
 function IntegrationsSection() {
   const { locale } = useLanguage();
   const integrations = [
-    { id: "zoho-ds", name: "Zoho Catalyst Data Store", status: "connected", desc: "Stores all case records" },
-    { id: "zia", name: "Catalyst Zia Services", status: "connected", desc: "Kannada translation" },
-    { id: "appsail", name: "AppSail Backend", status: "pending", desc: "Runs the crime analysis" },
-    { id: "mapbox", name: "Mapbox GL (3D Map)", status: "pending", desc: "Powers the city map" },
+    { id: "zoho-ds", name: "Zoho Catalyst Data Store", status: "connected", descriptionKey: "settings_service_datastore" },
+    { id: "zia", name: "Catalyst Zia Services", status: "pending", descriptionKey: "settings_service_zia" },
+    { id: "appsail", name: "AppSail Backend", status: "pending", descriptionKey: "settings_service_appsail" },
+    { id: "mapbox", name: "Mapbox GL (3D Map)", status: "pending", descriptionKey: "settings_service_map" },
   ];
 
   return (
@@ -221,13 +222,13 @@ function IntegrationsSection() {
         <div key={i.id} className="flex items-center justify-between py-3">
           <div>
             <div className="text-sm">{i.name}</div>
-            <div className="mt-0.5 text-[11px] text-muted-foreground">{i.desc}</div>
+            <div className="mt-0.5 text-[11px] text-muted-foreground">{t(i.descriptionKey, locale)}</div>
           </div>
           <span className={cn(
             "rounded-full px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-wide",
             i.status === "connected" ? "bg-emerald-500/10 text-emerald-400" : "bg-amber-500/10 text-amber-400"
           )}>
-            {i.status}
+            {t(i.status === "connected" ? "settings_connected" : "settings_pending", locale)}
           </span>
         </div>
       ))}
@@ -241,19 +242,19 @@ function SecuritySection() {
     <div className="space-y-4">
       <SectionCard title={t("settings_section_session", locale)}>
         {[
-          { label: "Session Token", value: "eyJ...BLR-A1 (active)" },
-          { label: "IP Address", value: "10.14.22.4 · KSP-Intranet" },
-          { label: "Session Expires", value: "2026-07-16 23:59 IST" },
-          { label: "2FA Status", value: "Enabled" },
-        ].map(({ label, value }) => (
-          <div key={label} className="flex items-center justify-between py-3 text-sm">
-            <span className="text-muted-foreground">{label}</span>
+          { labelKey: "settings_session_token", value: "eyJ...BLR-A1 (active)" },
+          { labelKey: "settings_ip_address", value: "10.14.22.4 · KSP-Intranet" },
+          { labelKey: "settings_session_expires", value: "2026-07-16 23:59 IST" },
+          { labelKey: "settings_2fa_status", value: t("settings_2fa_enabled", locale) },
+        ].map(({ labelKey, value }) => (
+          <div key={labelKey} className="flex items-center justify-between py-3 text-sm">
+            <span className="text-muted-foreground">{t(labelKey, locale)}</span>
             <span className="font-mono text-[11px]">{value}</span>
           </div>
         ))}
       </SectionCard>
       <button
-        onClick={() => toast("Session logged out", { description: "Redirecting to auth portal…" })}
+        onClick={() => toast(t("settings_session_ended", locale), { description: t("settings_redirecting", locale) })}
         className="rounded-md border border-rose-500/20 bg-rose-500/10 px-4 py-2.5 text-sm text-rose-400 transition hover:bg-rose-500/20"
       >
         {t("settings_end_session", locale)}
@@ -277,13 +278,13 @@ export function SettingsView() {
   const handleAlertChange = (id: string, v: boolean) => {
     setAlertValues((prev) => ({ ...prev, [id]: v }));
     const setting = ALERT_TOGGLES.find((t) => t.id === id);
-    toast(`${setting?.label} ${v ? "enabled" : "disabled"}`);
+    toast(`${setting ? t(setting.labelKey, locale) : ""} ${t(v ? "settings_enabled" : "settings_disabled", locale)}`);
   };
 
   const handleDisplayChange = (id: string, v: boolean) => {
     setDisplayValues((prev) => ({ ...prev, [id]: v }));
     const setting = DISPLAY_TOGGLES.find((t) => t.id === id);
-    toast(`${setting?.label} ${v ? "enabled" : "disabled"}`);
+    toast(`${setting ? t(setting.labelKey, locale) : ""} ${t(v ? "settings_enabled" : "settings_disabled", locale)}`);
   };
 
   return (

@@ -1,13 +1,14 @@
 'use client';
 
 import { useEffect, useState } from "react";
-import { FileText, Search, Filter, ChevronDown, ExternalLink, RefreshCw, Languages, Loader2 } from "lucide-react";
-import { fetchCaseReports } from "@/lib/mock-api";
+import { FileText, Search, Filter, ChevronDown, ExternalLink, RefreshCw, Languages, Loader2, Plus, X } from "lucide-react";
+import { createIncident, fetchCaseReports } from "@/lib/mock-api";
 import { translateTexts } from "@/lib/translate";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { t } from "@/lib/i18n";
-import type { CaseReport, CaseSeverity, CaseStatus } from "@/lib/types";
+import { t, type TranslationKey } from "@/lib/i18n";
+import type { CaseReport, CaseSeverity, CaseStatus, IncidentIntake } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 // ─── Badge helpers ─────────────────────────────────────────────────────────────
 
@@ -25,18 +26,49 @@ const STATUS_STYLES: Record<CaseStatus, string> = {
   closed: "bg-white/5 text-muted-foreground",
 };
 
+const SEVERITY_KEYS: Record<CaseSeverity, TranslationKey> = {
+  critical: "reports_severity_critical",
+  high: "reports_severity_high",
+  medium: "reports_severity_medium",
+  low: "reports_severity_low",
+};
+
+const STATUS_KEYS: Record<CaseStatus, TranslationKey> = {
+  open: "reports_status_open",
+  investigating: "reports_status_investigating",
+  resolved: "reports_status_resolved",
+  closed: "reports_status_closed",
+};
+
+const CRIME_TYPE_KEYS: Record<string, TranslationKey> = {
+  "Missing Persons": "reports_crime_missing_persons",
+  "Unlawful Assembly": "reports_crime_unlawful_assembly",
+  "Property Theft": "reports_crime_property_theft",
+  "Vehicle Theft": "reports_crime_vehicle_theft",
+  "Cyber Crime": "reports_crime_cyber_crime",
+  "Narcotics": "reports_crime_narcotics",
+  Assault: "reports_crime_assault",
+};
+
+function localizedCrimeType(crimeType: string, locale: ReturnType<typeof useLanguage>["locale"]) {
+  const key = CRIME_TYPE_KEYS[crimeType];
+  return key ? t(key, locale) : crimeType;
+}
+
 function SeverityBadge({ severity }: { severity: CaseSeverity }) {
+  const { locale } = useLanguage();
   return (
     <span className={cn("rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide", SEVERITY_STYLES[severity])}>
-      {severity}
+      {t(SEVERITY_KEYS[severity], locale)}
     </span>
   );
 }
 
 function StatusBadge({ status }: { status: CaseStatus }) {
+  const { locale } = useLanguage();
   return (
     <span className={cn("rounded-full px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide", STATUS_STYLES[status])}>
-      {status}
+      {t(STATUS_KEYS[status], locale)}
     </span>
   );
 }
@@ -97,8 +129,8 @@ function CaseDetailDrawer({ report, onClose }: { report: CaseReport; onClose: ()
           { label: t("reports_detail_area", locale), value: report.district },
           { label: t("reports_detail_station", locale), value: report.station },
           { label: t("reports_detail_section", locale), value: report.ipc_section },
-          { label: t("reports_detail_type", locale), value: report.crime_type },
-          { label: t("reports_detail_filed", locale), value: new Date(report.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) },
+          { label: t("reports_detail_type", locale), value: localizedCrimeType(report.crime_type, locale) },
+          { label: t("reports_detail_filed", locale), value: new Date(report.date).toLocaleDateString(locale === "kn" ? "kn-IN" : "en-IN", { day: "numeric", month: "short", year: "numeric" }) },
           { label: t("reports_detail_officer", locale), value: report.assigned_officer },
           { label: t("reports_detail_suspects", locale), value: String(report.suspects) },
         ].map(({ label, value }) => (
@@ -133,6 +165,86 @@ function StatCard({ label, value, sub }: { label: string; value: string | number
 
 const SEVERITY_ORDER: CaseSeverity[] = ["critical", "high", "medium", "low"];
 
+const CRIME_HEADS = [
+  [1, "Cyber Crime", "ಸೈಬರ್ ಅಪರಾಧ"], [2, "Property Theft", "ಆಸ್ತಿ ಕಳ್ಳತನ"], [3, "Vehicle Theft", "ವಾಹನ ಕಳ್ಳತನ"], [4, "Assault & Violence", "ದಾಳಿ ಮತ್ತು ಹಿಂಸಾಚಾರ"],
+  [5, "Narcotics", "ಮಾದಕ ವಸ್ತುಗಳು"], [6, "Murder", "ಕೊಲೆ"], [7, "Robbery & Dacoity", "ದರೋಡೆ"], [8, "Fraud & Cheating", "ವಂಚನೆ"],
+  [9, "Unlawful Assembly", "ಕಾನೂನುಬಾಹಿರ ಸಭೆ"], [10, "Eve Teasing", "ಮಹಿಳಾ ಕಿರುಕುಳ"], [11, "Land Disputes", "ಭೂ ವಿವಾದಗಳು"], [12, "Communal Offences", "ಸಾಮುದಾಯಿಕ ಅಪರಾಧಗಳು"],
+  [13, "Missing Persons", "ಕಾಣೆಯಾದ ವ್ಯಕ್ತಿಗಳು"], [14, "Domestic Violence", "ಗೃಹ ಹಿಂಸಾಚಾರ"], [15, "Child Offences", "ಮಕ್ಕಳ ವಿರುದ್ಧದ ಅಪರಾಧಗಳು"],
+] as const;
+
+const INITIAL_INTAKE: IncidentIntake = {
+  crime_no: "",
+  registered_date: new Date().toISOString().slice(0, 10),
+  police_station_id: 1,
+  crime_major_head_id: 2,
+  gravity_offence_id: 3,
+  latitude: 12.9716,
+  longitude: 77.5946,
+  brief_facts: "",
+  accused_names: [],
+};
+
+function IncidentIntakeForm({ onClose, onSubmitted }: { onClose: () => void; onSubmitted: () => void }) {
+  const { locale } = useLanguage();
+  const [intake, setIntake] = useState<IncidentIntake>(INITIAL_INTAKE);
+  const [accusedInput, setAccusedInput] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const update = <K extends keyof IncidentIntake>(key: K, value: IncidentIntake[K]) => {
+    setIntake((current) => ({ ...current, [key]: value }));
+  };
+
+  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSubmitting(true);
+    try {
+      const { data } = await createIncident({
+        ...intake,
+        accused_names: accusedInput.split(",").map((name) => name.trim()).filter(Boolean),
+      });
+      toast.success(`${t("reports_incident_added", locale)}: ${data.id}`, { description: data.warning ?? `Catalyst Data Store · ${data.station}` });
+      onSubmitted();
+      onClose();
+    } catch (error) {
+      toast.error(t("reports_intake_failed", locale), { description: error instanceof Error ? error.message : t("reports_review_details", locale) });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <form onSubmit={submit} className="rounded-xl border border-primary/20 bg-card p-5">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="text-base font-medium">{t("reports_intake_title", locale)}</div>
+          <p className="mt-1 max-w-2xl text-xs leading-relaxed text-muted-foreground">{t("reports_intake_desc", locale)}</p>
+        </div>
+        <button type="button" onClick={onClose} title={t("reports_close_intake", locale)} className="text-muted-foreground transition hover:text-foreground"><X className="h-4 w-4" /></button>
+      </div>
+
+      <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <label className="text-xs text-muted-foreground">{t("reports_fir_number", locale)}<input required value={intake.crime_no} onChange={(event) => update("crime_no", event.target.value)} placeholder="KSP/2026/0001" className="mt-1.5 w-full rounded-md border border-white/10 bg-background/50 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50" /></label>
+        <label className="text-xs text-muted-foreground">{t("reports_registration_date", locale)}<input required type="date" value={intake.registered_date} onChange={(event) => update("registered_date", event.target.value)} className="mt-1.5 w-full rounded-md border border-white/10 bg-background/50 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50" /></label>
+        <label className="text-xs text-muted-foreground">{t("reports_station_id", locale)}<input required min="1" max="1100" type="number" value={intake.police_station_id} onChange={(event) => update("police_station_id", Number(event.target.value))} className="mt-1.5 w-full rounded-md border border-white/10 bg-background/50 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50" /></label>
+        <label className="text-xs text-muted-foreground">{t("reports_gravity", locale)}<select value={intake.gravity_offence_id} onChange={(event) => update("gravity_offence_id", Number(event.target.value))} className="mt-1.5 w-full rounded-md border border-white/10 bg-background/50 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50">{[1, 2, 3, 4, 5].map((value) => <option key={value} value={value}>{t("reports_gravity_value", locale)} {value}</option>)}</select></label>
+        <label className="text-xs text-muted-foreground md:col-span-2">{t("reports_category", locale)}<select value={intake.crime_major_head_id} onChange={(event) => update("crime_major_head_id", Number(event.target.value))} className="mt-1.5 w-full rounded-md border border-white/10 bg-background/50 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50">{CRIME_HEADS.map(([id, en, kn]) => <option key={id} value={id}>{locale === "kn" ? kn : en}</option>)}</select></label>
+        <label className="text-xs text-muted-foreground">{t("reports_latitude", locale)}<input required step="0.000001" type="number" value={intake.latitude} onChange={(event) => update("latitude", Number(event.target.value))} className="mt-1.5 w-full rounded-md border border-white/10 bg-background/50 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50" /></label>
+        <label className="text-xs text-muted-foreground">{t("reports_longitude", locale)}<input required step="0.000001" type="number" value={intake.longitude} onChange={(event) => update("longitude", Number(event.target.value))} className="mt-1.5 w-full rounded-md border border-white/10 bg-background/50 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50" /></label>
+      </div>
+
+      <div className="mt-4 grid gap-4 md:grid-cols-2">
+        <label className="text-xs text-muted-foreground">{t("reports_narrative", locale)}<textarea required minLength={10} value={intake.brief_facts} onChange={(event) => update("brief_facts", event.target.value)} placeholder={t("reports_narrative_hint", locale)} className="mt-1.5 min-h-24 w-full resize-y rounded-md border border-white/10 bg-background/50 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50" /></label>
+        <label className="text-xs text-muted-foreground">{t("reports_accused", locale)} <span className="text-white/30">{t("reports_optional", locale)}</span><textarea value={accusedInput} onChange={(event) => setAccusedInput(event.target.value)} placeholder={t("reports_accused_hint", locale)} className="mt-1.5 min-h-24 w-full resize-y rounded-md border border-white/10 bg-background/50 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50" /></label>
+      </div>
+
+      <div className="mt-5 flex items-center justify-end gap-3">
+        <button type="button" onClick={onClose} className="px-3 py-2 text-xs text-muted-foreground transition hover:text-foreground">{t("reports_cancel", locale)}</button>
+        <button disabled={submitting} className="flex items-center gap-2 rounded-md bg-primary/15 px-4 py-2 text-xs font-medium text-primary transition hover:bg-primary/25 disabled:opacity-60"><Plus className="h-3.5 w-3.5" />{submitting ? t("reports_adding_incident", locale) : t("reports_add_to_intelligence", locale)}</button>
+      </div>
+    </form>
+  );
+}
+
 export function ReportsView() {
   const { locale } = useLanguage();
   const [reports, setReports] = useState<CaseReport[]>([]);
@@ -142,6 +254,7 @@ export function ReportsView() {
   const [filterStatus, setFilterStatus] = useState<CaseStatus | "all">("all");
   const [selected, setSelected] = useState<CaseReport | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [intakeOpen, setIntakeOpen] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -175,7 +288,7 @@ export function ReportsView() {
   return (
     <div className="space-y-5">
       {/* Page header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <FileText className="h-4 w-4 text-primary" />
           <div>
@@ -185,22 +298,20 @@ export function ReportsView() {
             </div>
           </div>
         </div>
-        <button
-          onClick={refresh}
-          disabled={refreshing}
-          className="flex items-center gap-2 rounded-md border border-white/5 bg-white/[0.02] px-3 py-1.5 text-xs text-muted-foreground transition hover:border-white/15 hover:text-foreground disabled:opacity-50"
-        >
-          <RefreshCw className={cn("h-3 w-3", refreshing && "animate-spin")} />
-          {t("reports_refresh", locale)}
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setIntakeOpen((open) => !open)} className="flex items-center gap-2 rounded-md bg-primary/15 px-3 py-1.5 text-xs text-primary transition hover:bg-primary/25"><Plus className="h-3.5 w-3.5" />{t("reports_add_incident", locale)}</button>
+          <button onClick={refresh} disabled={refreshing} className="flex items-center gap-2 rounded-md border border-white/5 bg-white/[0.02] px-3 py-1.5 text-xs text-muted-foreground transition hover:border-white/15 hover:text-foreground disabled:opacity-50"><RefreshCw className={cn("h-3 w-3", refreshing && "animate-spin")} />{t("reports_refresh", locale)}</button>
+        </div>
       </div>
+
+      {intakeOpen && <IncidentIntakeForm onClose={() => setIntakeOpen(false)} onSubmitted={load} />}
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatCard label={t("reports_total", locale)} value={reports.length} sub="all districts" />
-        <StatCard label={t("reports_active", locale)} value={openCount} sub="require attention" />
-        <StatCard label={t("reports_critical", locale)} value={criticalCount} sub="immediate action" />
-        <StatCard label={t("reports_stations", locale)} value="1,100+" sub="KSP network" />
+        <StatCard label={t("reports_total", locale)} value={reports.length} sub={t("reports_all_districts", locale)} />
+        <StatCard label={t("reports_active", locale)} value={openCount} sub={t("reports_attention", locale)} />
+        <StatCard label={t("reports_critical", locale)} value={criticalCount} sub={t("reports_immediate", locale)} />
+        <StatCard label={t("reports_stations", locale)} value="1,100+" sub={t("reports_network", locale)} />
       </div>
 
       {/* Filters */}
@@ -223,7 +334,7 @@ export function ReportsView() {
             className="appearance-none rounded-md border border-white/5 bg-card pl-8 pr-7 py-2 font-mono text-xs text-foreground outline-none"
           >
             <option value="all">{t("reports_all_severities", locale)}</option>
-            {SEVERITY_ORDER.map((s) => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+            {SEVERITY_ORDER.map((s) => <option key={s} value={s}>{t(SEVERITY_KEYS[s], locale)}</option>)}
           </select>
           <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
         </div>
@@ -236,7 +347,7 @@ export function ReportsView() {
           >
             <option value="all">{t("reports_all_statuses", locale)}</option>
             {(["open", "investigating", "resolved", "closed"] as CaseStatus[]).map((s) => (
-              <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
+              <option key={s} value={s}>{t(STATUS_KEYS[s], locale)}</option>
             ))}
           </select>
           <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
@@ -295,9 +406,9 @@ export function ReportsView() {
                     <td className="px-4 py-3 font-mono text-[11px] text-muted-foreground">{r.id}</td>
                     <td className="max-w-[260px] px-4 py-3 text-xs leading-snug">{r.title}</td>
                     <td className="px-4 py-3 font-mono text-[11px] text-muted-foreground">{r.district}</td>
-                    <td className="px-4 py-3 font-mono text-[11px] text-muted-foreground">{r.crime_type}</td>
+                    <td className="px-4 py-3 font-mono text-[11px] text-muted-foreground">{localizedCrimeType(r.crime_type, locale)}</td>
                     <td className="px-4 py-3 font-mono text-[11px] text-muted-foreground">
-                      {new Date(r.date).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                      {new Date(r.date).toLocaleDateString(locale === "kn" ? "kn-IN" : "en-IN", { day: "numeric", month: "short" })}
                     </td>
                     <td className="px-4 py-3">
                       <SeverityBadge severity={r.severity} />

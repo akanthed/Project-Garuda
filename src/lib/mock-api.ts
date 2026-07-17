@@ -10,14 +10,21 @@
  */
 
 import type {
+  AskResponse,
   ApiResponse,
   CaseReport,
+  ForecastPoint,
   Hotspot,
+  IncidentIntake,
+  IncidentIntakeResult,
   KpiMetric,
   NetworkGraph,
+  PatrolUnit,
   SimulationResult,
   SimulatorVariable,
+  StationAnomaly,
 } from "./types";
+import { getToken } from "./auth";
 
 const API_BASE = import.meta.env.VITE_API_URL as string | undefined;
 const USE_REAL_API = !!API_BASE;
@@ -31,8 +38,13 @@ function wrap<T>(data: T): ApiResponse<T> {
 
 /** Generic fetch wrapper with error handling */
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
+  const token = getToken();
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options?.headers,
+    },
     ...options,
   });
   if (!res.ok) throw new Error(`API ${path} failed: ${res.status} ${res.statusText}`);
@@ -267,13 +279,22 @@ export async function runSimulation(
       infra_health:    values["infra-health"] ?? 78,
       rapid_response:  values["rapid-response"] ?? 45,
     };
-    const data = await apiFetch<{ impact_percent: number; model_version: string; window_days: number; computed_at: string }>(
+    const data = await apiFetch<{
+      impact_percent: number;
+      model_version: string;
+      window_days: number;
+      confidence_range?: [number, number];
+      assumptions?: string[];
+      computed_at: string;
+    }>(
       "/api/simulator/run", { method: "POST", body: JSON.stringify(body) }
     );
     return wrap({
       impactPercent: data.impact_percent,
       modelVersion:  data.model_version,
       windowDays:    data.window_days,
+      confidenceRange: data.confidence_range,
+      assumptions: data.assumptions,
       computedAt:    data.computed_at,
     });
   }
@@ -283,8 +304,10 @@ export async function runSimulation(
   const normalized = Math.round(impact / 1.2);
   return wrap({
     impactPercent: normalized,
-    modelVersion: "causal-v2.4",
+    modelVersion: "scenario-model-v1",
     windowDays: 30,
+    confidenceRange: [Math.max(0, normalized - 12), Math.min(100, normalized + 12)],
+    assumptions: ["Local demonstration estimate; not a validated causal effect."],
     computedAt: new Date().toISOString(),
   });
 }
@@ -407,6 +430,52 @@ export async function fetchCaseReports(): Promise<ApiResponse<CaseReport[]>> {
   return wrap(CASE_REPORTS);
 }
 
+// ─── POST /api/incidents — officer-reviewed operational intake ───────────────
+
+const CRIME_TYPE_NAMES: Record<number, string> = {
+  1: "Cyber Crime", 2: "Property Theft", 3: "Vehicle Theft", 4: "Assault & Violence",
+  5: "Narcotics", 6: "Murder", 7: "Robbery & Dacoity", 8: "Fraud & Cheating",
+  9: "Unlawful Assembly", 10: "Eve Teasing", 11: "Land Disputes", 12: "Communal Offences",
+  13: "Missing Persons", 14: "Domestic Violence", 15: "Child Offences",
+};
+
+export async function createIncident(input: IncidentIntake): Promise<ApiResponse<IncidentIntakeResult>> {
+  if (USE_REAL_API) {
+    const data = await apiFetch<IncidentIntakeResult>("/api/incidents", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+    return wrap(data);
+  }
+
+  await delay(450);
+  if (CASE_REPORTS.some((report) => report.id === `BLR-${input.crime_no}`)) {
+    throw new Error("An incident with this FIR / crime number already exists");
+  }
+  const severity: CaseSeverity = input.gravity_offence_id >= 5 ? "critical" : input.gravity_offence_id === 4 ? "high" : input.gravity_offence_id === 3 ? "medium" : "low";
+  CASE_REPORTS.unshift({
+    id: `BLR-${input.crime_no}`,
+    title: input.brief_facts,
+    district: "Bengaluru",
+    station: `PS-${input.police_station_id}`,
+    date: input.registered_date,
+    severity,
+    status: "investigating",
+    assigned_officer: "Current officer",
+    crime_type: CRIME_TYPE_NAMES[input.crime_major_head_id] ?? "Operational Intake",
+    ipc_section: `Crime Head ${input.crime_major_head_id}`,
+    suspects: input.accused_names.length,
+  });
+  return wrap({
+    id: `BLR-${input.crime_no}`,
+    case_master_id: CASE_REPORTS.length,
+    station: `PS-${input.police_station_id}`,
+    accused_added: input.accused_names.length,
+    persistence: "session",
+    warning: "Local demonstration record; configure the backend for Data Store persistence.",
+  });
+}
+
 // ─── POST /api/export_brief ───────────────────────────────────────────────────
 
 export async function exportBrief(payload: {
@@ -418,11 +487,87 @@ export async function exportBrief(payload: {
   if (!USE_REAL_API) {
     throw new Error("PDF export requires the backend. Set VITE_API_URL.");
   }
+  const token = getToken();
   const res = await fetch(`${API_BASE}/api/export_brief`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error(`Export failed: ${res.status}`);
   return res.blob();
+}
+
+// ─── GET /api/patrols (synthetic Hoysala fleet) ───────────────────────────────
+
+const MOCK_PATROLS: PatrolUnit[] = [
+  { id: "HOY-01", lat: 12.965, lng: 77.601, status: "patrolling" },
+  { id: "HOY-02", lat: 12.982, lng: 77.615, status: "patrolling" },
+  { id: "HOY-03", lat: 12.952, lng: 77.622, status: "responding" },
+];
+
+export async function fetchPatrols(): Promise<ApiResponse<PatrolUnit[]>> {
+  if (USE_REAL_API) {
+    const data = await apiFetch<PatrolUnit[]>("/api/patrols");
+    return wrap(data);
+  }
+  await delay(250);
+  return wrap(MOCK_PATROLS);
+}
+
+// ─── GET /api/hotspots/forecast ───────────────────────────────────────────────
+
+export async function fetchForecast(): Promise<ApiResponse<ForecastPoint[]>> {
+  if (USE_REAL_API) {
+    const data = await apiFetch<ForecastPoint[]>("/api/hotspots/forecast");
+    return wrap(data);
+  }
+  await delay(300);
+  return wrap(
+    HOTSPOTS.map((h, i) => ({
+      station_id: i + 1,
+      station_name: h.label,
+      lat: h.lat,
+      lng: h.lng,
+      predicted_intensity: Math.min(1, h.intensity + 0.08),
+      predicted_count: Math.round(h.intensity * 10),
+      trend_pct: 8.4,
+      horizon_days: 30,
+      model: "mock-trend",
+    }))
+  );
+}
+
+// ─── GET /api/anomalies ────────────────────────────────────────────────────────
+
+export async function fetchAnomalies(): Promise<ApiResponse<StationAnomaly[]>> {
+  if (USE_REAL_API) {
+    const data = await apiFetch<StationAnomaly[]>("/api/anomalies");
+    return wrap(data);
+  }
+  await delay(250);
+  return wrap([
+    { station_id: 1, station_name: "KR Market PS", z_score: 3.4, current_count: 9, mean_count: 4.1, severity: "high" },
+    { station_id: 3, station_name: "Whitefield PS", z_score: 2.6, current_count: 7, mean_count: 3.8, severity: "high" },
+  ]);
+}
+
+// ─── POST /api/ask (Ask Garuda — rule-based NLU) ──────────────────────────────
+
+export async function askGaruda(query: string): Promise<ApiResponse<AskResponse>> {
+  if (USE_REAL_API) {
+    const data = await apiFetch<AskResponse>("/api/ask", {
+      method: "POST",
+      body: JSON.stringify({ query }),
+    });
+    return wrap(data);
+  }
+  await delay(400);
+  return wrap({
+    answer: `Ask Garuda requires the backend (set VITE_API_URL) to search real case data for "${query}".`,
+    matched_cases: [],
+    suggested_view: "reports" as const,
+  });
 }

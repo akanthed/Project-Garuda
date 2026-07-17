@@ -16,6 +16,61 @@ export interface Hotspot {
   /** CSS % position on the mock canvas — removed once real Mapbox is wired */
   _x: number;
   _y: number;
+  /** Station-level causal factors (only present when served by the real backend) */
+  station_id?: number;
+  station_name?: string;
+  patrol_density?: number;
+  infra_health?: number;
+  commercial_density?: number;
+}
+
+// ─── Patrol fleet ──────────────────────────────────────────────────────────────
+
+export interface PatrolUnit {
+  id: string;
+  lat: number;
+  lng: number;
+  status: "patrolling" | "responding";
+}
+
+// ─── Predictive forecast ───────────────────────────────────────────────────────
+
+export interface ForecastPoint {
+  station_id: number;
+  station_name: string;
+  lat: number;
+  lng: number;
+  predicted_intensity: number;
+  predicted_count: number;
+  trend_pct: number;
+  horizon_days: number;
+  model: string;
+}
+
+// ─── Anomaly detection ──────────────────────────────────────────────────────────
+
+export interface StationAnomaly {
+  station_id: number;
+  station_name: string;
+  z_score: number;
+  current_count: number;
+  mean_count: number;
+  severity: "critical" | "high";
+}
+
+// ─── Ask Garuda (NL search) ────────────────────────────────────────────────────
+
+export interface AskMatchedCase {
+  id: string;
+  date: string;
+  station: string;
+  gravity: number;
+}
+
+export interface AskResponse {
+  answer: string;
+  matched_cases: AskMatchedCase[];
+  suggested_view: "dashboard" | "geospatial" | "network" | "reports" | "settings";
 }
 
 // ─── Criminal Network ─────────────────────────────────────────────────────────
@@ -70,6 +125,8 @@ export interface SimulationResult {
   impactPercent: number;
   modelVersion: string;
   windowDays: number;
+  confidenceRange?: [number, number];
+  assumptions?: string[];
   computedAt: string;
 }
 
@@ -90,6 +147,28 @@ export interface CaseReport {
   crime_type: string;
   ipc_section: string;
   suspects: number;
+}
+
+export interface IncidentIntake {
+  crime_no: string;
+  registered_date: string;
+  police_station_id: number;
+  crime_major_head_id: number;
+  gravity_offence_id: number;
+  latitude: number;
+  longitude: number;
+  brief_facts: string;
+  accused_names: string[];
+}
+
+export interface IncidentIntakeResult {
+  id: string;
+  case_master_id: number;
+  station: string;
+  accused_added: number;
+  submitted_by?: string;
+  persistence: "datastore" | "session";
+  warning?: string | null;
 }
 
 // ─── API response wrappers ────────────────────────────────────────────────────

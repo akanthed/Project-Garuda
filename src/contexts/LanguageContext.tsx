@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Locale } from "@/lib/i18n";
 
 interface LanguageContextValue {
@@ -12,7 +12,13 @@ const LanguageContext = createContext<LanguageContextValue>({
 });
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocale] = useState<Locale>("en");
+  const [locale, setLocale] = useState<Locale>(() => {
+    const storedLocale = localStorage.getItem("garuda_locale");
+    return storedLocale === "kn" ? "kn" : "en";
+  });
+  useEffect(() => {
+    localStorage.setItem("garuda_locale", locale);
+  }, [locale]);
   const toggle = () => setLocale((l) => (l === "en" ? "kn" : "en"));
   return (
     <LanguageContext.Provider value={{ locale, toggle }}>

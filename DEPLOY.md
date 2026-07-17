@@ -41,6 +41,32 @@ python generate_data.py        # Creates data/*.csv
 
 ---
 
+## 3.5 Activate Zia Translate & SmartBrowz (required — these are opt-in per project)
+
+`backend/main.py` already calls `capp.zia().translate(...)` (in `/api/translate`) and `capp.smart_browz().generate_pdf(...)` (in `/api/export_brief`), each wrapped in a try/except that silently falls back to a local passthrough/`fpdf2` implementation if the call fails. **Unlike Data Store, Zia and SmartBrowz are not enabled by default on a new Catalyst project** — the fallback firing on every request (verified against the live AppSail instance: `/api/translate` returns `"source":"fallback"` and `/api/export_brief` throws even in production) means these two services have never actually been turned on for this project. There is no `catalyst` CLI command for this — it must be done in the console:
+
+1. Open [catalyst.zoho.com](https://catalyst.zoho.com) → select **Project Garuda**.
+2. In the left sidebar, find **Zia** (usually under an "AI & ML" or "Cognitive Services" group) → enable/activate it for this project, and confirm **Translate** is included in the enabled capabilities.
+3. In the left sidebar, find **SmartBrowz** (usually under "Advanced I/O" or a similar group) → enable/activate it for this project.
+4. Some Catalyst plans require accepting an add-on billing/quota consent screen the first time a service is enabled — complete that if prompted.
+5. Re-deploy is **not** required just for enabling a service (it's a project-level toggle, not code), but redeploy anyway if you've also picked up the em-dash PDF fix (see step 4 below).
+
+**Verify activation worked** (from anywhere, no CORS restriction via curl/PowerShell):
+```bash
+curl -X POST https://garuda-api-<project-id>.catalystappsail.com/api/translate \
+  -H "Content-Type: application/json" \
+  -d '{"texts":["Robbery reported near MG Road"],"target_language":"kn"}'
+# Look for "source":"zia" instead of "source":"fallback"
+
+curl -X POST https://garuda-api-<project-id>.catalystappsail.com/api/export_brief \
+  -H "Content-Type: application/json" \
+  -d '{"kpis":{"Cases":"5000"},"hotspot_count":5,"top_crime_types":["Theft"]}' \
+  -o brief.pdf
+# Should return a valid PDF (check size > 0) instead of a 500 JSON error
+```
+
+---
+
 ## 4. Deploy Backend to AppSail
 
 **Catalyst does NOT run `pip install` on the server for Catalyst-Managed Python runtimes.** Dependencies must be vendored locally (as Linux wheels, since AppSail runs on `manylinux` regardless of your local OS) into `backend/vendor` before every deploy that changes `requirements.txt`:
