@@ -1,14 +1,17 @@
-import { LayoutDashboard, Globe2, Share2, FileText, Settings, Shield } from "lucide-react";
+import { useState } from "react";
+import { LayoutDashboard, Globe2, Share2, FileText, Settings, Shield, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { t, type TranslationKey } from "@/lib/i18n";
 
 export type ViewKey = "dashboard" | "geospatial" | "network" | "reports" | "settings";
 
-const nav: { key: ViewKey; icon: typeof Shield; label: string }[] = [
-  { key: "dashboard", icon: LayoutDashboard, label: "Dashboard" },
-  { key: "geospatial", icon: Globe2, label: "Geospatial" },
-  { key: "network", icon: Share2, label: "Network" },
-  { key: "reports", icon: FileText, label: "Reports" },
-  { key: "settings", icon: Settings, label: "Settings" },
+const nav: { key: ViewKey; icon: typeof Shield; labelKey: TranslationKey }[] = [
+  { key: "dashboard", icon: LayoutDashboard, labelKey: "nav_dashboard" },
+  { key: "geospatial", icon: Globe2,          labelKey: "nav_geospatial" },
+  { key: "network",    icon: Share2,           labelKey: "nav_network" },
+  { key: "reports",    icon: FileText,         labelKey: "nav_reports" },
+  { key: "settings",   icon: Settings,         labelKey: "nav_settings" },
 ];
 
 interface SidebarProps {
@@ -17,39 +20,96 @@ interface SidebarProps {
 }
 
 export function Sidebar({ active, onChange }: SidebarProps) {
+  const { locale } = useLanguage();
+  const [collapsed, setCollapsed] = useState(true);
+
   return (
-    <aside className="flex h-screen w-14 flex-col items-center justify-between border-r border-white/5 bg-sidebar py-4">
-      <div className="flex flex-col items-center gap-6">
-        <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/10 ring-1 ring-primary/30">
-          <Shield className="h-4 w-4 text-primary" />
+    <aside
+      className={cn(
+        "relative flex h-screen flex-col justify-between border-r border-white/5 bg-sidebar py-4 transition-[width] duration-200",
+        collapsed ? "w-14 items-center" : "w-48 items-stretch"
+      )}
+    >
+      {/* Logo + collapse toggle */}
+      <div className={cn("flex flex-col gap-5", collapsed ? "items-center" : "px-3")}>
+        <div className={cn("flex items-center", collapsed ? "justify-center" : "justify-between")}>
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 ring-1 ring-primary/30">
+            <Shield className="h-4 w-4 text-primary" />
+          </div>
+          {!collapsed && (
+            <div className="ml-2 flex-1 min-w-0">
+              <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-primary truncate">
+                Sentinel
+              </div>
+              <div className="font-mono text-[9px] text-muted-foreground truncate">BLR · KSP</div>
+            </div>
+          )}
+          <button
+            onClick={() => setCollapsed((v) => !v)}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            className={cn(
+              "flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground",
+              collapsed && "mt-0"
+            )}
+          >
+            <ChevronRight
+              className={cn("h-3.5 w-3.5 transition-transform duration-200", !collapsed && "rotate-180")}
+            />
+          </button>
         </div>
-        <nav className="flex flex-col items-center gap-1.5">
-          {nav.map(({ key, icon: Icon, label }) => {
+
+        {/* Nav items */}
+        <nav className={cn("flex flex-col gap-1", collapsed ? "items-center" : "items-stretch")}>
+          {nav.map(({ key, icon: Icon, labelKey }) => {
+            const label = t(labelKey, locale);
             const isActive = key === active;
             return (
               <button
                 key={key}
-                title={label}
+                title={collapsed ? label : undefined}
                 onClick={() => onChange(key)}
                 className={cn(
-                  "group relative flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground hover:bg-white/5",
-                  isActive && "text-foreground bg-white/5"
+                  "group relative flex h-9 items-center rounded-md text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground",
+                  collapsed ? "w-9 justify-center" : "w-full gap-3 px-2.5",
+                  isActive && "bg-white/5 text-foreground"
                 )}
               >
-                <Icon className="h-4 w-4" strokeWidth={1.75} />
+                {/* Active indicator */}
                 {isActive && (
-                  <span className="absolute -left-[9px] top-1/2 h-4 w-[2px] -translate-y-1/2 rounded-full bg-primary" />
+                  <span className="absolute -left-[1px] top-1/2 h-4 w-[2px] -translate-y-1/2 rounded-full bg-primary" />
+                )}
+                <Icon className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+                {!collapsed && (
+                  <span className="truncate text-sm">{label}</span>
                 )}
               </button>
             );
           })}
         </nav>
       </div>
-      <button
-        title="Profile"
-        onClick={() => onChange("settings")}
-        className="h-8 w-8 rounded-full bg-gradient-to-br from-primary/40 to-primary/10 ring-1 ring-white/10 transition hover:ring-primary/40"
-      />
+
+      {/* Profile avatar */}
+      <div className={cn(collapsed ? "flex justify-center" : "px-3")}>
+        <button
+          title={t("nav_settings", locale)}
+          onClick={() => onChange("settings")}
+          className={cn(
+            "flex items-center gap-2.5 rounded-md transition hover:bg-white/5",
+            collapsed ? "h-8 w-8 justify-center" : "w-full px-2 py-1.5"
+          )}
+        >
+          <div className="h-7 w-7 shrink-0 rounded-full bg-gradient-to-br from-primary/40 to-primary/10 ring-1 ring-white/10 transition hover:ring-primary/40" />
+          {!collapsed && (
+            <div className="min-w-0 text-left">
+              <div className="truncate text-xs font-medium">Profile</div>
+              <div className="truncate font-mono text-[10px] text-muted-foreground">
+                {t("nav_settings", locale)}
+              </div>
+            </div>
+          )}
+        </button>
+      </div>
     </aside>
   );
 }
+

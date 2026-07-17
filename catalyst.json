@@ -1,0 +1,11 @@
+{
+  "appsail": [
+    {
+      "source": "./backend",
+      "name": "garuda-api"
+    }
+  ],
+  "client": {
+    "source": "dist"
+  }
+}

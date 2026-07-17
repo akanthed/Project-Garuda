@@ -1,0 +1,30 @@
+{
+  "defaults": {
+    "project": 1,
+    "env": 1
+  },
+  "actives": {
+    "project": 1,
+    "env": 1
+  },
+  "projects": [
+    {
+      "idx": 1,
+      "id": "52319000000013050",
+      "name": "Garuda",
+      "domain": {
+        "id": "50044100457",
+        "name": "garuda-60078749238.development"
+      },
+      "timezone": "Asia/Kolkata",
+      "env": [
+        {
+          "idx": 1,
+          "id": "60078749238",
+          "name": "Development",
+          "type": 3
+        }
+      ]
+    }
+  ]
+}

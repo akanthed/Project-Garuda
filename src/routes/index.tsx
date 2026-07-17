@@ -1,34 +1,72 @@
-import { useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
-import { Activity, Flame, TrendingUp, ShieldCheck } from "lucide-react";
+import { useState, lazy, Suspense } from "react";
+import { createFileRoute, redirect } from "@tanstack/react-router";
+import { Network, MapPin, TrendingDown, ShieldCheck } from "lucide-react";
 import { Toaster } from "@/components/ui/sonner";
 import { Sidebar, type ViewKey } from "@/components/dashboard/Sidebar";
 import { TopBar } from "@/components/dashboard/TopBar";
 import { KpiCard } from "@/components/dashboard/KpiCard";
-import { GeoMap } from "@/components/dashboard/GeoMap";
-import { LinkGraph } from "@/components/dashboard/LinkGraph";
 import { Simulator } from "@/components/dashboard/Simulator";
+import { ReportsView } from "@/components/dashboard/ReportsView";
+import { SettingsView } from "@/components/dashboard/SettingsView";
+import { getSession, isAuthenticated, type Officer } from "@/lib/auth";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { t } from "@/lib/i18n";
+
+// Lazy-load heavy canvas components — keeps login/dashboard first paint instant
+const GeoMap = lazy(() =>
+  import("@/components/dashboard/GeoMap").then((m) => ({ default: m.GeoMap }))
+);
+const LinkGraph = lazy(() =>
+  import("@/components/dashboard/LinkGraph").then((m) => ({ default: m.LinkGraph }))
+);
+
+function MapPlaceholder() {
+  return (
+    <div className="col-span-2 flex h-[460px] items-center justify-center rounded-xl border border-white/5 bg-card">
+      <div className="flex flex-col items-center gap-3">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary/20 border-t-primary" />
+        <span className="font-mono text-[11px] text-muted-foreground">Loading map…</span>
+      </div>
+    </div>
+  );
+}
+
+function GraphPlaceholder() {
+  return (
+    <div className="flex h-[460px] items-center justify-center rounded-xl border border-white/5 bg-card">
+      <div className="flex flex-col items-center gap-3">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary/20 border-t-primary" />
+        <span className="font-mono text-[11px] text-muted-foreground">Loading network…</span>
+      </div>
+    </div>
+  );
+}
 
 export const Route = createFileRoute("/")({
-  head: () => ({
-    meta: [
-      { title: "Sentinel BLR — Police Intelligence Dashboard" },
-      {
-        name: "description",
-        content:
-          "Real-time geospatial threat analysis, criminal link graphs, and causal command simulation for Bengaluru City Police.",
-      },
-      { property: "og:title", content: "Sentinel BLR — Police Intelligence" },
-      {
-        property: "og:description",
-        content: "Bengaluru intelligence platform: hotspots, link analysis, and predictive command simulation.",
-      },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
-    ],
-  }),
+  // Fires before the component mounts — instant redirect, no flash
+  beforeLoad: () => {
+    if (!isAuthenticated()) {
+      throw redirect({ to: "/login" });
+    }
+  },
   component: Dashboard,
 });
+
+function RbacBlock({ label, minRole }: { label: string; minRole: string }) {
+  return (
+    <div className="flex h-[460px] flex-col items-center justify-center gap-3 rounded-xl border border-white/5 bg-card">
+      <div className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--danger)]/30 bg-[var(--danger)]/10">
+        <ShieldCheck className="h-5 w-5 text-[var(--danger)]" />
+      </div>
+      <div className="text-center">
+        <div className="text-sm font-medium">{label}</div>
+        <div className="mt-1 font-mono text-[11px] text-muted-foreground">
+          Requires {minRole} clearance
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function Placeholder({ title, subtitle }: { title: string; subtitle: string }) {
   return (
@@ -45,50 +83,53 @@ function Placeholder({ title, subtitle }: { title: string; subtitle: string }) {
 }
 
 function Dashboard() {
+  // Session is guaranteed by beforeLoad — no null check needed
+  const officer = getSession() as Officer;
   const [view, setView] = useState<ViewKey>("dashboard");
+  const { locale } = useLanguage();
 
   return (
     <div className="flex min-h-screen bg-background text-foreground">
       <Toaster theme="dark" position="bottom-right" />
       <Sidebar active={view} onChange={setView} />
       <div className="flex flex-1 flex-col">
-        <TopBar />
+        <TopBar officer={officer} />
         <main className="flex-1 space-y-4 p-5">
           {view === "dashboard" && (
             <>
               <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <KpiCard
-                  label="Total Active Cases"
+                  label={t("kpi_criminal_nodes", locale)}
                   value="1,284"
                   delta="4.2%"
                   trend="up"
                   positive={false}
-                  icon={Activity}
+                  icon={Network}
                   data={[8, 12, 10, 14, 13, 16, 15, 18, 17, 20, 22, 21]}
                   accent="electric"
                 />
                 <KpiCard
-                  label="High-Risk Hotspots"
+                  label={t("kpi_hotspot_alerts", locale)}
                   value="27"
                   delta="12.1%"
                   trend="up"
                   positive={false}
-                  icon={Flame}
+                  icon={MapPin}
                   data={[10, 12, 11, 14, 16, 15, 18, 17, 22, 24, 26, 27]}
                   accent="danger"
                 />
                 <KpiCard
-                  label="Predicted Escalations"
-                  value="9"
+                  label={t("kpi_risk_volatility", locale)}
+                  value="0.74"
                   delta="3.4%"
                   trend="down"
-                  positive={false}
-                  icon={TrendingUp}
-                  data={[14, 13, 15, 12, 14, 11, 10, 11, 9, 10, 9, 9]}
+                  positive={true}
+                  icon={TrendingDown}
+                  data={[90, 88, 85, 82, 84, 81, 80, 79, 77, 76, 75, 74]}
                   accent="electric"
                 />
                 <KpiCard
-                  label="Resource Readiness"
+                  label={t("kpi_readiness", locale)}
                   value="92%"
                   delta="1.8%"
                   trend="up"
@@ -100,33 +141,55 @@ function Dashboard() {
               </section>
 
               <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-                <GeoMap />
-                <LinkGraph />
+                <Suspense fallback={<MapPlaceholder />}>
+                  <GeoMap />
+                </Suspense>
+                {officer.canViewNetwork ? (
+                  <Suspense fallback={<GraphPlaceholder />}>
+                    <LinkGraph />
+                  </Suspense>
+                ) : (
+                  <RbacBlock label="Criminal Link Analysis" minRole="ASI (CLR-3)" />
+                )}
               </section>
 
-              <Simulator />
+              {officer.canSimulate ? (
+                <Simulator />
+              ) : (
+                <RbacBlock label="Command Simulator" minRole="SI (CLR-4)" />
+              )}
             </>
           )}
 
           {view === "geospatial" && (
             <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-              <GeoMap />
-              <LinkGraph />
+              <Suspense fallback={<MapPlaceholder />}>
+                <GeoMap />
+              </Suspense>
+              {officer.canViewNetwork ? (
+                <Suspense fallback={<GraphPlaceholder />}>
+                  <LinkGraph />
+                </Suspense>
+              ) : (
+                <RbacBlock label="Criminal Link Analysis" minRole="ASI (CLR-3)" />
+              )}
             </section>
           )}
 
           {view === "network" && (
             <section className="grid h-[70vh] grid-cols-1 gap-4">
-              <LinkGraph />
+              {officer.canViewNetwork ? (
+                <Suspense fallback={<GraphPlaceholder />}>
+                  <LinkGraph />
+                </Suspense>
+              ) : (
+                <RbacBlock label="Criminal Link Analysis" minRole="ASI (CLR-3)" />
+              )}
             </section>
           )}
 
-          {view === "reports" && (
-            <Placeholder title="Reports" subtitle="Case briefs, weekly digests, and export tools." />
-          )}
-          {view === "settings" && (
-            <Placeholder title="Settings" subtitle="Preferences, roles, and integrations." />
-          )}
+          {view === "reports" && <ReportsView />}
+          {view === "settings" && <SettingsView />}
 
           <footer className="flex items-center justify-between pt-2 font-mono text-[10px] text-muted-foreground">
             <div>SENTINEL BLR v4.2.1 · secure channel</div>

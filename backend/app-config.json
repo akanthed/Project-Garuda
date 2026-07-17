@@ -1,0 +1,14 @@
+{
+  "command": "sh -c 'python3 -m uvicorn main:app --host 0.0.0.0 --port ${X_ZOHO_CATALYST_LISTEN_PORT}'",
+  "buildPath": "./",
+  "stack": "python_3_11",
+  "env_variables": {
+    "PYTHONUNBUFFERED": "1",
+    "LOG_LEVEL": "info",
+    "PYTHONPATH": "vendor",
+    "SEED_TOKEN": "06f19f5959edfadd5c273623efdd8b39",
+    "SESSION_SECRET": "53056e75373f53af53998bae1fab1585",
+    "ALLOWED_ORIGINS": "https://garuda-60078749238.development.catalystserverless.in"
+  },
+  "memory": 512
+}

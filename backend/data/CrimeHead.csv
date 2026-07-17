@@ -1,0 +1,16 @@
+CrimeHeadID,CrimeGroupName,GravityLevel
+1,Cyber Crime,4
+2,Property Theft,3
+3,Vehicle Theft,3
+4,Assault & Violence,4
+5,Narcotics,5
+6,Murder,5
+7,Robbery & Dacoity,5
+8,Fraud & Cheating,3
+9,Unlawful Assembly,2
+10,Eve Teasing,2
+11,Land Disputes,3
+12,Communal Offences,4
+13,Missing Persons,2
+14,Domestic Violence,3
+15,Child Offences,5

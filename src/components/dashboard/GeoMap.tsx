@@ -1,37 +1,156 @@
-import { useState } from "react";
-import { Layers, Maximize2, Radio, Satellite } from "lucide-react";
+﻿'use client';
+
+import { useEffect, useRef, useState } from "react";
+import { Map, Marker, Popup } from "react-map-gl/maplibre";
+import { Layers, Maximize2, Radio, Satellite, X, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
+import { fetchHotspots } from "@/lib/mock-api";
+import type { Hotspot } from "@/lib/types";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { t } from "@/lib/i18n";
+import "maplibre-gl/dist/maplibre-gl.css";
 
-const hotspots = [
-  { x: 32, y: 42, r: 34, level: "high", label: "KR Market" },
-  { x: 58, y: 48, r: 26, level: "med", label: "MG Road" },
-  { x: 74, y: 30, r: 22, level: "high", label: "Whitefield" },
-  { x: 44, y: 68, r: 22, level: "med", label: "Koramangala" },
-  { x: 78, y: 74, r: 20, level: "low", label: "Electronic City" },
-  { x: 22, y: 74, r: 16, level: "low", label: "Yeshwantpur" },
-];
+// ─── Constants ────────────────────────────────────────────────────────────────
 
-const levelColor = (l: string) =>
-  l === "high" ? "var(--danger)" : l === "med" ? "var(--warning)" : "var(--electric)";
+/** CARTO Dark Matter — free, no token needed */
+const MAP_STYLE = "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json";
 
-const initialLayers = [
+const BENGALURU_CENTER: [number, number] = [77.5946, 12.9716];
+
+const RISK_COLOR: Record<string, string> = {
+  high: "var(--danger)",
+  med: "var(--warning)",
+  low: "var(--electric)",
+};
+
+const RISK_SIZE: Record<string, number> = {
+  high: 28,
+  med: 22,
+  low: 16,
+};
+
+const INITIAL_LAYERS = [
   { id: "threat", label: "Threat Heatmap", icon: Radio, on: true },
   { id: "patrol", label: "Patrol Units", icon: Satellite, on: true },
   { id: "infra", label: "Infrastructure", icon: Layers, on: false },
 ];
 
+// Simulated patrol positions (real coords near Bengaluru)
+const PATROL_UNITS = [
+  { id: "P-1", lat: 12.965, lng: 77.601 },
+  { id: "P-2", lat: 12.982, lng: 77.615 },
+  { id: "P-3", lat: 12.952, lng: 77.622 },
+];
+
+// ─── Hotspot marker ───────────────────────────────────────────────────────────
+
+function HotspotMarker({
+  hotspot,
+  selected,
+  onClick,
+}: {
+  hotspot: Hotspot;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  const color = RISK_COLOR[hotspot.risk];
+  const size = RISK_SIZE[hotspot.risk];
+  return (
+    <div
+      onClick={onClick}
+      style={{ width: size, height: size, cursor: "pointer" }}
+      className="relative flex items-center justify-center"
+    >
+      {/* Pulse ring */}
+      <div
+        className="absolute inset-0 animate-ping rounded-full opacity-30"
+        style={{ background: color }}
+      />
+      {/* Solid dot */}
+      <div
+        className="relative rounded-full transition-transform hover:scale-125"
+        style={{
+          width: size * 0.55,
+          height: size * 0.55,
+          background: color,
+          boxShadow: selected ? `0 0 16px ${color}` : `0 0 6px ${color}80`,
+          border: selected ? `1.5px solid white` : "none",
+        }}
+      />
+    </div>
+  );
+}
+
+// ─── Hotspot popup ────────────────────────────────────────────────────────────
+
+function HotspotPopupContent({ hotspot, onClose }: { hotspot: Hotspot; onClose: () => void }) {
+  const { locale } = useLanguage();
+  const color = RISK_COLOR[hotspot.risk];
+  return (
+    <div className="min-w-[240px] rounded-lg border border-white/10 bg-background/95 p-4 backdrop-blur-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" style={{ color }} />
+          <div>
+            <div className="text-xs font-medium">{hotspot.label}</div>
+            <div className="font-mono text-[10px] text-muted-foreground">{hotspot.id}</div>
+          </div>
+        </div>
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+          <X className="h-3 w-3" />
+        </button>
+      </div>
+      <div className="mt-3 space-y-1.5">
+        <div key="crime" className="flex justify-between text-[11px]">
+          <span className="text-muted-foreground">{t("map_crime_type", locale)}</span>
+          <span className="max-w-[150px] text-right font-mono text-[10px]">{hotspot.crime_type}</span>
+        </div>
+        <div key="intensity" className="flex items-center justify-between text-[11px]">
+          <span className="text-muted-foreground">{t("map_intensity", locale)}</span>
+          <div className="flex items-center gap-2">
+            <div className="h-1.5 w-20 overflow-hidden rounded-full bg-white/10">
+              <div className="h-full rounded-full" style={{ width: `${hotspot.intensity * 100}%`, background: color }} />
+            </div>
+            <span className="font-mono text-[10px]">{Math.round(hotspot.intensity * 100)}%</span>
+          </div>
+        </div>
+        <div className="flex justify-between text-[11px]">
+          <span className="text-muted-foreground">{t("graph_risk", locale)}</span>
+          <span
+            className="rounded-full px-1.5 py-0.5 font-mono text-[10px] uppercase"
+            style={{ background: `${color}22`, color }}
+          >
+            {hotspot.risk}
+          </span>
+        </div>
+      </div>
+      <div className="mt-3 border-t border-white/5 pt-2">
+        <p className="text-[10px] uppercase tracking-widest text-muted-foreground">{t("map_causal", locale)}</p>
+        <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground/80">{hotspot.causal_driver}</p>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main component ────────────────────────────────────────────────────────────
+
 export function GeoMap() {
-  const [layers, setLayers] = useState(initialLayers);
+  const { locale } = useLanguage();
+  const [hotspots, setHotspots] = useState<Hotspot[]>([]);
+  const [layers, setLayers] = useState(INITIAL_LAYERS);
   const [expanded, setExpanded] = useState(false);
+  const [selected, setSelected] = useState<Hotspot | null>(null);
+
+  useEffect(() => {
+    fetchHotspots().then(({ data }) => setHotspots(data));
+  }, []);
 
   const toggle = (id: string) => {
     setLayers((prev) =>
       prev.map((l) => {
         if (l.id !== id) return l;
         const next = !l.on;
-        toast(`${l.label} ${next ? "enabled" : "disabled"}`, {
-          description: "Map overlay updated.",
-        });
+        toast(`${l.label} ${next ? "enabled" : "disabled"}`, { description: "Map overlay updated." });
         return { ...l, on: next };
       })
     );
@@ -39,16 +158,16 @@ export function GeoMap() {
 
   const threatOn = layers.find((l) => l.id === "threat")?.on;
   const patrolOn = layers.find((l) => l.id === "patrol")?.on;
-  const infraOn = layers.find((l) => l.id === "infra")?.on;
 
   return (
     <div className="relative col-span-2 overflow-hidden rounded-xl border border-white/5 bg-card">
+      {/* Header */}
       <div className="flex items-center justify-between border-b border-white/5 px-5 py-3">
         <div>
           <div className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
-            Geospatial Intelligence
+            {t("map_title", locale)}
           </div>
-          <div className="mt-0.5 text-sm font-medium">Bengaluru City — Live Threat Surface</div>
+          <div className="mt-0.5 text-sm font-medium">{t("map_subtitle", locale)}</div>
         </div>
         <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
           <span className="flex items-center gap-1.5">
@@ -62,84 +181,72 @@ export function GeoMap() {
         </div>
       </div>
 
-      <div className={`relative grid-noise transition-[height] ${expanded ? "h-[640px]" : "h-[460px]"}`}>
-        {threatOn && (
-          <>
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_40%_50%,rgba(58,120,255,0.18),transparent_60%)]" />
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_75%_30%,rgba(220,40,60,0.18),transparent_55%)]" />
-          </>
-        )}
-
-        <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-          <path
-            d="M2,60 C12,50 18,55 26,48 C34,41 40,44 48,38 C60,30 66,36 78,30 C88,25 94,32 100,28 L100,100 L0,100 Z"
-            fill="rgba(255,255,255,0.02)"
-            stroke="rgba(255,255,255,0.06)"
-            strokeWidth="0.15"
-          />
-          {infraOn && (
-            <g stroke="rgba(120,180,255,0.35)" strokeWidth="0.15" fill="none">
-              <path d="M10,50 L90,50" strokeDasharray="1 1" />
-              <path d="M50,10 L50,90" strokeDasharray="1 1" />
-              <circle cx="50" cy="50" r="18" strokeDasharray="0.8 1.2" />
-            </g>
-          )}
-        </svg>
-
-        {threatOn &&
-          hotspots.map((h, i) => (
-            <div key={i} className="absolute" style={{ left: `${h.x}%`, top: `${h.y}%` }}>
-              <div
-                className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full opacity-40 blur-md"
-                style={{ width: h.r * 2, height: h.r * 2, background: levelColor(h.level) }}
-              />
-              <div
-                className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full"
-                style={{
-                  width: h.r,
-                  height: h.r,
-                  background: `radial-gradient(circle, ${levelColor(h.level)}55 0%, transparent 70%)`,
-                  border: `1px solid ${levelColor(h.level)}`,
-                }}
-              />
-              <div
-                className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full"
-                style={{ width: 4, height: 4, background: levelColor(h.level) }}
-              />
-              <div
-                className="absolute translate-x-2 -translate-y-3 whitespace-nowrap font-mono text-[10px] uppercase tracking-wider"
-                style={{ color: levelColor(h.level) }}
+      {/* MapLibre canvas */}
+      <div className={`relative transition-[height] duration-300 ${expanded ? "h-[640px]" : "h-[460px]"}`}>
+        <Map
+          initialViewState={{
+            longitude: BENGALURU_CENTER[0],
+            latitude: BENGALURU_CENTER[1],
+            zoom: 11.5,
+          }}
+          style={{ width: "100%", height: "100%" }}
+          mapStyle={MAP_STYLE}
+          attributionControl={false}
+        >
+          {/* Hotspot markers */}
+          {threatOn &&
+            hotspots.map((h) => (
+              <Marker
+                key={h.id}
+                longitude={h.lng}
+                latitude={h.lat}
+                anchor="center"
               >
-                {h.label}
-              </div>
-            </div>
-          ))}
-
-        {patrolOn && (
-          <>
-            {[
-              { x: 40, y: 50 },
-              { x: 65, y: 40 },
-              { x: 55, y: 62 },
-            ].map((p, i) => (
-              <div
-                key={i}
-                className="absolute h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-sm border border-primary bg-primary/40"
-                style={{ left: `${p.x}%`, top: `${p.y}%` }}
-              />
+                <HotspotMarker
+                  hotspot={h}
+                  selected={selected?.id === h.id}
+                  onClick={() => setSelected(selected?.id === h.id ? null : h)}
+                />
+              </Marker>
             ))}
-          </>
-        )}
 
-        <div className="glass-panel absolute right-4 top-4 w-56 rounded-lg p-3">
+          {/* Patrol unit markers */}
+          {patrolOn &&
+            PATROL_UNITS.map((p) => (
+              <Marker key={p.id} longitude={p.lng} latitude={p.lat} anchor="center">
+                <div
+                  title={p.id}
+                  className="h-3 w-3 rounded-sm border border-primary bg-primary/60 shadow-[0_0_8px_var(--primary)]"
+                />
+              </Marker>
+            ))}
+
+          {/* Selected hotspot popup */}
+          {selected && (
+            <Popup
+              longitude={selected.lng}
+              latitude={selected.lat}
+              anchor="bottom"
+              offset={16}
+              closeButton={false}
+              closeOnClick={false}
+              style={{ background: "transparent", border: "none", padding: 0 }}
+            >
+              <HotspotPopupContent hotspot={selected} onClose={() => setSelected(null)} />
+            </Popup>
+          )}
+        </Map>
+
+        {/* Layer control panel */}
+        <div className="glass-panel absolute right-4 top-4 z-10 w-52 rounded-lg p-3">
           <div className="mb-2 flex items-center justify-between">
             <div className="flex items-center gap-1.5 text-[11px] font-medium">
               <Layers className="h-3.5 w-3.5 text-primary" />
-              Map Layers
+              {t("map_layers", locale)}
             </div>
             <button
               onClick={() => setExpanded((e) => !e)}
-              className="text-muted-foreground hover:text-foreground"
+              className="text-muted-foreground transition hover:text-foreground"
               title={expanded ? "Collapse" : "Expand"}
             >
               <Maximize2 className="h-3 w-3" />
@@ -156,12 +263,8 @@ export function GeoMap() {
                   <row.icon className="h-3 w-3" />
                   {row.label}
                 </div>
-                <div className={`h-3 w-6 rounded-full p-0.5 transition ${row.on ? "bg-primary/40" : "bg-white/10"}`}>
-                  <div
-                    className={`h-2 w-2 rounded-full transition ${
-                      row.on ? "translate-x-3 bg-primary" : "translate-x-0 bg-white/40"
-                    }`}
-                  />
+                <div className={`h-3 w-6 rounded-full p-0.5 transition-colors ${row.on ? "bg-primary/40" : "bg-white/10"}`}>
+                  <div className={`h-2 w-2 rounded-full transition-transform ${row.on ? "translate-x-3 bg-primary" : "translate-x-0 bg-white/40"}`} />
                 </div>
               </button>
             ))}
@@ -171,17 +274,13 @@ export function GeoMap() {
           </div>
         </div>
 
-        <div className="pointer-events-none absolute inset-4">
-          {[
-            "top-0 left-0 border-t border-l",
-            "top-0 right-0 border-t border-r",
-            "bottom-0 left-0 border-b border-l",
-            "bottom-0 right-0 border-b border-r",
-          ].map((cls) => (
-            <span key={cls} className={`absolute h-3 w-3 border-white/20 ${cls}`} />
-          ))}
-        </div>
+        {!selected && (
+          <div className="pointer-events-none absolute bottom-4 right-4 z-10 font-mono text-[10px] text-white/30">
+            {t("map_click_hint", locale)}
+          </div>
+        )}
       </div>
     </div>
   );
 }
+
