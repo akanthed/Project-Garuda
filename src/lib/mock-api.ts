@@ -13,6 +13,10 @@ import type {
   AskResponse,
   ApiResponse,
   CaseReport,
+  CaseReportsPage,
+  CaseSeverity,
+  CaseWorkflowResult,
+  CaseWorkflowUpdate,
   ForecastPoint,
   Hotspot,
   IncidentIntake,
@@ -314,7 +318,7 @@ export async function runSimulation(
 
 // ─── GET /api/reports ─────────────────────────────────────────────────────────
 
-const CASE_REPORTS: CaseReport[] = [
+const CASE_REPORTS: Omit<CaseReport, "case_master_id">[] = [
   {
     id: "BLR-2026-4481",
     title: "Organized Vehicle Theft Ring — Whitefield Corridor",
@@ -421,13 +425,46 @@ const CASE_REPORTS: CaseReport[] = [
   },
 ];
 
-export async function fetchCaseReports(): Promise<ApiResponse<CaseReport[]>> {
+export async function fetchCaseReports(): Promise<ApiResponse<CaseReportsPage>> {
   if (USE_REAL_API) {
-    const data = await apiFetch<CaseReport[]>("/api/reports?limit=20");
+    const data = await apiFetch<CaseReportsPage>("/api/reports?limit=20");
     return wrap(data);
   }
   await delay(500);
-  return wrap(CASE_REPORTS);
+  return wrap({
+    items: CASE_REPORTS.map((report, index) => ({ ...report, case_master_id: index + 1 })),
+    total: CASE_REPORTS.length,
+    limit: CASE_REPORTS.length,
+    offset: 0,
+  });
+}
+
+export async function updateCaseWorkflow(
+  caseMasterId: number,
+  input: CaseWorkflowUpdate,
+): Promise<ApiResponse<CaseWorkflowResult>> {
+  if (USE_REAL_API) {
+    const data = await apiFetch<CaseWorkflowResult>(`/api/reports/${caseMasterId}/workflow`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    });
+    return wrap(data);
+  }
+
+  await delay(250);
+  const report = CASE_REPORTS[caseMasterId - 1];
+  if (!report) throw new Error("Case not found");
+  report.status = input.status;
+  report.assigned_officer = input.assigned_officer;
+  return wrap({
+    case_master_id: caseMasterId,
+    status: input.status,
+    assigned_officer: input.assigned_officer,
+    updated_by: "Current officer",
+    updated_at: new Date().toISOString(),
+    persistence: "session",
+    warning: "Local demonstration workflow event; configure Catalyst Data Store persistence for deployment.",
+  });
 }
 
 // ─── POST /api/incidents — officer-reviewed operational intake ───────────────

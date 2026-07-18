@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { t, type TranslationKey } from "@/lib/i18n";
+import { getSession } from "@/lib/auth";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -86,55 +87,44 @@ function SectionCard({ title, children }: { title: string; children: React.React
 // ─── Section renderers ─────────────────────────────────────────────────────────
 
 function ProfileSection() {
-  const [saved, setSaved] = useState(false);
   const { locale } = useLanguage();
+  const officer = getSession();
 
-  const save = () => {
-    toast.success(t("settings_profile_updated", locale), { description: t("settings_profile_saved", locale) });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-  };
+  const identity: { labelKey: TranslationKey; value: string }[] = [
+    { labelKey: "settings_full_name", value: officer?.name ?? "-" },
+    { labelKey: "settings_badge_number", value: officer?.badge ?? "-" },
+    { labelKey: "settings_designation", value: officer?.designation ?? "-" },
+    { labelKey: "settings_station", value: officer?.station ?? "-" },
+  ];
+  const clearance: { labelKey: TranslationKey; value: string }[] = [
+    { labelKey: "settings_access_level", value: officer?.clearance ?? "-" },
+    { labelKey: "settings_team", value: officer?.node ?? "-" },
+    { labelKey: "settings_last_login", value: "-" },
+  ];
 
   return (
     <div className="space-y-4">
       <SectionCard title={t("settings_section_identity", locale)}>
-        {[
-          { labelKey: "settings_full_name", value: "Cpt. R. Vance", type: "text" },
-          { labelKey: "settings_badge_number", value: "KSP-BLR-7741", type: "text" },
-          { labelKey: "settings_designation", value: "Circle Inspector", type: "text" },
-          { labelKey: "settings_station", value: "Bengaluru City Police HQ", type: "text" },
-        ].map(({ labelKey, value, type }) => (
+        {identity.map(({ labelKey, value }) => (
           <div key={labelKey} className="py-3">
             <label className="mb-1.5 block text-[10px] uppercase tracking-widest text-muted-foreground">{t(labelKey, locale)}</label>
             <input
-              type={type}
-              defaultValue={value}
-              className="w-full rounded-md border border-white/5 bg-background/50 px-3 py-2 font-mono text-sm text-foreground outline-none focus:border-white/15"
+              readOnly
+              value={value}
+              className="w-full rounded-md border border-white/5 bg-background/50 px-3 py-2 font-mono text-sm text-foreground outline-none"
             />
           </div>
         ))}
       </SectionCard>
 
       <SectionCard title={t("settings_section_clearance", locale)}>
-        {[
-          { labelKey: "settings_access_level", value: "CLR-7 (Full Access)" },
-          { labelKey: "settings_team", value: "BLR-A1 · South Zone" },
-          { labelKey: "settings_last_login", value: "2026-07-16 18:42 IST" },
-        ].map(({ labelKey, value }) => (
+        {clearance.map(({ labelKey, value }) => (
           <div key={labelKey} className="flex items-center justify-between py-3 text-sm">
             <span className="text-muted-foreground">{t(labelKey, locale)}</span>
             <span className="font-mono text-xs">{value}</span>
           </div>
         ))}
       </SectionCard>
-
-      <button
-        onClick={save}
-        className="flex items-center gap-2 rounded-md bg-primary/15 px-4 py-2.5 text-sm font-medium text-primary transition hover:bg-primary/25"
-      >
-        {saved ? <Check className="h-4 w-4" /> : null}
-        {saved ? t("settings_saved", locale) : t("settings_save", locale)}
-      </button>
     </div>
   );
 }
@@ -209,7 +199,7 @@ function DisplaySection({ toggles, values, onChange }: { toggles: ToggleSetting[
 
 function IntegrationsSection() {
   const { locale } = useLanguage();
-  const integrations = [
+  const integrations: { id: string; name: string; status: "connected" | "pending"; descriptionKey: TranslationKey }[] = [
     { id: "zoho-ds", name: "Zoho Catalyst Data Store", status: "connected", descriptionKey: "settings_service_datastore" },
     { id: "zia", name: "Catalyst Zia Services", status: "pending", descriptionKey: "settings_service_zia" },
     { id: "appsail", name: "AppSail Backend", status: "pending", descriptionKey: "settings_service_appsail" },
@@ -238,15 +228,16 @@ function IntegrationsSection() {
 
 function SecuritySection() {
   const { locale } = useLanguage();
+  const sessionDetails: { labelKey: TranslationKey; value: string }[] = [
+    { labelKey: "settings_session_token", value: "Active" },
+    { labelKey: "settings_ip_address", value: "Browser session" },
+    { labelKey: "settings_session_expires", value: "Server-managed" },
+    { labelKey: "settings_2fa_status", value: t("settings_2fa_enabled", locale) },
+  ];
   return (
     <div className="space-y-4">
       <SectionCard title={t("settings_section_session", locale)}>
-        {[
-          { labelKey: "settings_session_token", value: "eyJ...BLR-A1 (active)" },
-          { labelKey: "settings_ip_address", value: "10.14.22.4 · KSP-Intranet" },
-          { labelKey: "settings_session_expires", value: "2026-07-16 23:59 IST" },
-          { labelKey: "settings_2fa_status", value: t("settings_2fa_enabled", locale) },
-        ].map(({ labelKey, value }) => (
+        {sessionDetails.map(({ labelKey, value }) => (
           <div key={labelKey} className="flex items-center justify-between py-3 text-sm">
             <span className="text-muted-foreground">{t(labelKey, locale)}</span>
             <span className="font-mono text-[11px]">{value}</span>

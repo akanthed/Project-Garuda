@@ -1,16 +1,17 @@
 import { useState, useEffect, lazy, Suspense } from "react";
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { Network, MapPin, TrendingDown, ShieldCheck, type LucideIcon } from "lucide-react";
+import { Network, MapPin, TrendingDown, ShieldCheck, ClipboardCheck, Clock3, type LucideIcon } from "lucide-react";
 import { Toaster } from "@/components/ui/sonner";
 import { Sidebar, type ViewKey } from "@/components/dashboard/Sidebar";
 import { TopBar } from "@/components/dashboard/TopBar";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { Simulator } from "@/components/dashboard/Simulator";
 import { AlertsFeed } from "@/components/dashboard/AlertsFeed";
+import { ActionBrief, type ActionBriefDecision } from "@/components/dashboard/ActionBrief";
 import { ReportsView } from "@/components/dashboard/ReportsView";
 import { SettingsView } from "@/components/dashboard/SettingsView";
 import { fetchKpiMetrics } from "@/lib/mock-api";
-import type { KpiMetric } from "@/lib/types";
+import type { KpiMetric, StationAnomaly } from "@/lib/types";
 import { getSession, isAuthenticated, type Officer } from "@/lib/auth";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { SimulatorProvider } from "@/contexts/SimulatorContext";
@@ -32,6 +33,60 @@ const GeoMap = lazy(() =>
 const LinkGraph = lazy(() =>
   import("@/components/dashboard/LinkGraph").then((m) => ({ default: m.LinkGraph }))
 );
+
+interface OperationEvent {
+  id: string;
+  stationName: string;
+  decision: ActionBriefDecision;
+  note: string;
+  createdAt: string;
+}
+
+const OPERATION_TIMELINE_KEY = "garuda-operation-timeline";
+
+function OperationsTimeline({ events }: { events: OperationEvent[] }) {
+  const { locale } = useLanguage();
+
+  return (
+    <section className="rounded-xl border border-white/5 bg-card">
+      <div className="flex items-start justify-between gap-4 border-b border-white/5 px-5 py-3.5">
+        <div>
+          <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+            <Clock3 className="h-3.5 w-3.5 text-primary" />
+            {t("operations_timeline_title", locale)}
+          </div>
+          <div className="mt-0.5 text-sm font-medium">{t("operations_timeline_subtitle", locale)}</div>
+        </div>
+        <span className="rounded-full border border-white/10 px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
+          {t("operations_timeline_prototype", locale)}
+        </span>
+      </div>
+      <div className="px-5 py-3">
+        {events.length === 0 ? (
+          <p className="py-3 text-xs text-muted-foreground">{t("operations_timeline_empty", locale)}</p>
+        ) : (
+          <div className="space-y-3">
+            {events.map((event) => (
+              <div key={event.id} className="flex gap-3">
+                <div className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                  <ClipboardCheck className="h-3.5 w-3.5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
+                    <span className="font-medium">{t(`action_brief_${event.decision}` as TranslationKey, locale)}</span>
+                    <span className="text-muted-foreground">{event.stationName}</span>
+                    <span className="font-mono text-[10px] text-muted-foreground">{new Date(event.createdAt).toLocaleTimeString(locale === "kn" ? "kn-IN" : "en-IN", { hour: "2-digit", minute: "2-digit" })}</span>
+                  </div>
+                  <p className="mt-0.5 text-xs text-muted-foreground">{event.note || t("operations_timeline_no_note", locale)}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
 
 function MapPlaceholder({ compact = false }: { compact?: boolean }) {
   return (
@@ -102,6 +157,16 @@ function Dashboard() {
   const { locale } = useLanguage();
   const [kpis, setKpis] = useState<KpiMetric[]>([]);
   const [kpisLoading, setKpisLoading] = useState(true);
+  const [selectedAnomaly, setSelectedAnomaly] = useState<StationAnomaly | null>(null);
+  const [briefOpen, setBriefOpen] = useState(false);
+  const [operationEvents, setOperationEvents] = useState<OperationEvent[]>(() => {
+    try {
+      const savedEvents = localStorage.getItem(OPERATION_TIMELINE_KEY);
+      return savedEvents ? JSON.parse(savedEvents) : [];
+    } catch {
+      return [];
+    }
+  });
 
   useEffect(() => {
     fetchKpiMetrics().then(({ data }) => {
@@ -109,6 +174,22 @@ function Dashboard() {
       setKpisLoading(false);
     });
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem(OPERATION_TIMELINE_KEY, JSON.stringify(operationEvents));
+  }, [operationEvents]);
+
+  const openBrief = (anomaly: StationAnomaly) => {
+    setSelectedAnomaly(anomaly);
+    setBriefOpen(true);
+  };
+
+  const recordDecision = (decision: ActionBriefDecision, note: string, anomaly: StationAnomaly) => {
+    setOperationEvents((events) => [
+      { id: crypto.randomUUID(), stationName: anomaly.station_name, decision, note, createdAt: new Date().toISOString() },
+      ...events,
+    ].slice(0, 8));
+  };
 
   return (
     <SimulatorProvider>
@@ -158,7 +239,7 @@ function Dashboard() {
                     </button>
                   </div>
                   {officer.canViewNetwork ? (
-                    <AlertsFeed onOpenView={setView} />
+                    <AlertsFeed onOpenView={setView} onOpenBrief={openBrief} />
                   ) : (
                     <RbacBlock label="Criminal Link Analysis" minRole="ASI (CLR-3)" />
                   )}
@@ -180,6 +261,8 @@ function Dashboard() {
                 ) : (
                   <RbacBlock label="Command Simulator" minRole="SI (CLR-4)" />
                 )}
+
+                <OperationsTimeline events={operationEvents} />
               </>
             )}
 
@@ -215,6 +298,7 @@ function Dashboard() {
               <div>build 0a4f9f · region ap-south-blr</div>
             </footer>
           </main>
+          <ActionBrief anomaly={selectedAnomaly} open={briefOpen} onOpenChange={setBriefOpen} onRecordDecision={recordDecision} />
         </div>
       </div>
     </SimulatorProvider>

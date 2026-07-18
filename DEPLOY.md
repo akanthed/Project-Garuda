@@ -34,36 +34,20 @@ python generate_data.py        # Creates data/*.csv
 
 ## 3. Upload Data to Catalyst Data Store
 1. Open Zoho Catalyst Console → Data Store
-2. Create 5 tables: `CaseMaster`, `Accused`, `CrimeHead`, `ArrestSurrender`, `Officers`
+2. Create 6 tables: `CaseMaster`, `Accused`, `CrimeHead`, `ArrestSurrender`, `Officers`, `CaseWorkflowEvents`
 3. Import each CSV from `backend/data/` for the first 4 tables
 4. Populate `Officers` with columns `Badge, Name, Designation, Station, Clearance, Node, PasswordHash` (see `hash_password()` in `backend/main.py` for the hashing scheme) — used by `POST /api/auth/login`. If this table is empty or missing, the backend falls back to its local demo registry.
 5. Verify FK relationships
 
+`CaseWorkflowEvents` is append-only audit data for Reports workflow changes. Create it with these columns: `EventID` (string), `CaseMasterID` (number), `Status` (string), `AssignedOfficer` (string), `UpdatedBy` (string), and `UpdatedAt` (string / ISO-8601 timestamp). The API reads the newest event for each case and never mutates `CaseMaster` source rows.
+
 ---
 
-## 3.5 Activate Zia Translate & SmartBrowz (required — these are opt-in per project)
+## 3.5 Optional Catalyst services
 
-`backend/main.py` already calls `capp.zia().translate(...)` (in `/api/translate`) and `capp.smart_browz().generate_pdf(...)` (in `/api/export_brief`), each wrapped in a try/except that silently falls back to a local passthrough/`fpdf2` implementation if the call fails. **Unlike Data Store, Zia and SmartBrowz are not enabled by default on a new Catalyst project** — the fallback firing on every request (verified against the live AppSail instance: `/api/translate` returns `"source":"fallback"` and `/api/export_brief` throws even in production) means these two services have never actually been turned on for this project. There is no `catalyst` CLI command for this — it must be done in the console:
+`POST /api/translate` currently returns supplied narrative text unchanged. The Catalyst Zia Python SDK does not provide a Translate API, so the application should not describe this endpoint as machine translation. Static English/Kannada interface labels are hand-curated in the client.
 
-1. Open [catalyst.zoho.com](https://catalyst.zoho.com) → select **Project Garuda**.
-2. In the left sidebar, find **Zia** (usually under an "AI & ML" or "Cognitive Services" group) → enable/activate it for this project, and confirm **Translate** is included in the enabled capabilities.
-3. In the left sidebar, find **SmartBrowz** (usually under "Advanced I/O" or a similar group) → enable/activate it for this project.
-4. Some Catalyst plans require accepting an add-on billing/quota consent screen the first time a service is enabled — complete that if prompted.
-5. Re-deploy is **not** required just for enabling a service (it's a project-level toggle, not code), but redeploy anyway if you've also picked up the em-dash PDF fix (see step 4 below).
-
-**Verify activation worked** (from anywhere, no CORS restriction via curl/PowerShell):
-```bash
-curl -X POST https://garuda-api-<project-id>.catalystappsail.com/api/translate \
-  -H "Content-Type: application/json" \
-  -d '{"texts":["Robbery reported near MG Road"],"target_language":"kn"}'
-# Look for "source":"zia" instead of "source":"fallback"
-
-curl -X POST https://garuda-api-<project-id>.catalystappsail.com/api/export_brief \
-  -H "Content-Type: application/json" \
-  -d '{"kpis":{"Cases":"5000"},"hotspot_count":5,"top_crime_types":["Theft"]}' \
-  -o brief.pdf
-# Should return a valid PDF (check size > 0) instead of a 500 JSON error
-```
+`POST /api/export_brief` attempts Catalyst SmartBrowz PDF generation through `capp.smart_browz().convert_to_pdf(html)` when available. A local `fpdf2` fallback keeps intelligence brief export usable during local development and if SmartBrowz is unavailable.
 
 ---
 
@@ -132,10 +116,10 @@ catalyst client:setup
 # Select client type "Basic" (or the closest match for a Vite static build) and
 # point it at the dist/ output directory.
 
-# Then deploy all resources (functions, client, appsail, API gateway) in one shot:
+# Then deploy all resources in one shot:
 catalyst deploy
 ```
-> There is no `catalyst hosting push` command — deployment of the client happens through `catalyst deploy` (or `catalyst deploy client` to deploy only the client) after it's been configured with `client:setup`.
+> There is no `catalyst hosting push` command. Deploy the configured client with `catalyst deploy`, or use `catalyst deploy --only client` for the client only.
 
 In Catalyst Console → Web Client Hosting, you can confirm the client named `garuda-frontend` (or whatever name you gave it during setup) and its assigned domain / `*.catalystapps.com` URL.
 
@@ -144,11 +128,13 @@ In Catalyst Console → Web Client Hosting, you can confirm the client named `ga
 ## 7. Set Environment Variables in Catalyst Console
 AppSail → Environment Variables:
 ```
-CATALYST_PROJECT_ID=<your-project-id>
 ALLOWED_ORIGINS=https://garuda-frontend-<id>.catalystapps.com
 SESSION_SECRET=<a long random string, generate with: openssl rand -hex 32>
+SEED_TOKEN=<a long random secret used only by protected seed and reload endpoints>
 ```
-> `ALLOWED_ORIGINS` replaces the previously wide-open `allow_origins=["*"]` CORS setting. `SESSION_SECRET` signs officer login tokens — without setting it, an insecure default is used, so this is required before going to production.
+> Do not set `CATALYST_PROJECT_ID`: AppSail derives project context from request headers, and Catalyst reserves that variable name. `ALLOWED_ORIGINS` configures local-development CORS; Catalyst manages deployed Web Client origin protection. `SESSION_SECRET` signs officer login tokens and is required before production use.
+
+> Rotate `SESSION_SECRET` and `SEED_TOKEN` in the Catalyst Console before the next deployment. Earlier local configuration values were removed from `backend/app-config.json` and must not be reused.
 
 Web Client Hosting → Build Settings:
 ```

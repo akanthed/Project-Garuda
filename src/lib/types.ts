@@ -136,6 +136,7 @@ export type CaseSeverity = "critical" | "high" | "medium" | "low";
 export type CaseStatus = "open" | "investigating" | "resolved" | "closed";
 
 export interface CaseReport {
+  case_master_id: number;
   id: string;
   title: string;
   district: string;
@@ -147,6 +148,26 @@ export interface CaseReport {
   crime_type: string;
   ipc_section: string;
   suspects: number;
+}
+
+export interface CaseReportsPage {
+  items: CaseReport[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface CaseWorkflowUpdate {
+  status: CaseStatus;
+  assigned_officer: string;
+}
+
+export interface CaseWorkflowResult extends CaseWorkflowUpdate {
+  case_master_id: number;
+  updated_by: string;
+  updated_at: string;
+  persistence: "datastore" | "session";
+  warning?: string | null;
 }
 
 export interface IncidentIntake {

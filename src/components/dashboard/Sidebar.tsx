@@ -89,27 +89,6 @@ export function Sidebar({ active, onChange }: SidebarProps) {
         </nav>
       </div>
 
-      {/* Profile avatar */}
-      <div className={cn(collapsed ? "flex justify-center" : "px-3")}>
-        <button
-          title={t("nav_settings", locale)}
-          onClick={() => onChange("settings")}
-          className={cn(
-            "flex items-center gap-2.5 rounded-md transition hover:bg-white/5",
-            collapsed ? "h-9 w-9 justify-center" : "w-full px-2 py-1.5"
-          )}
-        >
-          <div className="h-7 w-7 shrink-0 rounded-full bg-gradient-to-br from-primary/40 to-primary/10 ring-1 ring-white/10 transition hover:ring-primary/40" />
-          {!collapsed && (
-            <div className="min-w-0 text-left">
-              <div className="truncate text-xs font-medium">Profile</div>
-              <div className="truncate font-mono text-[10px] text-muted-foreground">
-                {t("nav_settings", locale)}
-              </div>
-            </div>
-          )}
-        </button>
-      </div>
     </aside>
   );
 }

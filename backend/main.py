@@ -29,6 +29,7 @@ import random
 import time
 from contextlib import asynccontextmanager
 from io import BytesIO
+from threading import Lock
 from typing import Optional
 
 import networkx as nx
@@ -251,6 +252,30 @@ def load_from_catalyst(capp) -> None:
     DB.crime_heads = pd.DataFrame(_zcql_query_all(capp, "CrimeHead", 300))
     _coerce_dtypes()
     log.info(f"Loaded {len(DB.cases)} cases from Catalyst")
+
+_DATA_LOAD_LOCK = Lock()
+
+def ensure_data_loaded(request: Request) -> bool:
+    """Recover in-memory analytics after an AppSail restart using this request's
+    Catalyst context. Startup cannot do this because Catalyst headers are only
+    available on a real proxied request."""
+    if not DB.cases.empty:
+        return True
+
+    with _DATA_LOAD_LOCK:
+        if not DB.cases.empty:
+            return True
+        capp = _try_catalyst_app(request)
+        if capp is None:
+            return False
+        try:
+            load_from_catalyst(capp)
+            build_graph()
+            _LOCAL_CACHE.clear()
+            return not DB.cases.empty
+        except Exception:
+            log.exception("Automatic Catalyst Data Store reload failed")
+            return False
 
 def _coerce_dtypes() -> None:
     """Data Store/ZCQL returns every column as a JSON string, unlike pd.read_csv
@@ -642,7 +667,7 @@ async def translate(body: TranslateRequest, request: Request):
 
 @app.get("/api/kpis")
 async def get_kpis(request: Request):
-    if DB.cases.empty:
+    if not ensure_data_loaded(request):
         raise HTTPException(503, "Data not loaded")
 
     capp = _try_catalyst_app(request)
@@ -694,7 +719,7 @@ async def get_hotspots(
     gravity_min: int = Query(1, ge=1, le=5),
     limit: int = Query(300, le=1000),
 ):
-    if DB.cases.empty:
+    if not ensure_data_loaded(request):
         raise HTTPException(503, "Data not loaded")
 
     capp = _try_catalyst_app(request)
@@ -747,14 +772,14 @@ async def get_patrols():
 # ─── GET /api/hotspots/forecast (predictive risk layer) ───────────────
 
 @app.get("/api/hotspots/forecast")
-async def get_hotspots_forecast(horizon_days: int = Query(30, ge=7, le=90)):
+async def get_hotspots_forecast(request: Request, horizon_days: int = Query(30, ge=7, le=90)):
     """
     Per-station linear trend (numpy.polyfit over monthly incident counts)
     projected forward `horizon_days`. This is a simple trend model, not a
     full time-series/ML forecast — labeled as such via the `model` field so
     the frontend can show it's a lightweight projection, not magic.
     """
-    if DB.cases.empty:
+    if not ensure_data_loaded(request):
         raise HTTPException(503, "Data not loaded")
     monthly = _monthly_counts_by_station()
     if not monthly:
@@ -793,7 +818,7 @@ async def get_hotspots_forecast(horizon_days: int = Query(30, ge=7, le=90)):
 
 @app.get("/api/anomalies")
 async def get_anomalies(request: Request):
-    if DB.cases.empty:
+    if not ensure_data_loaded(request):
         raise HTTPException(503, "Data not loaded")
     capp = _try_catalyst_app(request)
     cached = cache_get(capp, "anomalies")
@@ -869,9 +894,11 @@ def _ask(query: str) -> dict:
     return {"answer": answer, "matched_cases": matched_cases, "suggested_view": suggested_view}
 
 @app.post("/api/ask")
-async def ask_garuda(body: AskRequest):
+async def ask_garuda(body: AskRequest, request: Request):
     if not body.query.strip():
         raise HTTPException(400, "Empty query")
+    if not ensure_data_loaded(request):
+        raise HTTPException(503, "Data not loaded")
     return _ask(body.query)
 
 # ─── POST /api/incidents — operational intake ─────────────────────────────────
@@ -885,7 +912,7 @@ async def create_incident(body: IncidentIntakeRequest, request: Request):
     local development retains them only for the running API session.
     """
     officer = require_session(request)
-    if DB.cases.empty:
+    if not ensure_data_loaded(request):
         raise HTTPException(503, "Data not loaded")
     if DB.crime_heads.empty or body.crime_major_head_id not in set(DB.crime_heads["CrimeHeadID"].astype(int)):
         raise HTTPException(400, "Unknown crime category")
@@ -955,6 +982,8 @@ async def create_incident(body: IncidentIntakeRequest, request: Request):
 @app.get("/api/network")
 async def get_network(request: Request, cluster_size: int = Query(15, ge=5, le=50)):
     require_permission(request, "canViewNetwork")
+    if not ensure_data_loaded(request):
+        raise HTTPException(503, "Data not loaded")
     if DB.graph.number_of_nodes() == 0:
         raise HTTPException(503, "Graph not built")
 
@@ -990,6 +1019,8 @@ async def get_network(request: Request, cluster_size: int = Query(15, ge=5, le=5
 @app.post("/api/simulator/run")
 async def run_simulation(body: SimulationRequest, request: Request):
     require_permission(request, "canSimulate")
+    if not ensure_data_loaded(request):
+        raise HTTPException(503, "Data not loaded")
     baseline = len(DB.cases) if not DB.cases.empty else 1000
     patrol_density = max(0.0, min(100.0, body.patrol_density))
     infra_health = max(0.0, min(100.0, body.infra_health))
@@ -1013,8 +1044,8 @@ async def run_simulation(body: SimulationRequest, request: Request):
 # ─── GET /api/reports ─────────────────────────────────────────────────────────
 
 @app.get("/api/reports")
-async def get_reports(limit: int = Query(20, le=100)):
-    if DB.cases.empty:
+async def get_reports(request: Request, limit: int = Query(20, le=100)):
+    if not ensure_data_loaded(request):
         raise HTTPException(503, "Data not loaded")
     df = DB.cases.sort_values("CrimeRegisteredDate", ascending=False).head(limit)
     if not DB.crime_heads.empty:

@@ -13,13 +13,14 @@ interface ActionBriefProps {
   anomaly: StationAnomaly | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onRecordDecision: (decision: ActionBriefDecision, note: string, anomaly: StationAnomaly) => void;
 }
 
-type Decision = "approve" | "modify" | "escalate";
+export type ActionBriefDecision = "approve" | "modify" | "escalate";
 
-export function ActionBrief({ anomaly, open, onOpenChange }: ActionBriefProps) {
+export function ActionBrief({ anomaly, open, onOpenChange, onRecordDecision }: ActionBriefProps) {
   const { locale } = useLanguage();
-  const [decision, setDecision] = useState<Decision>("approve");
+  const [decision, setDecision] = useState<ActionBriefDecision>("approve");
   const [note, setNote] = useState("");
 
   if (!anomaly) return null;
@@ -32,7 +33,9 @@ export function ActionBrief({ anomaly, open, onOpenChange }: ActionBriefProps) {
   ];
 
   const markReady = () => {
+    onRecordDecision(decision, note.trim(), anomaly);
     toast.success(t("action_brief_ready", locale), { description: t("action_brief_ready_desc", locale) });
+    setNote("");
     onOpenChange(false);
   };
 
@@ -116,7 +119,7 @@ export function ActionBrief({ anomaly, open, onOpenChange }: ActionBriefProps) {
           </section>
 
           <p className="border-l-2 border-amber-400/70 bg-amber-400/5 px-3 py-2 text-[11px] leading-relaxed text-amber-100/80">{t("action_brief_disclaimer", locale)}</p>
-          <button type="button" onClick={markReady} className="flex w-full items-center justify-center gap-2 rounded-md bg-primary/15 px-4 py-2.5 text-sm font-medium text-primary transition hover:bg-primary/25"><CheckCircle2 className="h-4 w-4" />{t("action_brief_export", locale)}</button>
+          <button type="button" onClick={markReady} className="flex w-full items-center justify-center gap-2 rounded-md bg-primary/15 px-4 py-2.5 text-sm font-medium text-primary transition hover:bg-primary/25"><CheckCircle2 className="h-4 w-4" />{t("action_brief_record_decision", locale)}</button>
         </div>
       </SheetContent>
     </Sheet>

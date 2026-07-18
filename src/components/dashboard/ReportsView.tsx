@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { FileText, Search, Filter, ChevronDown, ExternalLink, RefreshCw, Languages, Loader2, Plus, X } from "lucide-react";
-import { createIncident, fetchCaseReports } from "@/lib/mock-api";
+import { createIncident, fetchCaseReports, updateCaseWorkflow } from "@/lib/mock-api";
 import { translateTexts } from "@/lib/translate";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { t, type TranslationKey } from "@/lib/i18n";
@@ -75,11 +75,14 @@ function StatusBadge({ status }: { status: CaseStatus }) {
 
 // ─── Case detail drawer ────────────────────────────────────────────────────────
 
-function CaseDetailDrawer({ report, onClose }: { report: CaseReport; onClose: () => void }) {
+function CaseDetailDrawer({ report, onClose, onWorkflowUpdated }: { report: CaseReport; onClose: () => void; onWorkflowUpdated: (report: CaseReport) => void }) {
   const { locale } = useLanguage();
   const [translated, setTranslated] = useState<string | null>(null);
   const [translating, setTranslating] = useState(false);
   const [translateSource, setTranslateSource] = useState<"zia" | "fallback" | null>(null);
+  const [status, setStatus] = useState<CaseStatus>(report.status);
+  const [assignedOfficer, setAssignedOfficer] = useState(report.assigned_officer === "Unassigned" ? "" : report.assigned_officer);
+  const [savingWorkflow, setSavingWorkflow] = useState(false);
 
   const handleTranslate = async () => {
     if (translated) {
@@ -92,6 +95,22 @@ function CaseDetailDrawer({ report, onClose }: { report: CaseReport; onClose: ()
     setTranslating(false);
     setTranslateSource(source);
     setTranslated(texts[0]);
+  };
+
+  const handleWorkflowUpdate = async () => {
+    const officer = assignedOfficer.trim();
+    if (!officer || savingWorkflow) return;
+    setSavingWorkflow(true);
+    try {
+      const { data } = await updateCaseWorkflow(report.case_master_id, { status, assigned_officer: officer });
+      const updated = { ...report, status: data.status, assigned_officer: data.assigned_officer };
+      onWorkflowUpdated(updated);
+      toast.success(t("reports_workflow_saved", locale), { description: data.warning ?? data.updated_by });
+    } catch (error) {
+      toast.error(t("reports_workflow_failed", locale), { description: error instanceof Error ? error.message : t("reports_review_details", locale) });
+    } finally {
+      setSavingWorkflow(false);
+    }
   };
 
   return (
@@ -144,6 +163,21 @@ function CaseDetailDrawer({ report, onClose }: { report: CaseReport; onClose: ()
       <div className="mt-4 flex items-center gap-3">
         <SeverityBadge severity={report.severity} />
         <StatusBadge status={report.status} />
+      </div>
+
+      <div className="mt-4 grid gap-3 border-t border-white/5 pt-4 md:grid-cols-[1fr_180px_auto]">
+        <input
+          value={assignedOfficer}
+          onChange={(event) => setAssignedOfficer(event.target.value)}
+          placeholder={t("reports_assign_officer", locale)}
+          className="rounded-md border border-white/10 bg-background/50 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50"
+        />
+        <select value={status} onChange={(event) => setStatus(event.target.value as CaseStatus)} className="rounded-md border border-white/10 bg-background/50 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50">
+          {(["open", "investigating", "resolved", "closed"] as CaseStatus[]).map((value) => <option key={value} value={value}>{t(STATUS_KEYS[value], locale)}</option>)}
+        </select>
+        <button onClick={handleWorkflowUpdate} disabled={!assignedOfficer.trim() || savingWorkflow} className="rounded-md bg-primary/15 px-4 py-2 text-xs font-medium text-primary transition hover:bg-primary/25 disabled:opacity-50">
+          {savingWorkflow ? t("reports_workflow_saving", locale) : t("reports_update_workflow", locale)}
+        </button>
       </div>
     </div>
   );
@@ -248,6 +282,7 @@ function IncidentIntakeForm({ onClose, onSubmitted }: { onClose: () => void; onS
 export function ReportsView() {
   const { locale } = useLanguage();
   const [reports, setReports] = useState<CaseReport[]>([]);
+  const [totalReports, setTotalReports] = useState(0);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filterSeverity, setFilterSeverity] = useState<CaseSeverity | "all">("all");
@@ -259,7 +294,8 @@ export function ReportsView() {
   const load = () => {
     setLoading(true);
     fetchCaseReports().then(({ data }) => {
-      setReports(data);
+      setReports(data.items);
+      setTotalReports(data.total);
       setLoading(false);
     });
   };
@@ -269,7 +305,8 @@ export function ReportsView() {
   const refresh = () => {
     setRefreshing(true);
     fetchCaseReports().then(({ data }) => {
-      setReports(data);
+      setReports(data.items);
+      setTotalReports(data.total);
       setRefreshing(false);
     });
   };
@@ -294,7 +331,7 @@ export function ReportsView() {
           <div>
             <div className="text-base font-medium">{t("reports_title", locale)}</div>
             <div className="font-mono text-[11px] text-muted-foreground">
-              {t("reports_subtitle", locale)}
+              {t("reports_workflow_hint", locale)}
             </div>
           </div>
         </div>
@@ -308,7 +345,7 @@ export function ReportsView() {
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatCard label={t("reports_total", locale)} value={reports.length} sub={t("reports_all_districts", locale)} />
+        <StatCard label={t("reports_total", locale)} value={totalReports} sub={t("reports_all_districts", locale)} />
         <StatCard label={t("reports_active", locale)} value={openCount} sub={t("reports_attention", locale)} />
         <StatCard label={t("reports_critical", locale)} value={criticalCount} sub={t("reports_immediate", locale)} />
         <StatCard label={t("reports_stations", locale)} value="1,100+" sub={t("reports_network", locale)} />
@@ -356,7 +393,15 @@ export function ReportsView() {
 
       {/* Selected case detail */}
       {selected && (
-        <CaseDetailDrawer report={selected} onClose={() => setSelected(null)} />
+        <CaseDetailDrawer
+          key={selected.id}
+          report={selected}
+          onClose={() => setSelected(null)}
+          onWorkflowUpdated={(updated) => {
+            setReports((current) => current.map((report) => report.case_master_id === updated.case_master_id ? updated : report));
+            setSelected(updated);
+          }}
+        />
       )}
 
       {/* Table */}
@@ -377,7 +422,7 @@ export function ReportsView() {
                   t("reports_col_type", locale),
                   t("reports_col_date", locale),
                   t("reports_col_severity", locale),
-                  t("reports_col_status", locale),
+                  t("reports_col_workflow", locale),
                   "",
                 ].map((h) => (
                   <th key={h} className="px-4 py-3 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
@@ -414,7 +459,12 @@ export function ReportsView() {
                       <SeverityBadge severity={r.severity} />
                     </td>
                     <td className="px-4 py-3">
-                      <StatusBadge status={r.status} />
+                      <div className="space-y-1">
+                        <StatusBadge status={r.status} />
+                        <div className="max-w-28 truncate font-mono text-[10px] text-muted-foreground" title={r.assigned_officer}>
+                          {r.assigned_officer}
+                        </div>
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <ExternalLink className="h-3.5 w-3.5 text-muted-foreground/40 group-hover:text-muted-foreground" />
@@ -427,7 +477,7 @@ export function ReportsView() {
         )}
         {!loading && filtered.length > 0 && (
           <div className="flex items-center justify-between border-t border-white/5 px-4 py-2.5 font-mono text-[10px] text-muted-foreground">
-            <span>{t("reports_showing", locale)} {filtered.length} {t("reports_of", locale)} {reports.length}</span>
+            <span>{t("reports_showing", locale)} {filtered.length} {t("reports_of", locale)} {totalReports}</span>
             <span>KSP · {new Date().toLocaleDateString("en-IN")}</span>
           </div>
         )}
