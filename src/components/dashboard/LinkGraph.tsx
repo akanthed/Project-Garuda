@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import ForceGraph2D, { type ForceGraphMethods } from "react-force-graph-2d";
-import { X, User, MapPin, Car, FileText, AlertTriangle } from "lucide-react";
+import { X, User, MapPin, Car, FileText, AlertTriangle, Info, Move } from "lucide-react";
 import { fetchNetwork } from "@/lib/mock-api";
 import type { NetworkNode, NetworkEdge, NetworkGraph } from "@/lib/types";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { t } from "@/lib/i18n";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 // ─── Theme constants ───────────────────────────────────────────────────────────
 
@@ -80,6 +81,46 @@ interface NodeDetailProps {
   onClose:  () => void;
 }
 
+function nodeTypeLabel(type: string, locale: ReturnType<typeof useLanguage>["locale"]) {
+  const key = type === "Suspect" ? "graph_suspect" : type === "Location" ? "graph_location" : type === "Vehicle" ? "graph_vehicle" : "graph_fir";
+  return t(key, locale);
+}
+
+function NetworkHelp() {
+  const { locale } = useLanguage();
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          title={t("graph_help_open", locale)}
+          aria-label={t("graph_help_open", locale)}
+          className="flex h-7 w-7 items-center justify-center rounded-md border border-white/10 text-muted-foreground transition hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
+        >
+          <Info className="h-3.5 w-3.5" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-80 border-white/10 bg-background/95 p-4 backdrop-blur-sm">
+        <div className="text-sm font-medium">{t("graph_help_title", locale)}</div>
+        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{t("graph_help_intro", locale)}</p>
+        <div className="mt-3 space-y-2.5 text-xs leading-relaxed text-muted-foreground">
+          <p>{t("graph_help_nodes", locale)}</p>
+          <p>{t("graph_help_risk", locale)}</p>
+          <p>{t("graph_help_links", locale)}</p>
+          <div className="flex gap-2 border-t border-white/5 pt-2.5">
+            <Move className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+            <p>{t("graph_help_move", locale)}</p>
+          </div>
+        </div>
+        <div className="mt-3 border-l-2 border-amber-400/70 bg-amber-400/5 px-3 py-2 text-[11px] leading-relaxed text-amber-100/80">
+          {t("graph_help_caution", locale)}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function NodeDetail({ node, links, allNodes, onClose }: NodeDetailProps) {
   const { locale } = useLanguage();
   const byId = Object.fromEntries(allNodes.map((n) => [n.id, n]));
@@ -119,7 +160,7 @@ function NodeDetail({ node, links, allNodes, onClose }: NodeDetailProps) {
       <div className="mt-3 space-y-1.5">
         <div className="flex items-center justify-between text-[11px]">
           <span className="text-muted-foreground">{t("graph_type", locale)}</span>
-          <span className="font-mono">{node.type}</span>
+          <span className="font-mono">{nodeTypeLabel(node.type, locale)}</span>
         </div>
         <div className="flex items-center justify-between text-[11px]">
           <span className="text-muted-foreground">{t("graph_risk", locale)}</span>
@@ -160,7 +201,7 @@ function NodeDetail({ node, links, allNodes, onClose }: NodeDetailProps) {
             })}
             {connections.length > 4 && (
               <div className="text-[10px] text-muted-foreground">
-                +{connections.length - 4} more
+                +{connections.length - 4} {t("graph_more", locale)}
               </div>
             )}
           </div>
@@ -172,7 +213,12 @@ function NodeDetail({ node, links, allNodes, onClose }: NodeDetailProps) {
 
 // ─── Main component ────────────────────────────────────────────────────────────
 
-export function LinkGraph() {
+interface LinkGraphProps {
+  /** Smaller, read-only preview used on the Dashboard overview */
+  compact?: boolean;
+}
+
+export function LinkGraph({ compact = false }: LinkGraphProps) {
   const { locale } = useLanguage();
   const containerRef = useRef<HTMLDivElement>(null);
   const graphRef = useRef<ForceGraphMethods<FGNode, FGLink>>(undefined);
@@ -181,7 +227,7 @@ export function LinkGraph() {
   const [rawLinks, setRawLinks]   = useState<FGLink[]>([]);
   const [loading, setLoading]     = useState(true);
   const [selected, setSelected]   = useState<FGNode | null>(null);
-  const [dimensions, setDimensions] = useState({ width: 400, height: 360 });
+  const [dimensions, setDimensions] = useState({ width: 400, height: compact ? 180 : 360 });
 
   // Measure container for responsive canvas size
   useEffect(() => {
@@ -195,7 +241,7 @@ export function LinkGraph() {
     const ro = new ResizeObserver(observe);
     if (containerRef.current) ro.observe(containerRef.current);
     return () => ro.disconnect();
-  }, []);
+  }, [loading]);
 
   // Load network data
   useEffect(() => {
@@ -204,10 +250,16 @@ export function LinkGraph() {
       setGraphData(gd);
       setRawLinks(gd.links);
       setLoading(false);
-      // Zoom to fit after physics settles
-      setTimeout(() => graphRef.current?.zoomToFit(400, 24), 800);
     });
   }, []);
+
+  // Fit after both the force layout and the responsive canvas dimensions settle.
+  // A single fit at the initial 400px width leaves the graph anchored left on wide screens.
+  useEffect(() => {
+    if (!graphData.nodes.length || dimensions.width <= 0) return;
+    const timer = window.setTimeout(() => graphRef.current?.zoomToFit(400, 64), 900);
+    return () => window.clearTimeout(timer);
+  }, [graphData.nodes.length, dimensions.height, dimensions.width]);
 
   // Custom node renderer — circles with glow ring and label
   const paintNode = useCallback((node: FGNode, ctx: CanvasRenderingContext2D, globalScale: number) => {
@@ -271,15 +323,34 @@ export function LinkGraph() {
   }, [selected]);
 
   const handleNodeClick = useCallback((node: FGNode) => {
+    if (compact) return;
     setSelected((prev) => (prev?.id === node.id ? null : node));
     // Zoom toward clicked node
     graphRef.current?.centerAt(node.x, node.y, 400);
     graphRef.current?.zoom(2.5, 400);
-  }, []);
+  }, [compact]);
+
+  const keepNodeInViewport = useCallback((node: FGNode) => {
+    const graph = graphRef.current;
+    if (!graph || node.x === undefined || node.y === undefined) return;
+
+    const padding = 48;
+    const topLeft = graph.screen2GraphCoords(padding, padding);
+    const bottomRight = graph.screen2GraphCoords(dimensions.width - padding, dimensions.height - padding);
+
+    node.x = Math.min(bottomRight.x, Math.max(topLeft.x, node.x));
+    node.y = Math.min(bottomRight.y, Math.max(topLeft.y, node.y));
+  }, [dimensions.height, dimensions.width]);
+
+  const handleNodeDragEnd = useCallback((node: FGNode) => {
+    keepNodeInViewport(node);
+    node.fx = node.x;
+    node.fy = node.y;
+  }, [keepNodeInViewport]);
 
   if (loading) {
     return (
-      <div className="flex h-[460px] flex-col items-center justify-center rounded-xl border border-white/5 bg-card">
+      <div className={`flex ${compact ? "h-[220px]" : "h-[460px]"} flex-col items-center justify-center rounded-xl border border-white/5 bg-card`}>
         <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary/20 border-t-primary" />
         <div className="mt-3 font-mono text-[11px] text-muted-foreground">{t("common_loading", locale)}</div>
       </div>
@@ -300,12 +371,13 @@ export function LinkGraph() {
           {selected && (
             <div className="flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 font-mono text-[10px] text-primary">
               <AlertTriangle className="h-2.5 w-2.5" />
-              {t("graph_type", locale)}: {selected.type}
+              {t("graph_type", locale)}: {nodeTypeLabel(selected.type, locale)}
             </div>
           )}
           <div className="font-mono text-[10px] text-muted-foreground">
-            {graphData.nodes.length} nodes · {graphData.links.length} edges
+            {graphData.nodes.length} {t("graph_nodes", locale)} · {graphData.links.length} {t("graph_edges", locale)}
           </div>
+          {!compact && <NetworkHelp />}
         </div>
       </div>
 
@@ -313,10 +385,10 @@ export function LinkGraph() {
       <div
         ref={containerRef}
         className="relative flex-1"
-        style={{ minHeight: 380 }}
+        style={{ minHeight: compact ? 160 : 380 }}
         onClick={(e) => {
           // Click on empty canvas → deselect
-          if ((e.target as HTMLElement).tagName === "CANVAS") setSelected(null);
+          if (!compact && (e.target as HTMLElement).tagName === "CANVAS") setSelected(null);
         }}
       >
         <ForceGraph2D
@@ -328,7 +400,7 @@ export function LinkGraph() {
           // Physics
           d3AlphaDecay={0.03}
           d3VelocityDecay={0.35}
-          cooldownTicks={120}
+          cooldownTicks={compact ? 60 : 120}
           // Rendering
           nodeCanvasObject={paintNode}
           nodeCanvasObjectMode={() => "replace"}
@@ -336,10 +408,12 @@ export function LinkGraph() {
           linkCanvasObjectMode={() => "replace"}
           // Interaction
           onNodeClick={handleNodeClick}
+          onNodeDrag={keepNodeInViewport}
+          onNodeDragEnd={handleNodeDragEnd}
           nodeLabel={(node) => `${node.label} (${node.type})`}
-          enableNodeDrag
-          enableZoomInteraction
-          enablePanInteraction
+          enableNodeDrag={!compact}
+          enableZoomInteraction={!compact}
+          enablePanInteraction={!compact}
           // Performance
           nodeRelSize={1}
           linkDirectionalParticles={2}
@@ -353,7 +427,7 @@ export function LinkGraph() {
         />
 
         {/* Node detail panel */}
-        {selected && (
+        {selected && !compact && (
           <NodeDetail
             node={selected}
             links={rawLinks}
@@ -363,18 +437,22 @@ export function LinkGraph() {
         )}
 
         {/* Legend */}
-        <div className="absolute bottom-3 left-3 flex flex-wrap gap-3 font-mono text-[10px] text-muted-foreground">
-          {Object.entries(TYPE_COLOR).map(([type, color]) => (
-            <span key={type} className="flex items-center gap-1">
-              <span className="h-2 w-2 rounded-full" style={{ background: color }} />
-              {type}
-            </span>
-          ))}
-        </div>
+        {!compact && (
+          <div className="absolute bottom-3 left-3 flex flex-wrap gap-3 font-mono text-[10px] text-muted-foreground">
+            {Object.entries(TYPE_COLOR).map(([type, color]) => (
+              <span key={type} className="flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full" style={{ background: color }} />
+                {nodeTypeLabel(type, locale)}
+              </span>
+            ))}
+          </div>
+        )}
 
-        <div className="absolute bottom-3 right-3 font-mono text-[10px] text-muted-foreground/50">
-          {t("graph_click_hint", locale)}
-        </div>
+        {!compact && (
+          <div className="absolute bottom-3 right-3 font-mono text-[10px] text-muted-foreground/50">
+            {t("graph_click_hint", locale)}
+          </div>
+        )}
       </div>
     </div>
   );

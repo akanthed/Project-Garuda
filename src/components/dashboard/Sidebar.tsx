@@ -1,15 +1,16 @@
 import { useState } from "react";
-import { LayoutDashboard, Globe2, Share2, FileText, Settings, Shield, ChevronRight } from "lucide-react";
+import { LayoutDashboard, Globe2, Share2, FileText, Settings, Shield, ChevronRight, SlidersHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { t, type TranslationKey } from "@/lib/i18n";
 
-export type ViewKey = "dashboard" | "geospatial" | "network" | "reports" | "settings";
+export type ViewKey = "dashboard" | "geospatial" | "network" | "simulator" | "reports" | "settings";
 
 const nav: { key: ViewKey; icon: typeof Shield; labelKey: TranslationKey }[] = [
   { key: "dashboard", icon: LayoutDashboard, labelKey: "nav_dashboard" },
   { key: "geospatial", icon: Globe2,          labelKey: "nav_geospatial" },
   { key: "network",    icon: Share2,           labelKey: "nav_network" },
+  { key: "simulator",  icon: SlidersHorizontal, labelKey: "nav_simulator" },
   { key: "reports",    icon: FileText,         labelKey: "nav_reports" },
   { key: "settings",   icon: Settings,         labelKey: "nav_settings" },
 ];
@@ -39,14 +40,14 @@ export function Sidebar({ active, onChange }: SidebarProps) {
           {!collapsed && (
             <div className="ml-2 flex-1 min-w-0">
               <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-primary truncate">
-                Sentinel
+                Garuda
               </div>
               <div className="font-mono text-[9px] text-muted-foreground truncate">BLR · KSP</div>
             </div>
           )}
           <button
             onClick={() => setCollapsed((v) => !v)}
-            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={t(collapsed ? "settings_expand_sidebar" : "settings_collapse_sidebar", locale)}
             className={cn(
               "flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground",
               collapsed && "mt-0"
@@ -88,27 +89,6 @@ export function Sidebar({ active, onChange }: SidebarProps) {
         </nav>
       </div>
 
-      {/* Profile avatar */}
-      <div className={cn(collapsed ? "flex justify-center" : "px-3")}>
-        <button
-          title={t("nav_settings", locale)}
-          onClick={() => onChange("settings")}
-          className={cn(
-            "flex items-center gap-2.5 rounded-md transition hover:bg-white/5",
-            collapsed ? "h-8 w-8 justify-center" : "w-full px-2 py-1.5"
-          )}
-        >
-          <div className="h-7 w-7 shrink-0 rounded-full bg-gradient-to-br from-primary/40 to-primary/10 ring-1 ring-white/10 transition hover:ring-primary/40" />
-          {!collapsed && (
-            <div className="min-w-0 text-left">
-              <div className="truncate text-xs font-medium">Profile</div>
-              <div className="truncate font-mono text-[10px] text-muted-foreground">
-                {t("nav_settings", locale)}
-              </div>
-            </div>
-          )}
-        </button>
-      </div>
     </aside>
   );
 }

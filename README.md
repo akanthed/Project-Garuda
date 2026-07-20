@@ -6,10 +6,10 @@
 
 ## 🏗️ Architectural Overview
 
-Garuda decouples a data-dense Next.js user interface from a high-performance Python FastAPI engine, deployed natively using Zoho Catalyst services to meet production-grade compliance.
+Garuda decouples a data-dense React/Vite user interface from a high-performance Python FastAPI engine, deployed using Zoho Catalyst services.
 
 ┌─────────────────────────────────┐
-              │      Next.js Frontend UI        │
+              │      React / Vite Frontend UI   │
               │   (Hosted: Web Client Hosting)  │
               └────────────────┬────────────────┘
                                │
@@ -20,11 +20,11 @@ Garuda decouples a data-dense Next.js user interface from a high-performance Pyt
               │     (Hosted: AppSail Container) │
               └───────┬─────────────────┬───────┘
                       │                 │
-        ZCQL Queries  │                 │ Zia Text APIs
+        ZCQL Queries  │                 │ PDF generation
                       ▼                 ▼
  ┌───────────────────────┐           ┌───────────────────────┐
- │  Catalyst Data Store  │           │ Catalyst Zia Services │
- │  (Tabular Synthetic)  │           │ (Kannada Translation) │
+ │  Catalyst Data Store  │           │ Catalyst SmartBrowz   │
+ │  (Tabular Synthetic)  │           │ (PDF brief export)    │
  └───────────────────────┘           └───────────────────────┘
 
 ---
@@ -88,11 +88,11 @@ Every software component maps directly to an approved Catalyst module, avoiding 
 
 Compute (Backend API): Containerized Python FastAPI application executed inside Catalyst AppSail (Managed OCI/Docker runtime), configured to adapt natively to the dynamic environment port variable $X_ZOHO_CATALYST_LISTEN_PORT.
 
-Hosting (Frontend): Next.js decoupled framework exported cleanly via static optimization into Catalyst Web Client Hosting.
+Hosting (Frontend): React/Vite static client deployed to Catalyst Web Client Hosting.
 
 Storage (Tabular Records): Managed synthetic data querying via ZCQL directly inside Catalyst Data Store, including the `Officers` table used for authentication.
 
-Localization Engine: On-the-fly translation of dynamic case narrative text into Kannada via Catalyst Zia Services (`POST /api/translate`), with a passthrough fallback when Zia is unavailable. Static UI chrome (nav labels, buttons) uses a hand-curated bilingual dictionary instead, since machine translation of short fixed labels is lower quality than a reviewed translation.
+Localization Engine: Static UI chrome (nav labels, buttons) uses a hand-curated English/Kannada dictionary. Dynamic narrative translation currently returns a passthrough fallback because the Catalyst Zia SDK does not provide a Translate API; an approved translation provider is required before enabling that workflow.
 
 Authentication: Officer badge/password credentials are verified server-side only (`POST /api/auth/login`) against Catalyst Data Store — never shipped to the client bundle. Sessions use HMAC-signed tokens with a 12-hour expiry.
 

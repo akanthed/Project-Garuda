@@ -5,23 +5,40 @@ import { toast } from "sonner";
 import { fetchSimulatorVariables, runSimulation } from "@/lib/mock-api";
 import type { SimulatorVariable } from "@/lib/types";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { t } from "@/lib/i18n";
+import { useSimulator } from "@/contexts/SimulatorContext";
+import { t, type TranslationKey } from "@/lib/i18n";
 
-export function Simulator() {
+const VARIABLE_TRANSLATIONS: Record<string, { labelKey: TranslationKey; hintKey: TranslationKey }> = {
+  "patrol-density": { labelKey: "sim_patrol_density", hintKey: "sim_patrol_hint" },
+  "infra-health": { labelKey: "sim_infra_health", hintKey: "sim_infra_hint" },
+  "rapid-response": { labelKey: "sim_response_units", hintKey: "sim_response_hint" },
+};
+
+interface SimulatorProps {
+  onComplete?: (impact: number) => void;
+}
+
+export function Simulator({ onComplete }: SimulatorProps) {
   const { locale } = useLanguage();
+  const { values: vals, setValue, setDefaults } = useSimulator();
   const [variables, setVariables] = useState<SimulatorVariable[]>([]);
-  const [vals, setVals] = useState<Record<string, number>>({});
   const [running, setRunning] = useState(false);
-  const [lastImpact, setLastImpact] = useState<number | null>(null);
+  const [lastResult, setLastResult] = useState<{
+    impact: number;
+    modelVersion: string;
+    confidenceRange?: [number, number];
+    assumptions?: string[];
+  } | null>(null);
 
   useEffect(() => {
     fetchSimulatorVariables().then(({ data }) => {
       setVariables(data);
-      setVals(Object.fromEntries(data.map((v) => [v.id, v.defaultValue])));
+      setDefaults(Object.fromEntries(data.map((v) => [v.id, v.defaultValue])));
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Live preview — weighted sum
+  // Live preview — weighted sum (also drives GeoMap's hex layer via SimulatorContext)
   const previewImpact = variables.length
     ? Math.round(
         variables.reduce((sum, v) => sum + (vals[v.id] ?? v.defaultValue) * v.weight, 0) / 1.2
@@ -31,12 +48,18 @@ export function Simulator() {
   const handleRun = async () => {
     if (running || !variables.length) return;
     setRunning(true);
-    toast("Running causal simulation…", { description: "Computing counterfactual across BLR sectors." });
+    toast(t("sim_running_toast", locale), { description: t("sim_comparing", locale) });
     try {
       const { data } = await runSimulation(vals);
-      setLastImpact(data.impactPercent);
-      toast.success(`Simulation complete · −${data.impactPercent}% incidents`, {
-        description: `Model: ${data.modelVersion} · ${data.windowDays}d rolling window`,
+      setLastResult({
+        impact: data.impactPercent,
+        modelVersion: data.modelVersion,
+        confidenceRange: data.confidenceRange,
+        assumptions: data.assumptions,
+      });
+      onComplete?.(data.impactPercent);
+      toast.success(`${t("sim_complete", locale)} · −${data.impactPercent}% ${t("sim_incidents", locale)}`, {
+        description: `${t("sim_model", locale)}: ${data.modelVersion} · ${data.windowDays}${locale === "kn" ? " ದಿನ" : "d"} ${t("sim_rolling_window", locale).replace("30d ", "")}`,
       });
     } finally {
       setRunning(false);
@@ -60,20 +83,22 @@ export function Simulator() {
             {t("sim_title", locale)}
           </div>
           <span className="ml-2 rounded-full border border-white/10 px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
-            causal-v2.4
+            scenario-model-v1
           </span>
         </div>
         <div className="font-mono text-[10px] text-muted-foreground">
-          {lastImpact !== null ? `Last run · −${lastImpact}%` : "Baseline · 30d rolling window"}
+          {lastResult ? `${t("sim_last_run", locale)} · −${lastResult.impact}%` : t("sim_baseline", locale)}
         </div>
       </div>
 
       <div className="grid gap-6 p-6 lg:grid-cols-[1fr_1fr_1fr_260px]">
-        {variables.map((v) => (
+        {variables.map((v) => {
+          const translation = VARIABLE_TRANSLATIONS[v.id];
+          return (
           <div key={v.id} className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
-                {v.label}
+                {translation ? t(translation.labelKey, locale) : v.label}
               </div>
               <div className="font-mono text-sm tabular-nums text-foreground">
                 {(vals[v.id] ?? v.defaultValue).toString().padStart(2, "0")}
@@ -82,14 +107,15 @@ export function Simulator() {
             </div>
             <Slider
               value={[vals[v.id] ?? v.defaultValue]}
-              onValueChange={([n]) => setVals((prev) => ({ ...prev, [v.id]: n }))}
+              onValueChange={([n]) => setValue(v.id, n)}
               max={100}
               step={1}
               className="[&_[data-slot=slider-range]]:bg-primary [&_[data-slot=slider-track]]:h-[3px] [&_[data-slot=slider-track]]:bg-white/8 [&_[data-slot=slider-thumb]]:h-3 [&_[data-slot=slider-thumb]]:w-3 [&_[data-slot=slider-thumb]]:border-primary [&_[data-slot=slider-thumb]]:bg-background [&_[data-slot=slider-thumb]]:shadow-[0_0_0_4px_rgba(90,140,255,0.12)]"
             />
-            <div className="font-mono text-[10px] text-muted-foreground">{v.hint}</div>
+            <div className="font-mono text-[10px] text-muted-foreground">{translation ? t(translation.hintKey, locale) : v.hint}</div>
           </div>
-        ))}
+          );
+        })}
 
         <div className="flex flex-col items-stretch justify-between rounded-lg border border-white/5 bg-background/40 p-4">
           <div>
@@ -111,6 +137,15 @@ export function Simulator() {
           </button>
         </div>
       </div>
+      {lastResult && (
+        <div className="border-t border-white/5 px-6 py-3">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[10px] text-muted-foreground">
+            <span>{t("sim_estimate_range", locale)}: −{lastResult.confidenceRange?.[0] ?? Math.max(0, lastResult.impact - 12)}% {locale === "kn" ? "ರಿಂದ" : "to"} −{lastResult.confidenceRange?.[1] ?? Math.min(100, lastResult.impact + 12)}%</span>
+            <span>{lastResult.modelVersion}</span>
+            <span>{lastResult.assumptions?.[0] ?? t("sim_assumption", locale)}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

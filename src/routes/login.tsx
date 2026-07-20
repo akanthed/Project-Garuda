@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Shield, Eye, EyeOff, AlertCircle, Loader2 } from "lucide-react";
+import { Shield, Eye, EyeOff, AlertCircle, Loader2, Sun, Moon } from "lucide-react";
 import { login } from "@/lib/auth";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { t } from "@/lib/i18n";
 
 export const Route = createFileRoute("/login")({
@@ -14,6 +15,7 @@ export const Route = createFileRoute("/login")({
 function LoginPage() {
   const navigate = useNavigate();
   const { locale, toggle } = useLanguage();
+  const { theme, toggle: toggleTheme } = useTheme();
   const [badge, setBadge] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -23,7 +25,7 @@ function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!badge.trim() || !password.trim()) {
-      setError("Badge number and passphrase are required.");
+      setError(t("login_required", locale));
       return;
     }
 
@@ -34,7 +36,7 @@ function LoginPage() {
     setLoading(false);
 
     if (!officer) {
-      setError("Invalid credentials. Access denied.");
+      setError(t("login_error", locale));
       return;
     }
 
@@ -60,8 +62,15 @@ function LoginPage() {
       </div>
 
       <div className="w-full max-w-md px-6">
-        {/* Language toggle — top right */}
-        <div className="mb-4 flex justify-end">
+        {/* Theme + language toggle — top right */}
+        <div className="mb-4 flex justify-end gap-2">
+          <button
+            onClick={toggleTheme}
+            title={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+            className="flex h-8 w-8 items-center justify-center rounded-md border border-white/5 bg-white/[0.02] text-primary transition hover:border-primary/30 hover:bg-primary/5"
+          >
+            {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          </button>
           <button
             onClick={toggle}
             className="rounded-md border border-white/5 bg-white/[0.02] px-3 py-1.5 font-mono text-[11px] text-primary transition hover:border-primary/30 hover:bg-primary/5"
@@ -79,7 +88,7 @@ function LoginPage() {
             {t("login_org", locale)}
           </div>
           <h1 className="mt-1 text-2xl font-medium tracking-tight text-foreground">
-            Sentinel BLR
+            Garuda BLR
           </h1>
           <p className="mt-1 font-mono text-xs text-muted-foreground">
             {t("login_platform", locale)}
@@ -165,7 +174,7 @@ function LoginPage() {
 
           <div className="mt-6 border-t border-white/5 pt-4 space-y-2">
             <div className="text-center font-mono text-[10px] uppercase tracking-widest text-muted-foreground/40 mb-2">
-              Demo Accounts
+              {t("login_demo", locale)}
             </div>
             {[
               { badge: "KSP-DGP-0001", pass: "dgp2026",       role: "DGP",        access: "Full" },

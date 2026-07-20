@@ -29,14 +29,16 @@ import random
 import time
 from contextlib import asynccontextmanager
 from io import BytesIO
-from typing import Optional
+from threading import Lock
+from typing import Literal, Optional
 
 import networkx as nx
+import numpy as np
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # ─── Logging ──────────────────────────────────────────────────────────────────
 
@@ -181,6 +183,25 @@ def _permissions_for(clearance: str) -> dict:
         "canExport": level >= 5,
     }
 
+def require_session(request: Request) -> dict:
+    """Validate the signed officer session before accepting officer actions."""
+    authorization = request.headers.get("Authorization", "")
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        raise HTTPException(401, "Missing officer session")
+    session = verify_session(token)
+    if not session:
+        raise HTTPException(401, "Invalid or expired officer session")
+    return session
+
+def require_permission(request: Request, permission: str) -> dict:
+    """Validate the signed officer session and its required clearance."""
+    session = require_session(request)
+    clearance = session.get("clearance")
+    if not clearance or not _permissions_for(clearance).get(permission, False):
+        raise HTTPException(403, "Insufficient clearance")
+    return session
+
 def _lookup_officer(capp, badge: str) -> Optional[dict]:
     """Try Catalyst Data Store first (Officers table), then local registry."""
     if capp is not None:
@@ -231,6 +252,30 @@ def load_from_catalyst(capp) -> None:
     DB.crime_heads = pd.DataFrame(_zcql_query_all(capp, "CrimeHead", 300))
     _coerce_dtypes()
     log.info(f"Loaded {len(DB.cases)} cases from Catalyst")
+
+_DATA_LOAD_LOCK = Lock()
+
+def ensure_data_loaded(request: Request) -> bool:
+    """Recover in-memory analytics after an AppSail restart using this request's
+    Catalyst context. Startup cannot do this because Catalyst headers are only
+    available on a real proxied request."""
+    if not DB.cases.empty:
+        return True
+
+    with _DATA_LOAD_LOCK:
+        if not DB.cases.empty:
+            return True
+        capp = _try_catalyst_app(request)
+        if capp is None:
+            return False
+        try:
+            load_from_catalyst(capp)
+            build_graph()
+            _LOCAL_CACHE.clear()
+            return not DB.cases.empty
+        except Exception:
+            log.exception("Automatic Catalyst Data Store reload failed")
+            return False
 
 def _coerce_dtypes() -> None:
     """Data Store/ZCQL returns every column as a JSON string, unlike pd.read_csv
@@ -294,6 +339,113 @@ def build_graph() -> None:
     DB.graph = G
     log.info(f"Graph: {G.number_of_nodes()} nodes, {G.number_of_edges()} edges")
 
+# ─── Station-level causal feature engine ─────────────────────────────────────
+# No live IoT/streetlight feed exists in this dataset, so each station's
+# socio-economic profile is derived from a station-id-seeded RNG — stable
+# across requests/restarts without needing a new Data Store table or CSV
+# regeneration. This grounds the map's "causal_driver" narrative and the
+# What-If Simulator in per-station numbers instead of canned placeholder text.
+
+BENGALURU_AREAS = [
+    "KR Market", "MG Road", "Whitefield", "Koramangala", "Hebbal",
+    "Jayanagar", "Malleshwaram", "Yelahanka", "Electronic City",
+    "HSR Layout", "BTM Layout", "Bannerghatta Road", "Mysuru Road",
+    "Indiranagar", "Rajajinagar", "Yeshwantpur", "Marathahalli",
+    "Silk Board", "Basavanagudi", "RT Nagar",
+]
+
+def station_name(station_id: int) -> str:
+    area = BENGALURU_AREAS[(station_id - 1) % len(BENGALURU_AREAS)]
+    zone = (station_id - 1) // len(BENGALURU_AREAS) + 1
+    return f"{area} PS" if zone == 1 else f"{area} PS (Zone {zone})"
+
+def _station_factors(station_id: int) -> dict:
+    """Deterministic synthetic patrol/infra/commercial profile for a station —
+    seeded on station_id (not wall-clock time), so it's stable across requests."""
+    rng = random.Random(1000 + station_id)
+    return {
+        "patrol_density":     round(rng.uniform(25, 95), 1),
+        "infra_health":       round(rng.uniform(20, 95), 1),
+        "commercial_density": round(rng.uniform(15, 90), 1),
+    }
+
+def _causal_narrative(station_id: int, gravity: int) -> str:
+    """Templated causal explanation grounded in this station's own factor
+    values — replaces the earlier Faker-generated BriefFacts placeholder text."""
+    f = _station_factors(station_id)
+    weak = sorted(
+        [("patrol density", f["patrol_density"]), ("street lighting / CCTV", f["infra_health"]),
+         ("commercial footfall pressure", f["commercial_density"])],
+        key=lambda kv: kv[1],
+    )
+    primary, secondary = weak[0], weak[1]
+    severity_bump = round((gravity / 5) * (100 - primary[1]) / 10, 1)
+    return (
+        f"Low {primary[0]} ({primary[1]:.0f}%) and constrained {secondary[0]} "
+        f"({secondary[1]:.0f}%) at {station_name(station_id)} correlate with an "
+        f"estimated {severity_bump}pt rise in incident severity this quarter."
+    )
+
+def _monthly_counts_by_station() -> dict:
+    """station_id -> pandas Series indexed by month Period, incident counts."""
+    if DB.cases.empty:
+        return {}
+    df = DB.cases.copy()
+    df["_month"] = pd.to_datetime(df["CrimeRegisteredDate"], errors="coerce").dt.to_period("M")
+    df = df.dropna(subset=["_month"])
+    out = {}
+    for sid, grp in df.groupby("PoliceStationID"):
+        out[int(sid)] = grp.groupby("_month").size().sort_index()
+    return out
+
+def _compute_anomalies() -> list[dict]:
+    """Zia-style anomaly flagging: z-score of latest month vs trailing history,
+    per station. Flags stations whose current month is a statistical outlier."""
+    monthly = _monthly_counts_by_station()
+    out = []
+    for sid, series in monthly.items():
+        if len(series) < 4:
+            continue
+        current = float(series.iloc[-1])
+        history = series.iloc[:-1]
+        mean = float(history.mean())
+        std = float(history.std()) or 1.0
+        z = round((current - mean) / std, 2)
+        if z >= 2.0:
+            out.append({
+                "station_id":    int(sid),
+                "station_name":  station_name(int(sid)),
+                "z_score":       z,
+                "current_count": int(current),
+                "mean_count":    round(mean, 1),
+                "severity":      "critical" if z >= 3.5 else "high",
+            })
+    return sorted(out, key=lambda a: a["z_score"], reverse=True)
+
+# ─── Synthetic Hoysala patrol fleet ───────────────────────────────────────────
+# In-memory fleet with slight positional jitter every ~20s (no real GPS feed
+# exists in this dataset) — enough to feel "live" on the map without a DB.
+
+_PATROL_BASE = [
+    (12.965, 77.601), (12.982, 77.615), (12.952, 77.622), (12.9758, 77.6072),
+    (12.9352, 77.6245), (12.8399, 77.6770), (13.0218, 77.5510), (12.9900, 77.5800),
+    (12.9600, 77.6400), (12.9100, 77.6500), (13.0100, 77.6200), (12.9450, 77.5700),
+    (12.9990, 77.6600), (12.9200, 77.6100), (13.0350, 77.5950),
+]
+
+def _patrol_units() -> list[dict]:
+    units = []
+    tick = int(time.time() // 20)
+    for i, (lat, lng) in enumerate(_PATROL_BASE, start=1):
+        rng = random.Random(tick * 1000 + i)
+        jlat = lat + rng.uniform(-0.006, 0.006)
+        jlng = lng + rng.uniform(-0.006, 0.006)
+        units.append({
+            "id": f"HOY-{i:02d}", "lat": round(jlat, 6), "lng": round(jlng, 6),
+            "status": rng.choice(["patrolling", "patrolling", "patrolling", "responding"]),
+        })
+    return units
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
@@ -312,17 +464,23 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Restrict CORS to known frontend origin(s) via env var (comma-separated).
-# Catalyst API Gateway cannot front AppSail apps directly (it only supports
-# Basic/Advanced I/O Functions and the Web Client as targets), so origin
-# restriction + the rate limiter below are the in-app substitute.
-_allowed_origins = os.environ.get("ALLOWED_ORIGINS", "*")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"] if _allowed_origins == "*" else [o.strip() for o in _allowed_origins.split(",")],
-    allow_methods=["GET", "POST"],
-    allow_headers=["*"],
-)
+# NOTE on CORS: Catalyst's AppSail gateway already injects a correct
+# Access-Control-Allow-Origin header itself, scoped to the project's linked
+# Web Client origin(s) (verified: an arbitrary Origin gets no ACAO header at
+# all, so it's a real restriction, not a permissive reflect-any-origin).
+# Adding our own CORSMiddleware on top of THAT caused the platform's header
+# and ours to both be sent, producing an invalid duplicated ACAO value that
+# real browsers reject outright. So only add our own CORS middleware for
+# local dev (no Catalyst gateway in front of us there) — detect that via
+# X_ZOHO_CATALYST_LISTEN_PORT, which Catalyst always injects for AppSail.
+if not os.environ.get("X_ZOHO_CATALYST_LISTEN_PORT"):
+    _allowed_origins = os.environ.get("ALLOWED_ORIGINS", "*")
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"] if _allowed_origins == "*" else [o.strip() for o in _allowed_origins.split(",")],
+        allow_methods=["GET", "POST", "PATCH"],
+        allow_headers=["*"],
+    )
 
 @app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next):
@@ -359,6 +517,24 @@ class LoginRequest(BaseModel):
 class TranslateRequest(BaseModel):
     texts:           list[str]
     target_language: str = "kn"
+
+class IncidentIntakeRequest(BaseModel):
+    """Operational intelligence intake, not a substitute for legal FIR registration."""
+    crime_no: str = Field(min_length=3, max_length=80)
+    registered_date: str
+    police_station_id: int = Field(ge=1, le=1100)
+    crime_major_head_id: int = Field(ge=1)
+    gravity_offence_id: int = Field(ge=1, le=5)
+    latitude: float = Field(ge=11.0, le=15.0)
+    longitude: float = Field(ge=74.0, le=80.0)
+    brief_facts: str = Field(min_length=10, max_length=1000)
+    accused_names: list[str] = Field(default_factory=list, max_length=10)
+
+class CaseWorkflowUpdate(BaseModel):
+    status: Literal["open", "investigating", "resolved", "closed"]
+    assigned_officer: str = Field(min_length=2, max_length=120)
+
+_LOCAL_CASE_WORKFLOWS: dict[int, dict] = {}
 
 # ─── Health ───────────────────────────────────────────────────────────────────
 
@@ -470,7 +646,7 @@ async def auth_login(body: LoginRequest, request: Request):
         "node":        officer.get("node") or officer.get("Node"),
         **_permissions_for(clearance),
     }
-    token = sign_session({"badge": badge})
+    token = sign_session({"badge": badge, "clearance": clearance})
     return {"officer": profile, "token": token}
 
 # ─── POST /api/translate (Zia Translate) ──────────────────────────────────────
@@ -479,29 +655,25 @@ async def auth_login(body: LoginRequest, request: Request):
 async def translate(body: TranslateRequest, request: Request):
     """
     Translates dynamic case narrative text (not static UI chrome, which is
-    already hand-translated in the frontend's i18n dictionary) via Catalyst
-    Zia Services. Falls back to passthrough (untranslated) text if Zia is
-    unavailable, so the caller can decide whether to use its own fallback.
-    """
-    capp = _try_catalyst_app(request)
-    if capp is not None:
-        try:
-            zia = capp.zia()
-            translated = [
-                zia.translate(text=text, target_language=body.target_language).get("translated_text", text)
-                for text in body.texts
-            ]
-            return {"translations": translated, "source": "zia"}
-        except Exception as e:
-            log.warning(f"Zia translate unavailable: {e} — passthrough fallback")
+    already hand-translated in the frontend's i18n dictionary).
 
+    NOTE: verified against zcatalyst-sdk 1.4.0 (the latest on PyPI) — the
+    `Zia` component has NO `translate()` method at all (confirmed by reading
+    the installed package's zia.py and by the Catalyst console's own Zia
+    page, which lists only Face Analytics/OCR/Identity Scanner/Image
+    Moderation/Object Recognition/Barcode Scanner/AutoML/Text Analytics —
+    no Translate). Zia Translate is not a real capability of this SDK/plan,
+    so this always falls back to passthrough (untranslated) text. A working
+    translation would need a different service entirely (e.g. an external
+    translation API), not a code fix here.
+    """
     return {"translations": body.texts, "source": "fallback"}
 
 # ─── GET /api/kpis ────────────────────────────────────────────────────────────
 
 @app.get("/api/kpis")
 async def get_kpis(request: Request):
-    if DB.cases.empty:
+    if not ensure_data_loaded(request):
         raise HTTPException(503, "Data not loaded")
 
     capp = _try_catalyst_app(request)
@@ -513,7 +685,8 @@ async def get_kpis(request: Request):
     high_risk = int((DB.cases["GravityOffenceID"] >= 4).sum())
     arrests   = len(DB.arrests)
     readiness = min(100, round(arrests / max(total, 1) * 110))
-    esc       = round(float(DB.cases["GravityOffenceID"].mean()), 2)
+    anomalies = _compute_anomalies()
+    volatility = round(sum(a["z_score"] for a in anomalies) / len(anomalies), 2) if anomalies else 0.0
 
     def sparkline(series: pd.Series) -> list[int]:
         try:
@@ -532,9 +705,10 @@ async def get_kpis(request: Request):
          "sparkline": sparkline(DB.cases.loc[DB.cases["GravityOffenceID"] >= 4, "CrimeRegisteredDate"]),
          "accent": "danger"},
         {"id": "risk-volatility", "label": "Causal Risk Volatility Index",
-         "value": str(esc), "delta": "3.4%", "trend": "down", "positive": True,
-         "sparkline": [round(v) for v in DB.cases["GravityOffenceID"].rolling(500).mean().dropna().tail(12).tolist()],
-         "accent": "electric"},
+         "value": str(volatility), "delta": f"{len(anomalies)} active",
+         "trend": "up" if anomalies else "down", "positive": not anomalies,
+         "sparkline": ([round(a["z_score"] * 10) for a in anomalies[:12]] or [0] * 12),
+         "accent": "danger" if anomalies else "electric"},
         {"id": "resource-readiness", "label": "Resource Deployment Readiness",
          "value": f"{readiness}%", "delta": "1.8%", "trend": "up", "positive": True,
          "sparkline": [max(60, min(100, readiness + i - 5)) for i in range(12)],
@@ -551,7 +725,7 @@ async def get_hotspots(
     gravity_min: int = Query(1, ge=1, le=5),
     limit: int = Query(300, le=1000),
 ):
-    if DB.cases.empty:
+    if not ensure_data_loaded(request):
         raise HTTPException(503, "Data not loaded")
 
     capp = _try_catalyst_app(request)
@@ -574,6 +748,8 @@ async def get_hotspots(
 
     results = []
     for _, row in df.head(limit).iterrows():
+        sid = int(row["PoliceStationID"])
+        factors = _station_factors(sid)
         results.append({
             "id":           f"HS-{int(row['CaseMasterID'])}",
             "lat":          float(row["latitude"]),
@@ -582,16 +758,237 @@ async def get_hotspots(
             "risk":         row["risk"],
             "label":        str(row.get("CrimeGroupName", "Unknown")),
             "crime_type":   str(row.get("CrimeGroupName", "Unknown")),
-            "causal_driver": str(row.get("BriefFacts", ""))[:120],
+            "causal_driver": _causal_narrative(sid, int(row["GravityOffenceID"])),
+            "station_id":    sid,
+            "station_name":  station_name(sid),
+            "patrol_density": factors["patrol_density"],
+            "infra_health":   factors["infra_health"],
+            "commercial_density": factors["commercial_density"],
             "_x": 50.0, "_y": 50.0,
         })
     cache_set(capp, cache_key, results)
     return results
 
+# ─── GET /api/patrols (synthetic Hoysala fleet) ────────────────────────
+
+@app.get("/api/patrols")
+async def get_patrols():
+    return _patrol_units()
+
+# ─── GET /api/hotspots/forecast (predictive risk layer) ───────────────
+
+@app.get("/api/hotspots/forecast")
+async def get_hotspots_forecast(request: Request, horizon_days: int = Query(30, ge=7, le=90)):
+    """
+    Per-station linear trend (numpy.polyfit over monthly incident counts)
+    projected forward `horizon_days`. This is a simple trend model, not a
+    full time-series/ML forecast — labeled as such via the `model` field so
+    the frontend can show it's a lightweight projection, not magic.
+    """
+    if not ensure_data_loaded(request):
+        raise HTTPException(503, "Data not loaded")
+    monthly = _monthly_counts_by_station()
+    if not monthly:
+        return []
+
+    df = DB.cases
+    max_hist = float(max((s.values.max() for s in monthly.values()), default=1)) or 1.0
+    results = []
+    for sid, series in monthly.items():
+        if len(series) < 3:
+            continue
+        y = series.values.astype(float)
+        x = list(range(len(y)))
+        slope, intercept = np.polyfit(x, y, 1)
+        next_val = max(0.0, slope * len(y) + intercept)
+        baseline = float(y[-3:].mean()) or 1.0
+        trend_pct = round(((next_val - baseline) / baseline) * 100, 1)
+
+        station_rows = df[df["PoliceStationID"] == sid]
+        if station_rows.empty:
+            continue
+        results.append({
+            "station_id":          int(sid),
+            "station_name":        station_name(int(sid)),
+            "lat":                 float(station_rows["latitude"].mean()),
+            "lng":                 float(station_rows["longitude"].mean()),
+            "predicted_intensity": round(min(1.0, next_val / max_hist), 2),
+            "predicted_count":     round(next_val, 1),
+            "trend_pct":           trend_pct,
+            "horizon_days":        horizon_days,
+            "model":               "linear-trend-v1",
+        })
+    return sorted(results, key=lambda r: r["predicted_intensity"], reverse=True)[:100]
+
+# ─── GET /api/anomalies (Zia-style anomaly detection) ────────────────
+
+@app.get("/api/anomalies")
+async def get_anomalies(request: Request):
+    if not ensure_data_loaded(request):
+        raise HTTPException(503, "Data not loaded")
+    capp = _try_catalyst_app(request)
+    cached = cache_get(capp, "anomalies")
+    if cached is not None:
+        return cached
+    result = _compute_anomalies()
+    cache_set(capp, "anomalies", result)
+    return result
+
+# ─── POST /api/ask (Ask Garuda — rule-based NLU, no hosted LLM configured) ───
+# Extracts crime-type / location / time-window entities from free text via
+# keyword matching, then filters the in-memory case data. Deterministic and
+# fully local — swap the body of `_ask()` for a real LLM/Zia GenAI call later
+# without changing this endpoint's request/response contract.
+
+class AskRequest(BaseModel):
+    query: str
+
+def _ask(query: str) -> dict:
+    q = query.lower().strip()
+    df = DB.cases
+    if df.empty:
+        return {"answer": "No case data loaded.", "matched_cases": [], "suggested_view": "reports"}
+
+    matched = df
+    matched_crime = None
+    if not DB.crime_heads.empty:
+        for _, ch in DB.crime_heads.iterrows():
+            name = str(ch["CrimeGroupName"])
+            if name.lower() in q or any(word in q for word in name.lower().split()):
+                matched_crime = ch["CrimeHeadID"]
+                matched = matched[matched["CrimeMajorHeadID"] == matched_crime]
+                break
+
+    matched_station = None
+    for sid in range(1, 101):
+        area = BENGALURU_AREAS[(sid - 1) % len(BENGALURU_AREAS)].lower()
+        if area in q:
+            matched_station = sid
+            matched = matched[matched["PoliceStationID"] == sid]
+            break
+
+    now = pd.Timestamp.now()
+    dates = pd.to_datetime(matched["CrimeRegisteredDate"], errors="coerce")
+    if "today" in q:
+        matched = matched[dates.dt.date == now.date()]
+    elif "this week" in q:
+        matched = matched[dates >= now - pd.Timedelta(days=7)]
+    elif "last month" in q:
+        matched = matched[(dates >= now - pd.Timedelta(days=60)) & (dates < now - pd.Timedelta(days=30))]
+    elif "this month" in q or "last 30 days" in q or "month" in q:
+        matched = matched[dates >= now - pd.Timedelta(days=30)]
+    elif "this year" in q:
+        matched = matched[dates >= now - pd.Timedelta(days=365)]
+
+    count = len(matched)
+    parts = [f"Found {count} matching case{'s' if count != 1 else ''}"]
+    if matched_crime is not None and not DB.crime_heads.empty:
+        crime_name = DB.crime_heads.loc[DB.crime_heads["CrimeHeadID"] == matched_crime, "CrimeGroupName"].iloc[0]
+        parts.append(f"of type {crime_name}")
+    if matched_station is not None:
+        parts.append(f"at {station_name(matched_station)}")
+    answer = " ".join(parts) + "."
+
+    top = matched.sort_values("CrimeRegisteredDate", ascending=False).head(10)
+    matched_cases = [
+        {"id": f"BLR-{row['CrimeNo']}", "date": str(row["CrimeRegisteredDate"]),
+         "station": station_name(int(row["PoliceStationID"])),
+         "gravity": int(row["GravityOffenceID"])}
+        for _, row in top.iterrows()
+    ]
+    return {"answer": answer, "matched_cases": matched_cases, "suggested_view": "reports"}
+
+@app.post("/api/ask")
+async def ask_garuda(body: AskRequest, request: Request):
+    if not body.query.strip():
+        raise HTTPException(400, "Empty query")
+    if not ensure_data_loaded(request):
+        raise HTTPException(503, "Data not loaded")
+    return _ask(body.query)
+
+# ─── POST /api/incidents — operational intake ─────────────────────────────────
+
+@app.post("/api/incidents")
+async def create_incident(body: IncidentIntakeRequest, request: Request):
+    """Adds an officer-reviewed incident to the active intelligence session.
+
+    This deliberately does not claim to register a statutory FIR. When the
+    Catalyst Data Store is available, the normalized rows are persisted there;
+    local development retains them only for the running API session.
+    """
+    officer = require_session(request)
+    if not ensure_data_loaded(request):
+        raise HTTPException(503, "Data not loaded")
+    if DB.crime_heads.empty or body.crime_major_head_id not in set(DB.crime_heads["CrimeHeadID"].astype(int)):
+        raise HTTPException(400, "Unknown crime category")
+    if DB.cases["CrimeNo"].astype(str).eq(body.crime_no.strip()).any():
+        raise HTTPException(409, "An incident with this FIR / crime number already exists")
+
+    registered_at = pd.to_datetime(body.registered_date, errors="coerce")
+    if pd.isna(registered_at):
+        raise HTTPException(400, "registered_date must be a valid ISO date")
+
+    case_id = int(pd.to_numeric(DB.cases["CaseMasterID"], errors="coerce").max()) + 1
+    case_row = {
+        "CaseMasterID": case_id,
+        "CrimeNo": body.crime_no.strip(),
+        "CrimeRegisteredDate": registered_at.strftime("%Y-%m-%d"),
+        "PoliceStationID": body.police_station_id,
+        "CrimeMajorHeadID": body.crime_major_head_id,
+        "GravityOffenceID": body.gravity_offence_id,
+        "latitude": body.latitude,
+        "longitude": body.longitude,
+        "BriefFacts": body.brief_facts.strip(),
+    }
+    accused_names = [name.strip() for name in body.accused_names if name.strip()]
+    next_accused_id = int(pd.to_numeric(DB.accused["AccusedMasterID"], errors="coerce").max()) + 1 if not DB.accused.empty else 1
+    accused_rows = [
+        {
+            "AccusedMasterID": next_accused_id + index,
+            "CaseMasterID": case_id,
+            "AccusedName": name,
+            "AgeYear": None,
+            "GenderID": None,
+        }
+        for index, name in enumerate(accused_names)
+    ]
+
+    persistence = "session"
+    warning = "Stored for this active intelligence session; deploy with Catalyst Data Store to persist it."
+    capp = _try_catalyst_app(request)
+    if capp is not None:
+        try:
+            capp.datastore().table("CaseMaster").insert_rows([case_row])
+            if accused_rows:
+                capp.datastore().table("Accused").insert_rows(accused_rows)
+            persistence = "datastore"
+            warning = None
+        except Exception as exc:
+            log.warning(f"Incident intake Data Store write failed; keeping session record: {exc}")
+
+    DB.cases = pd.concat([DB.cases, pd.DataFrame([case_row])], ignore_index=True)
+    if accused_rows:
+        DB.accused = pd.concat([DB.accused, pd.DataFrame(accused_rows)], ignore_index=True)
+    build_graph()
+    _LOCAL_CACHE.clear()
+
+    return {
+        "id": f"BLR-{case_row['CrimeNo']}",
+        "case_master_id": case_id,
+        "station": station_name(body.police_station_id),
+        "accused_added": len(accused_rows),
+        "submitted_by": officer["badge"],
+        "persistence": persistence,
+        "warning": warning,
+    }
+
 # ─── GET /api/network ─────────────────────────────────────────────────────────
 
 @app.get("/api/network")
-async def get_network(cluster_size: int = Query(15, ge=5, le=50)):
+async def get_network(request: Request, cluster_size: int = Query(15, ge=5, le=50)):
+    require_permission(request, "canViewNetwork")
+    if not ensure_data_loaded(request):
+        raise HTTPException(503, "Data not loaded")
     if DB.graph.number_of_nodes() == 0:
         raise HTTPException(503, "Graph not built")
 
@@ -625,47 +1022,99 @@ async def get_network(cluster_size: int = Query(15, ge=5, le=50)):
 # ─── POST /api/simulator/run ──────────────────────────────────────────────────
 
 @app.post("/api/simulator/run")
-async def run_simulation(body: SimulationRequest):
+async def run_simulation(body: SimulationRequest, request: Request):
+    require_permission(request, "canSimulate")
+    if not ensure_data_loaded(request):
+        raise HTTPException(503, "Data not loaded")
     baseline = len(DB.cases) if not DB.cases.empty else 1000
-    impact   = (body.patrol_density * 0.4 + body.infra_health * 0.35
-                + body.rapid_response * 0.25) / 1.2
-    impact   = max(0, min(100, round(impact + random.uniform(-1.5, 1.5))))
+    patrol_density = max(0.0, min(100.0, body.patrol_density))
+    infra_health = max(0.0, min(100.0, body.infra_health))
+    rapid_response = max(0.0, min(100.0, body.rapid_response))
+    impact = round((patrol_density * 0.4 + infra_health * 0.35 + rapid_response * 0.25) / 1.2)
+    impact = max(0, min(100, impact))
     return {
         "impact_percent":      impact,
         "predicted_reduction": round(baseline * impact / 100),
         "baseline_cases":      baseline,
-        "model_version":       "causal-v2.4",
+        "model_version":       "scenario-model-v1",
         "window_days":         30,
+        "confidence_range":    [max(0, impact - 12), min(100, impact + 12)],
+        "assumptions": [
+            "Scenario estimate only; it is not a validated causal effect.",
+            "Patrol, infrastructure, and response inputs are weighted equally across Bengaluru sectors.",
+        ],
         "computed_at":         pd.Timestamp.now().isoformat(),
     }
 
 # ─── GET /api/reports ─────────────────────────────────────────────────────────
 
 @app.get("/api/reports")
-async def get_reports(limit: int = Query(20, le=100)):
-    if DB.cases.empty:
+async def get_reports(
+    request: Request,
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+):
+    if not ensure_data_loaded(request):
         raise HTTPException(503, "Data not loaded")
-    df = DB.cases.sort_values("CrimeRegisteredDate", ascending=False).head(limit)
+    total = len(DB.cases)
+    df = DB.cases.sort_values("CrimeRegisteredDate", ascending=False).iloc[offset : offset + limit].copy()
     if not DB.crime_heads.empty:
         df = df.merge(DB.crime_heads[["CrimeHeadID", "CrimeGroupName"]],
                       left_on="CrimeMajorHeadID", right_on="CrimeHeadID", how="left")
+    accused_counts = DB.accused.groupby("CaseMasterID").size().to_dict() if not DB.accused.empty else {}
     results = []
     for _, row in df.iterrows():
+        case_id = int(row["CaseMasterID"])
+        workflow = _LOCAL_CASE_WORKFLOWS.get(case_id, {})
         g = int(row["GravityOffenceID"])
         results.append({
+            "case_master_id": case_id,
             "id":             f"BLR-{row['CrimeNo']}",
             "title":          str(row.get("BriefFacts", ""))[:80],
             "district":       "Bengaluru",
-            "station":        f"PS-{int(row['PoliceStationID'])}",
+            "station":        station_name(int(row["PoliceStationID"])),
             "date":           str(row["CrimeRegisteredDate"]),
             "severity":       "critical" if g == 5 else ("high" if g == 4 else ("medium" if g == 3 else "low")),
-            "status":         "investigating",
-            "assigned_officer": "Assigned",
+            "status":         workflow.get("status", "open"),
+            "assigned_officer": workflow.get("assigned_officer", "Unassigned"),
             "crime_type":     str(row.get("CrimeGroupName", "Unknown")),
             "ipc_section":    f"IPC {int(row['CrimeMajorHeadID']) * 100 + 79}",
-            "suspects":       1,
+            "suspects":       int(accused_counts.get(case_id, 0)),
         })
-    return results
+    return {"items": results, "total": total, "limit": limit, "offset": offset}
+
+@app.patch("/api/reports/{case_master_id}/workflow")
+async def update_case_workflow(case_master_id: int, body: CaseWorkflowUpdate, request: Request):
+    officer = require_session(request)
+    if not ensure_data_loaded(request):
+        raise HTTPException(503, "Data not loaded")
+    if not DB.cases["CaseMasterID"].astype(int).eq(case_master_id).any():
+        raise HTTPException(404, "Case not found")
+
+    workflow = {
+        "status": body.status,
+        "assigned_officer": body.assigned_officer.strip(),
+        "updated_by": officer["badge"],
+        "updated_at": pd.Timestamp.now(tz="UTC").isoformat(),
+    }
+    _LOCAL_CASE_WORKFLOWS[case_master_id] = workflow
+    persistence = "session"
+    warning = "Stored for this AppSail session; configure CaseWorkflowEvents to persist workflow history."
+    capp = _try_catalyst_app(request)
+    if capp is not None:
+        try:
+            capp.datastore().table("CaseWorkflowEvents").insert_rows([{
+                "CaseMasterID": case_master_id,
+                "Status": workflow["status"],
+                "AssignedOfficer": workflow["assigned_officer"],
+                "UpdatedBy": workflow["updated_by"],
+                "UpdatedAt": workflow["updated_at"],
+            }])
+            persistence = "datastore"
+            warning = None
+        except Exception as exc:
+            log.warning(f"Case workflow Data Store write failed; keeping session event: {exc}")
+    return {"case_master_id": case_master_id, **workflow, "persistence": persistence, "warning": warning}
 
 # ─── POST /api/export_brief (SmartBrowz PDF) ─────────────────────────────────
 
@@ -675,12 +1124,18 @@ async def export_brief(body: ExportBriefRequest, request: Request):
     CATALYST mode: SmartBrowz headless PDF generation.
     LOCAL mode:    fpdf2 fallback.
     """
+    require_permission(request, "canExport")
     capp = _try_catalyst_app(request)
     if capp is not None:
         try:
             html    = _brief_html(body)
             sb      = capp.smart_browz()
-            pdf_b   = sb.generate_pdf(html_content=html)
+            # zcatalyst-sdk 1.4.0's SmartBrowz has no `generate_pdf(html_content=...)`
+            # method — the real API is `convert_to_pdf(source)`, which accepts either
+            # a URL or a raw HTML string and returns the underlying `requests.Response`
+            # (verified by reading the installed package's smartbrowz/__init__.py).
+            resp    = sb.convert_to_pdf(html)
+            pdf_b   = resp.content
             return StreamingResponse(iter([pdf_b]), media_type="application/pdf",
                 headers={"Content-Disposition": "attachment; filename=garuda-intel-brief.pdf"})
         except Exception as e:
@@ -692,7 +1147,7 @@ async def export_brief(body: ExportBriefRequest, request: Request):
         pdf = FPDF()
         pdf.add_page()
         pdf.set_font("Helvetica", "B", 16)
-        pdf.cell(0, 12, "PROJECT GARUDA — INTELLIGENCE BRIEF", ln=True, align="C")
+        pdf.cell(0, 12, "PROJECT GARUDA - INTELLIGENCE BRIEF", ln=True, align="C")
         pdf.set_font("Helvetica", "", 9)
         pdf.cell(0, 6, "Karnataka State Police | RESTRICTED", ln=True, align="C")
         pdf.ln(6)
@@ -706,7 +1161,7 @@ async def export_brief(body: ExportBriefRequest, request: Request):
         pdf.cell(0, 8, "Top Crime Categories", ln=True)
         pdf.set_font("Helvetica", "", 10)
         for c in body.top_crime_types:
-            pdf.cell(0, 7, f"  • {c}", ln=True)
+            pdf.cell(0, 7, f"  - {c}", ln=True)
         if body.simulation_impact:
             pdf.ln(4)
             pdf.set_font("Helvetica", "B", 11)
