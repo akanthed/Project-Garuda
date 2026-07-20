@@ -105,3 +105,4 @@ htmlcov/
 .data/
 local_data/
 backend/vendor/*
+.env.production
