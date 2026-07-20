@@ -15,7 +15,7 @@ dist
 dist-ssr
 .output
 .vinxi
-.tanstack/**
+.tanstack/                  # TanStack Router generated cache & temp files
 .nitro
 *.local
 coverage
@@ -52,6 +52,12 @@ backend/build/
 *.pyd
 .Python
 *.so
+
+# ─── TypeScript & Generated Files ──────────────────────────────────────────────
+*.d.ts                      # TypeScript declaration files
+*.d.map                     # TypeScript declaration maps
+*.tsbuildinfo               # TypeScript build info
+src/routes/routeTree.gen.ts # TanStack Router auto-generated route tree
 
 # ─── AI/IDE Configuration (user-specific) ───────────────────────────────────────
 .lovable/                  # Lovable AI IDE config
