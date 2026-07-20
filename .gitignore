@@ -1,4 +1,4 @@
-# Logs
+# ─── Logs & Output ──────────────────────────────────────────────────────────
 logs
 *.log
 npm-debug.log*
@@ -6,35 +6,102 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+dev-log.txt
+deploy_log.txt
 
+# ─── Dependencies & Build ───────────────────────────────────────────────────────
 node_modules
 dist
 dist-ssr
 .output
 .vinxi
 .tanstack/**
-
-# Python (backend/)
-backend/venv
-backend/vendor
-backend/__pycache__
-backend/**/__pycache__
-backend/data/.upload_checkpoint.json
-*.pyc
 .nitro
 *.local
+coverage
+.nyc_output
 
-# Wrangler / Cloudflare
-.wrangler/
-.dev.vars
+# ─── Environment & Secrets (DO NOT COMMIT) ──────────────────────────────────────
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+.env.test
 
-# Editor directories and files
+# ─── Sensitive Configuration Files ──────────────────────────────────────────────
+catalyst.json              # Zoho Catalyst config (may have API keys)
+.catalystrc                # Catalyst runtime config
+backend/app-config.json    # Backend configuration with model IDs
+.dev.vars                  # Local development variables
+
+# ─── Python (backend/) ──────────────────────────────────────────────────────────
+backend/venv
+backend/env
+backend/.venv
+backend/.env
+backend/__pycache__
+backend/**/__pycache__
+backend/vendor/                 # ⭐ DO NOT COMMIT - Python dependencies
+backend/data/.upload_checkpoint.json
+backend/*.egg-info
+backend/dist/
+backend/build/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# ─── AI/IDE Configuration (user-specific) ───────────────────────────────────────
+.lovable/                  # Lovable AI IDE config
+.claude/                   # Claude config (may have API keys)
 .vscode/*
 !.vscode/extensions.json
+!.vscode/agents/           # Keep agent instructions (no secrets)
+!.vscode/agents/**
+.vscode/settings.json      # User-specific settings
+.vscode/keybindings.json   # User keybindings
+.vscode/launch.json        # User debug config
+
+# ─── IDE & OS Files ─────────────────────────────────────────────────────────────
 .idea
 .DS_Store
+.AppleDouble
+.LSOverride
 *.suo
+*.sln.iml
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+*.swp
+.venv-gen/                 # Local Python venv
+Thumbs.db
+
+# ─── Wrangler / Cloudflare ──────────────────────────────────────────────────────
+.wrangler/
+
+# ─── Testing & Coverage ─────────────────────────────────────────────────────────
+coverage/
+.coverage
+htmlcov/
+.pytest_cache/
+.vitest/
+
+# ─── Temporary & Local Files ────────────────────────────────────────────────────
+*.tmp
+*.bak
+*~
+*.swp
+.DS_Store
+.env.*.local
+.cache/
+
+# ─── Database & Data Files (if local) ───────────────────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+.data/
+local_data/
+backend/vendor/*
