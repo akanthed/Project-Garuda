@@ -28,7 +28,7 @@ import type {
   SimulatorVariable,
   StationAnomaly,
 } from "./types";
-import { getToken } from "./auth";
+import { getToken, logout } from "./auth";
 
 const API_BASE = import.meta.env.VITE_API_URL as string | undefined;
 const USE_REAL_API = !!API_BASE;
@@ -44,13 +44,18 @@ function wrap<T>(data: T): ApiResponse<T> {
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const token = getToken();
   const res = await fetch(`${API_BASE}${path}`, {
+    ...options,
     headers: {
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options?.headers,
     },
-    ...options,
   });
+  if (res.status === 401) {
+    logout();
+    window.location.assign(`${import.meta.env.BASE_URL}login`);
+    throw new Error("Officer session expired. Please sign in again.");
+  }
   if (!res.ok) throw new Error(`API ${path} failed: ${res.status} ${res.statusText}`);
   return res.json() as Promise<T>;
 }
@@ -427,7 +432,15 @@ const CASE_REPORTS: Omit<CaseReport, "case_master_id">[] = [
 
 export async function fetchCaseReports(): Promise<ApiResponse<CaseReportsPage>> {
   if (USE_REAL_API) {
-    const data = await apiFetch<CaseReportsPage>("/api/reports?limit=20");
+    const data = await apiFetch<CaseReportsPage | CaseReport[]>("/api/reports?limit=20");
+    if (Array.isArray(data)) {
+      return wrap({
+        items: data.map((report, index) => ({ ...report, case_master_id: report.case_master_id ?? index + 1 })),
+        total: data.length,
+        limit: data.length,
+        offset: 0,
+      });
+    }
     return wrap(data);
   }
   await delay(500);

@@ -8,7 +8,7 @@
     "PYTHONPATH": "vendor",
     "ALLOWED_ORIGINS": "https://garuda-60078749238.development.catalystserverless.in",
     "SEED_TOKEN": "06f19f5959edfadd5c273623efdd8b39",
-    "SESSION_SECRET": "53056e75373f53af53998bae1fab1585"
+    "SESSION_SECRET": "023987acef4d1b56"
   },
   "memory": 512
 }

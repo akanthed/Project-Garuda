@@ -14,6 +14,7 @@ import { fetchKpiMetrics } from "@/lib/mock-api";
 import type { KpiMetric, StationAnomaly } from "@/lib/types";
 import { getSession, isAuthenticated, type Officer } from "@/lib/auth";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { SimulatorProvider } from "@/contexts/SimulatorContext";
 import { t, type TranslationKey } from "@/lib/i18n";
 
@@ -155,10 +156,12 @@ function Dashboard() {
   const officer = getSession() as Officer;
   const [view, setView] = useState<ViewKey>("dashboard");
   const { locale } = useLanguage();
+  const { theme } = useTheme();
   const [kpis, setKpis] = useState<KpiMetric[]>([]);
   const [kpisLoading, setKpisLoading] = useState(true);
   const [selectedAnomaly, setSelectedAnomaly] = useState<StationAnomaly | null>(null);
   const [briefOpen, setBriefOpen] = useState(false);
+  const [simulationImpact, setSimulationImpact] = useState<number | null>(null);
   const [operationEvents, setOperationEvents] = useState<OperationEvent[]>(() => {
     try {
       const savedEvents = localStorage.getItem(OPERATION_TIMELINE_KEY);
@@ -194,7 +197,7 @@ function Dashboard() {
   return (
     <SimulatorProvider>
       <div className="flex min-h-screen bg-background text-foreground">
-        <Toaster theme="dark" position="bottom-right" />
+        <Toaster theme={theme} position="bottom-right" />
         <Sidebar active={view} onChange={setView} />
         <div className="flex min-w-0 flex-1 flex-col">
           <TopBar officer={officer} kpis={kpis} onNavigate={setView} />
@@ -225,6 +228,16 @@ function Dashboard() {
                     })
                   )}
                 </section>
+
+                {simulationImpact !== null && (
+                  <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/25 bg-primary/[0.06] px-5 py-3">
+                    <div>
+                      <div className="text-sm font-medium">{t("sim_dashboard_result", locale)}: −{simulationImpact}% {t("sim_incidents", locale)}</div>
+                      <p className="mt-0.5 text-xs text-muted-foreground">{t("sim_dashboard_applied", locale)}</p>
+                    </div>
+                    <button onClick={() => setSimulationImpact(null)} className="text-xs text-primary transition hover:text-foreground">×</button>
+                  </section>
+                )}
 
                 <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
                   <div className="space-y-2 lg:col-span-2">
@@ -287,7 +300,10 @@ function Dashboard() {
             )}
 
             {view === "simulator" && (
-              officer.canSimulate ? <Simulator /> : <RbacBlock label="Command Simulator" minRole="SI (CLR-4)" />
+              officer.canSimulate ? <Simulator onComplete={(impact) => {
+                setSimulationImpact(impact);
+                setView("dashboard");
+              }} /> : <RbacBlock label="Command Simulator" minRole="SI (CLR-4)" />
             )}
 
             {view === "reports" && <ReportsView />}

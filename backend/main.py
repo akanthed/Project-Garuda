@@ -30,7 +30,7 @@ import time
 from contextlib import asynccontextmanager
 from io import BytesIO
 from threading import Lock
-from typing import Optional
+from typing import Literal, Optional
 
 import networkx as nx
 import numpy as np
@@ -478,7 +478,7 @@ if not os.environ.get("X_ZOHO_CATALYST_LISTEN_PORT"):
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"] if _allowed_origins == "*" else [o.strip() for o in _allowed_origins.split(",")],
-        allow_methods=["GET", "POST"],
+        allow_methods=["GET", "POST", "PATCH"],
         allow_headers=["*"],
     )
 
@@ -529,6 +529,12 @@ class IncidentIntakeRequest(BaseModel):
     longitude: float = Field(ge=74.0, le=80.0)
     brief_facts: str = Field(min_length=10, max_length=1000)
     accused_names: list[str] = Field(default_factory=list, max_length=10)
+
+class CaseWorkflowUpdate(BaseModel):
+    status: Literal["open", "investigating", "resolved", "closed"]
+    assigned_officer: str = Field(min_length=2, max_length=120)
+
+_LOCAL_CASE_WORKFLOWS: dict[int, dict] = {}
 
 # ─── Health ───────────────────────────────────────────────────────────────────
 
@@ -890,8 +896,7 @@ def _ask(query: str) -> dict:
          "gravity": int(row["GravityOffenceID"])}
         for _, row in top.iterrows()
     ]
-    suggested_view = "network" if matched_station or matched_crime else "reports"
-    return {"answer": answer, "matched_cases": matched_cases, "suggested_view": suggested_view}
+    return {"answer": answer, "matched_cases": matched_cases, "suggested_view": "reports"}
 
 @app.post("/api/ask")
 async def ask_garuda(body: AskRequest, request: Request):
@@ -1044,30 +1049,72 @@ async def run_simulation(body: SimulationRequest, request: Request):
 # ─── GET /api/reports ─────────────────────────────────────────────────────────
 
 @app.get("/api/reports")
-async def get_reports(request: Request, limit: int = Query(20, le=100)):
+async def get_reports(
+    request: Request,
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+):
     if not ensure_data_loaded(request):
         raise HTTPException(503, "Data not loaded")
-    df = DB.cases.sort_values("CrimeRegisteredDate", ascending=False).head(limit)
+    total = len(DB.cases)
+    df = DB.cases.sort_values("CrimeRegisteredDate", ascending=False).iloc[offset : offset + limit].copy()
     if not DB.crime_heads.empty:
         df = df.merge(DB.crime_heads[["CrimeHeadID", "CrimeGroupName"]],
                       left_on="CrimeMajorHeadID", right_on="CrimeHeadID", how="left")
+    accused_counts = DB.accused.groupby("CaseMasterID").size().to_dict() if not DB.accused.empty else {}
     results = []
     for _, row in df.iterrows():
+        case_id = int(row["CaseMasterID"])
+        workflow = _LOCAL_CASE_WORKFLOWS.get(case_id, {})
         g = int(row["GravityOffenceID"])
         results.append({
+            "case_master_id": case_id,
             "id":             f"BLR-{row['CrimeNo']}",
             "title":          str(row.get("BriefFacts", ""))[:80],
             "district":       "Bengaluru",
-            "station":        f"PS-{int(row['PoliceStationID'])}",
+            "station":        station_name(int(row["PoliceStationID"])),
             "date":           str(row["CrimeRegisteredDate"]),
             "severity":       "critical" if g == 5 else ("high" if g == 4 else ("medium" if g == 3 else "low")),
-            "status":         "investigating",
-            "assigned_officer": "Assigned",
+            "status":         workflow.get("status", "open"),
+            "assigned_officer": workflow.get("assigned_officer", "Unassigned"),
             "crime_type":     str(row.get("CrimeGroupName", "Unknown")),
             "ipc_section":    f"IPC {int(row['CrimeMajorHeadID']) * 100 + 79}",
-            "suspects":       1,
+            "suspects":       int(accused_counts.get(case_id, 0)),
         })
-    return results
+    return {"items": results, "total": total, "limit": limit, "offset": offset}
+
+@app.patch("/api/reports/{case_master_id}/workflow")
+async def update_case_workflow(case_master_id: int, body: CaseWorkflowUpdate, request: Request):
+    officer = require_session(request)
+    if not ensure_data_loaded(request):
+        raise HTTPException(503, "Data not loaded")
+    if not DB.cases["CaseMasterID"].astype(int).eq(case_master_id).any():
+        raise HTTPException(404, "Case not found")
+
+    workflow = {
+        "status": body.status,
+        "assigned_officer": body.assigned_officer.strip(),
+        "updated_by": officer["badge"],
+        "updated_at": pd.Timestamp.now(tz="UTC").isoformat(),
+    }
+    _LOCAL_CASE_WORKFLOWS[case_master_id] = workflow
+    persistence = "session"
+    warning = "Stored for this AppSail session; configure CaseWorkflowEvents to persist workflow history."
+    capp = _try_catalyst_app(request)
+    if capp is not None:
+        try:
+            capp.datastore().table("CaseWorkflowEvents").insert_rows([{
+                "CaseMasterID": case_master_id,
+                "Status": workflow["status"],
+                "AssignedOfficer": workflow["assigned_officer"],
+                "UpdatedBy": workflow["updated_by"],
+                "UpdatedAt": workflow["updated_at"],
+            }])
+            persistence = "datastore"
+            warning = None
+        except Exception as exc:
+            log.warning(f"Case workflow Data Store write failed; keeping session event: {exc}")
+    return {"case_master_id": case_master_id, **workflow, "persistence": persistence, "warning": warning}
 
 # ─── POST /api/export_brief (SmartBrowz PDF) ─────────────────────────────────
 

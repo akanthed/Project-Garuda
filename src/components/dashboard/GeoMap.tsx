@@ -218,14 +218,11 @@ export function GeoMap({ compact = false }: GeoMapProps) {
   }, [compact]);
 
   const toggle = (id: string) => {
-    setLayers((prev) =>
-      prev.map((l) => {
-        if (l.id !== id) return l;
-        const next = !l.on;
-        toast(`${t(l.labelKey, locale)} ${t(next ? "map_enabled" : "map_disabled", locale)}`, { description: t("map_overlay_updated", locale) });
-        return { ...l, on: next };
-      })
-    );
+    const layer = layers.find((item) => item.id === id);
+    if (!layer) return;
+    const next = !layer.on;
+    setLayers((previous) => previous.map((item) => item.id === id ? { ...item, on: next } : item));
+    toast(`${t(layer.labelKey, locale)} ${t(next ? "map_enabled" : "map_disabled", locale)}`, { description: t("map_overlay_updated", locale) });
   };
 
   const densityOn = layers.find((l) => l.id === "density")?.on;

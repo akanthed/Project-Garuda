@@ -15,6 +15,12 @@ import "./styles.css";
     const q = params.get("q");
     const restored = redirectPath + (q ? `?${q}` : "") + window.location.hash;
     window.history.replaceState(null, "", restored);
+    return;
+  }
+
+  const entryPath = `${import.meta.env.BASE_URL}index.html`;
+  if (window.location.pathname === entryPath) {
+    window.history.replaceState(null, "", `${import.meta.env.BASE_URL}${window.location.search}${window.location.hash}`);
   }
 })();
 

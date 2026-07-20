@@ -14,7 +14,11 @@ const VARIABLE_TRANSLATIONS: Record<string, { labelKey: TranslationKey; hintKey:
   "rapid-response": { labelKey: "sim_response_units", hintKey: "sim_response_hint" },
 };
 
-export function Simulator() {
+interface SimulatorProps {
+  onComplete?: (impact: number) => void;
+}
+
+export function Simulator({ onComplete }: SimulatorProps) {
   const { locale } = useLanguage();
   const { values: vals, setValue, setDefaults } = useSimulator();
   const [variables, setVariables] = useState<SimulatorVariable[]>([]);
@@ -53,6 +57,7 @@ export function Simulator() {
         confidenceRange: data.confidenceRange,
         assumptions: data.assumptions,
       });
+      onComplete?.(data.impactPercent);
       toast.success(`${t("sim_complete", locale)} · −${data.impactPercent}% ${t("sim_incidents", locale)}`, {
         description: `${t("sim_model", locale)}: ${data.modelVersion} · ${data.windowDays}${locale === "kn" ? " ದಿನ" : "d"} ${t("sim_rolling_window", locale).replace("30d ", "")}`,
       });

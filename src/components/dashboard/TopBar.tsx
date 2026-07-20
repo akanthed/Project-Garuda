@@ -1,9 +1,10 @@
 ﻿import { useState } from "react";
-import { Search, Bot, LogOut, FileDown, Loader2, ArrowRight } from "lucide-react";
+import { Bot, LogOut, FileDown, Loader2, ArrowRight, Moon, Sun, Send } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "@tanstack/react-router";
 import { logout, type Officer } from "@/lib/auth";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { t } from "@/lib/i18n";
 import { exportBrief, askGaruda } from "@/lib/mock-api";
 import type { AskResponse, KpiMetric } from "@/lib/types";
@@ -16,13 +17,22 @@ interface TopBarProps {
   onNavigate?: (view: ViewKey) => void;
 }
 
+interface ChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  text: string;
+  result?: AskResponse;
+}
+
 export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
   const navigate = useNavigate();
   const { locale, toggle } = useLanguage();
+  const { theme, toggle: toggleTheme } = useTheme();
   const [q, setQ] = useState("");
   const [exporting, setExporting] = useState(false);
   const [asking, setAsking] = useState(false);
-  const [askResult, setAskResult] = useState<AskResponse | null>(null);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [conversation, setConversation] = useState<ChatMessage[]>([]);
 
   const handleLogout = () => {
     logout();
@@ -73,71 +83,66 @@ export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
-        <form
-          onSubmit={async (e) => {
-            e.preventDefault();
-            if (!q.trim() || asking) return;
-            setAsking(true);
-            setAskResult(null);
-            try {
-              const { data } = await askGaruda(q);
-              setAskResult(data);
-            } catch {
-              toast.error(t("topbar_ask_failed", locale), { description: t("topbar_ask_failed_desc", locale) });
-            } finally {
-              setAsking(false);
-            }
-          }}
-          className="relative hidden w-80 items-center gap-2 rounded-md border border-primary/20 bg-primary/[0.04] px-3 py-1.5 text-xs text-muted-foreground focus-within:border-primary/50 md:flex"
-        >
-          {asking ? <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" /> : <Bot className="h-3.5 w-3.5 text-primary" />}
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            className="flex-1 bg-transparent text-foreground outline-none placeholder:text-muted-foreground/60"
-            placeholder={t("ask_placeholder", locale)}
-          />
-          <span className="hidden rounded border border-primary/20 px-1.5 py-0.5 font-mono text-[9px] text-primary lg:inline">
-            {t("topbar_ask_label", locale)}
-          </span>
+        <div className="relative">
+          <button
+            onClick={() => setChatOpen((open) => !open)}
+            aria-expanded={chatOpen}
+            title={t("topbar_ask_label", locale)}
+            className="flex h-8 items-center gap-1.5 rounded-md border border-primary/20 bg-primary/[0.04] px-2.5 text-primary transition hover:border-primary/50 hover:bg-primary/10"
+          >
+            {asking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Bot className="h-3.5 w-3.5" />}
+            <span className="hidden text-xs font-medium sm:inline">{t("topbar_ask_label", locale)}</span>
+          </button>
 
-          {askResult && (
-            <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-20 rounded-lg border border-white/10 bg-background/95 p-3 text-left shadow-xl backdrop-blur-sm">
-              <div className="flex items-start justify-between gap-2">
-                <p className="text-[11px] leading-relaxed text-foreground">{askResult.answer}</p>
-                <button
-                  type="button"
-                  onClick={() => setAskResult(null)}
-                  className="shrink-0 text-muted-foreground hover:text-foreground"
-                >
-                  ×
-                </button>
+          {chatOpen && (
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const question = q.trim();
+                if (!question || asking) return;
+                setAsking(true);
+                setConversation((messages) => [...messages, { id: crypto.randomUUID(), role: "user", text: question }]);
+                setQ("");
+                try {
+                  const { data } = await askGaruda(question);
+                  setConversation((messages) => [...messages, { id: crypto.randomUUID(), role: "assistant", text: data.answer, result: data }]);
+                } catch {
+                  toast.error(t("topbar_ask_failed", locale), { description: t("topbar_ask_failed_desc", locale) });
+                } finally {
+                  setAsking(false);
+                }
+              }}
+              role="dialog"
+              aria-label={t("topbar_ask_label", locale)}
+              className="absolute right-0 top-[calc(100%+8px)] z-20 flex w-[min(23rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-lg border border-border bg-popover shadow-xl"
+            >
+              <div className="flex items-center justify-between border-b border-border px-3 py-2.5">
+                <div className="flex items-center gap-2 text-sm font-medium"><Bot className="h-4 w-4 text-primary" /> {t("topbar_ask_label", locale)}</div>
+                <button type="button" onClick={() => setChatOpen(false)} className="text-muted-foreground transition hover:text-foreground">×</button>
               </div>
-              {askResult.matched_cases.length > 0 && (
-                <div className="mt-2 space-y-1 border-t border-white/5 pt-2">
-                  {askResult.matched_cases.slice(0, 4).map((c) => (
-                    <div key={c.id} className="flex items-center justify-between font-mono text-[10px] text-muted-foreground">
-                      <span className="truncate">{c.id}</span>
-                      <span>{c.station}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {onNavigate && askResult.matched_cases.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    onNavigate(askResult.suggested_view);
-                    setAskResult(null);
-                  }}
-                  className="mt-2 flex items-center gap-1 text-[11px] text-primary hover:underline"
-                >
-                  {t("ask_view_results", locale)} <ArrowRight className="h-3 w-3" />
-                </button>
-              )}
-            </div>
+              <div className="max-h-72 space-y-2 overflow-y-auto p-3">
+                {conversation.length === 0 && <p className="text-xs text-muted-foreground">{t("ask_greeting", locale)}</p>}
+                {conversation.map((message) => (
+                  <div key={message.id} className={message.role === "user" ? "ml-8 rounded-md bg-primary px-3 py-2 text-xs text-primary-foreground" : "mr-4 rounded-md bg-muted px-3 py-2 text-xs text-foreground"}>
+                    <p>{message.text}</p>
+                    {message.result && message.result.matched_cases.length > 0 && (
+                      <>
+                        <div className="mt-2 space-y-1 border-t border-border pt-2 font-mono text-[10px] text-muted-foreground">
+                          {message.result.matched_cases.slice(0, 3).map((caseRecord) => <div key={caseRecord.id} className="flex justify-between gap-2"><span className="truncate">{caseRecord.id}</span><span className="shrink-0">{caseRecord.station}</span></div>)}
+                        </div>
+                        {onNavigate && <button type="button" onClick={() => { onNavigate(message.result!.suggested_view); setChatOpen(false); }} className="mt-2 flex items-center gap-1 text-[11px] text-primary hover:underline">{t("ask_view_results", locale)} <ArrowRight className="h-3 w-3" /></button>}
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center gap-2 border-t border-border p-2">
+                <input value={q} onChange={(e) => setQ(e.target.value)} className="min-w-0 flex-1 bg-transparent px-2 py-1.5 text-sm text-foreground outline-none placeholder:text-muted-foreground" placeholder={t("ask_placeholder", locale)} />
+                <button type="submit" disabled={!q.trim() || asking} title={t("ask_send", locale)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50"><Send className="h-3.5 w-3.5" /></button>
+              </div>
+            </form>
           )}
-        </form>
+        </div>
 
         {/* PDF Export — triggers SmartBrowz on backend */}
         <button
@@ -163,6 +168,14 @@ export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
           <span className="font-mono text-[11px] text-primary">
             {locale === "en" ? "ಕನ್ನಡ" : "EN"}
           </span>
+        </button>
+
+        <button
+          onClick={toggleTheme}
+          title={t(theme === "dark" ? "topbar_theme_dark" : "topbar_theme_light", locale)}
+          className="flex h-8 w-8 items-center justify-center rounded-md border border-white/5 text-muted-foreground transition hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
+        >
+          {theme === "dark" ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
         </button>
 
         {/* Logout */}
