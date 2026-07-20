@@ -21,23 +21,41 @@ catalyst init
 
 ---
 
-## 2. Generate Synthetic Data (before deploying backend)
+## 2. Generate the 100k Synthetic Dataset
 ```bash
 cd backend
-python -m venv venv
-.\venv\Scripts\activate        # Windows
-pip install -r requirements.txt
-python generate_data.py        # Creates data/*.csv
+python -m venv .venv-gen
+.\.venv-gen\Scripts\activate
+pip install -r requirements-dev.txt
+python scale_data.py --target-cases 100000
 ```
+
+`scale_data.py` preserves the existing CSV prefix already loaded into Data Store, appends relational records with new IDs, and writes `data/scale_manifest.json`. Do not run the original generator after this step because it replaces the files.
 
 ---
 
 ## 3. Upload Data to Catalyst Data Store
 1. Open Zoho Catalyst Console → Data Store
 2. Create 6 tables: `CaseMaster`, `Accused`, `CrimeHead`, `ArrestSurrender`, `Officers`, `CaseWorkflowEvents`
-3. Import each CSV from `backend/data/` for the first 4 tables
-4. Populate `Officers` with columns `Badge, Name, Designation, Station, Clearance, Node, PasswordHash` (see `hash_password()` in `backend/main.py` for the hashing scheme) — used by `POST /api/auth/login`. If this table is empty or missing, the backend falls back to its local demo registry.
-5. Verify FK relationships
+3. Populate `Officers` with columns `Badge, Name, Designation, Station, Clearance, Node, PasswordHash` (see `hash_password()` in `backend/main.py` for the hashing scheme) — used by `POST /api/auth/login`. If this table is empty or missing, the backend falls back to its local demo registry.
+4. Deploy AppSail so the protected chunk uploader is available.
+5. Set the same rotated `SEED_TOKEN` in AppSail and in the local terminal, then run:
+
+```powershell
+$env:SEED_TOKEN = "<same rotated value configured in AppSail>"
+python backend\upload_data.py --base-url https://garuda-api-<id>.catalystappsail.com
+```
+
+The uploader starts from the row counts captured before scaling, sends 200 rows per request, and records progress in the ignored `backend/data/.upload_checkpoint.json`. Re-run the same command after a network failure to resume. Do not use `--reset-checkpoint` unless the appended rows were removed from Data Store.
+
+After upload, refresh AppSail's in-memory analytics and verify the count:
+
+```powershell
+Invoke-RestMethod -Method Post `
+  -Uri "https://garuda-api-<id>.catalystappsail.com/api/admin/reload-from-datastore" `
+  -Headers @{ "X-Seed-Token" = $env:SEED_TOKEN }
+Invoke-RestMethod "https://garuda-api-<id>.catalystappsail.com/health"
+```
 
 `CaseWorkflowEvents` is append-only audit data for Reports workflow changes. Create it with these columns: `EventID` (string), `CaseMasterID` (number), `Status` (string), `AssignedOfficer` (string), `UpdatedBy` (string), and `UpdatedAt` (string / ISO-8601 timestamp). The API reads the newest event for each case and never mutates `CaseMaster` source rows.
 
@@ -48,6 +66,8 @@ python generate_data.py        # Creates data/*.csv
 `POST /api/translate` currently returns supplied narrative text unchanged. The Catalyst Zia Python SDK does not provide a Translate API, so the application should not describe this endpoint as machine translation. Static English/Kannada interface labels are hand-curated in the client.
 
 `POST /api/export_brief` attempts Catalyst SmartBrowz PDF generation through `capp.smart_browz().convert_to_pdf(html)` when available. A local `fpdf2` fallback keeps intelligence brief export usable during local development and if SmartBrowz is unavailable.
+
+QuickML LLM Serving is the generative AI path for Ask Garuda and is available in the IN data center. Follow `QUICKML_INTEGRATION.md` to obtain the endpoint URL, endpoint key, OAuth token, organization ID, and model name. Zia AutoML is not the chosen path because Zoho documents it as unavailable in the IN data center.
 
 ---
 
@@ -131,6 +151,11 @@ AppSail → Environment Variables:
 ALLOWED_ORIGINS=https://garuda-frontend-<id>.catalystapps.com
 SESSION_SECRET=<a long random string, generate with: openssl rand -hex 32>
 SEED_TOKEN=<a long random secret used only by protected seed and reload endpoints>
+QUICKML_LLM_ENDPOINT=<copied from QuickML Model Details>
+QUICKML_ENDPOINT_KEY=<secret endpoint key>
+QUICKML_ACCESS_TOKEN=<OAuth token with QuickML.deployment.READ>
+QUICKML_ORG_ID=<organization ID>
+QUICKML_MODEL=<model name from QuickML Model Details>
 ```
 > Do not set `CATALYST_PROJECT_ID`: AppSail derives project context from request headers, and Catalyst reserves that variable name. `ALLOWED_ORIGINS` configures local-development CORS; Catalyst manages deployed Web Client origin protection. `SESSION_SECRET` signs officer login tokens and is required before production use.
 

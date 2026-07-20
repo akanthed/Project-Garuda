@@ -6,9 +6,8 @@
     "PYTHONUNBUFFERED": "1",
     "LOG_LEVEL": "info",
     "PYTHONPATH": "vendor",
-    "ALLOWED_ORIGINS": "https://garuda-60078749238.development.catalystserverless.in",
-    "SEED_TOKEN": "06f19f5959edfadd5c273623efdd8b39",
-    "SESSION_SECRET": "023987acef4d1b56"
+    "ZIA_RISK_MODEL_ID": "52319000000096025",
+    "ALLOWED_ORIGINS": "https://garuda-60078749238.development.catalystserverless.in"
   },
   "memory": 512
 }
