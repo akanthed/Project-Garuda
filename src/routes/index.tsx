@@ -16,6 +16,7 @@ import { getSession, isAuthenticated, type Officer } from "@/lib/auth";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { SimulatorProvider } from "@/contexts/SimulatorContext";
+import { useDisplayPreferences } from "@/contexts/DisplayPreferencesContext";
 import { t, type TranslationKey } from "@/lib/i18n";
 
 // Maps backend KPI ids -> local icon + translated label (backend labels are
@@ -25,6 +26,15 @@ const KPI_META: Record<string, { icon: LucideIcon; labelKey: TranslationKey }> =
   "hotspot-alerts":      { icon: MapPin,        labelKey: "kpi_hotspot_alerts" },
   "risk-volatility":     { icon: TrendingDown,  labelKey: "kpi_risk_volatility" },
   "resource-readiness":  { icon: ShieldCheck,   labelKey: "kpi_readiness" },
+};
+
+const VIEW_TITLE_KEYS: Record<ViewKey, TranslationKey> = {
+  dashboard: "nav_dashboard",
+  geospatial: "nav_geospatial",
+  network: "nav_network",
+  simulator: "nav_simulator",
+  reports: "nav_reports",
+  settings: "nav_settings",
 };
 
 // Lazy-load heavy canvas components — keeps login/dashboard first paint instant
@@ -157,6 +167,7 @@ function Dashboard() {
   const [view, setView] = useState<ViewKey>("dashboard");
   const { locale } = useLanguage();
   const { theme } = useTheme();
+  const { autoRefresh, compactCards } = useDisplayPreferences();
   const [kpis, setKpis] = useState<KpiMetric[]>([]);
   const [kpisLoading, setKpisLoading] = useState(true);
   const [selectedAnomaly, setSelectedAnomaly] = useState<StationAnomaly | null>(null);
@@ -172,11 +183,15 @@ function Dashboard() {
   });
 
   useEffect(() => {
-    fetchKpiMetrics().then(({ data }) => {
+    const loadKpis = () => fetchKpiMetrics().then(({ data }) => {
       setKpis(data);
       setKpisLoading(false);
     });
-  }, []);
+    loadKpis();
+    if (!autoRefresh) return;
+    const interval = window.setInterval(loadKpis, 60_000);
+    return () => window.clearInterval(interval);
+  }, [autoRefresh]);
 
   useEffect(() => {
     localStorage.setItem(OPERATION_TIMELINE_KEY, JSON.stringify(operationEvents));
@@ -200,7 +215,7 @@ function Dashboard() {
         <Toaster theme={theme} position="bottom-right" />
         <Sidebar active={view} onChange={setView} />
         <div className="flex min-w-0 flex-1 flex-col">
-          <TopBar officer={officer} kpis={kpis} onNavigate={setView} />
+          <TopBar officer={officer} kpis={kpis} activeViewLabel={t(VIEW_TITLE_KEYS[view], locale)} onNavigate={setView} />
           <main className="min-w-0 flex-1 space-y-4 p-5">
             {view === "dashboard" && (
               <>
@@ -223,6 +238,7 @@ function Dashboard() {
                           icon={meta?.icon ?? Network}
                           data={k.sparkline}
                           accent={k.accent}
+                          compact={compactCards}
                         />
                       );
                     })

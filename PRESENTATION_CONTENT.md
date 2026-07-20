@@ -47,22 +47,24 @@ Garuda combines spatial intelligence, relationship analysis, and scenario planni
 | Isolated FIR review | Suspect-FIR relationship graph for connected-case investigation |
 | Reactive deployment | Adjustable, transparent intervention scenarios |
 | One view for everyone | Role-based access for sensitive network and planning modules |
+| Opaque AI alert | Forecast model, horizon, assumptions, and human-review notice shown in context |
 | Separate deployment services | Catalyst Web Client Hosting, AppSail, and Data Store in one platform |
 
 **Responsible intelligence:** Current forecast and planner outputs are clearly labelled as trend/scenario estimates. They support human decision-making; they do not automate enforcement decisions.
 
 ## Slide 5 - Key Features
 
-- **Geospatial risk canvas:** historical and predicted hotspot layers, density view, risk labels, and patrol-unit overlay.
+- **Geospatial risk canvas:** historical and predicted hotspot layers, stable density view, risk labels, patrol-unit overlay, and forecast model/window disclosure.
 - **Station anomaly alerts:** z-score based flags for stations with unusual recent incident volumes.
-- **Criminal link analysis:** visual graph of accused and FIR relationships to surface repeat and connected entities.
-- **Ask Garuda search:** natural-language-style filtering for crime type, area, and time window, returning matching cases.
+- **Criminal link analysis:** responsive, full-panel graph of accused and FIR relationships with node detail, relationship evidence, and investigation-use caution.
+- **Ask Garuda search:** case-record search for crime type, area, and time window, returning matching cases; it is explicitly presented as review support, not autonomous decision-making.
 - **What-if planner:** adjust patrol density, infrastructure health, and rapid response to compare a 30-day scenario estimate and range.
-- **Secure operational workflow:** server-side badge login, signed session, and clearance-based access to sensitive modules.
-- **Incident intake and brief export:** add a reviewed intelligence record and generate an intelligence brief PDF.
-- **Bilingual interface:** English and Kannada UI labels for usability across teams.
+- **Secure operational workflow:** server-side badge login, signed session, clearance-based access, case assignment, status updates, and incident intake.
+- **Truthful case review:** reports show a matching-case total separately from the loaded page, with previous/next paging controls.
+- **Operator preferences:** persistent theme, display density, compact KPI cards, data refresh, map-animation, and Kannada place-name settings.
+- **Bilingual interface and brief export:** English/Kannada UI labels and intelligence-brief PDF export.
 
-**Visual:** A 2 x 4 feature grid using real product screenshots, not stock icons.
+**Visual:** Use four real screenshots: forecast disclosure on the map, full network graph, paged case reports, and persistent display preferences. Do not use stock icons.
 
 ## Slide 6 - Process Flow
 
@@ -124,8 +126,10 @@ flowchart TB
 
 - Seeded synthetic pilot dataset: **5,000 cases**, **approximately 8,500 accused records**, **15 crime categories**, and **100 Bengaluru station IDs** across 2022-June 2026.
 - The deployed Catalyst Data Store refresh returned **5,001 cases** and a relationship graph of **13,722 nodes** in the tested live environment.
-- Dashboard-heavy components are lazy-loaded so the authentication and primary view remain lightweight.
+- Dashboard-heavy map and graph components are lazy-loaded so authentication and the primary shell remain lightweight.
 - KPI, hotspot, and anomaly results use a 30-second cache to avoid repeated computation for common views.
+- The network graph was browser-tested after responsive canvas sizing was corrected; it now uses the full operational panel rather than a fixed fallback canvas.
+- TypeScript validation and a production Vite build pass after the UI/workflow improvements.
 - The health endpoint reports loaded case and graph-node counts, enabling simple deployment smoke checks.
 
 **Important evaluation note:** This is a synthetic-data prototype. The forecasting and what-if planner are transparent statistical/scenario models, not validated crime prediction claims. A field pilot with approved historical data is the next benchmarking step.
@@ -162,10 +166,11 @@ flowchart TB
 
 1. State the operational problem in 15 seconds.
 2. Log in as an authorised officer and show role-aware modules.
-3. Open the map, switch risk layers, and inspect one hotspot.
-4. Move to the link graph and explain a suspect-to-FIR connection.
-5. Adjust the three planner controls, run the scenario, and state that it is an estimate with assumptions.
-6. Export the intelligence brief and close on Catalyst-native deployment.
+3. Open the map, switch to Predicted (30d), point out the model/window and planning-support notice, then inspect one hotspot.
+4. Move to the full network graph and explain one suspect-to-FIR connection, including the investigative-lead caution.
+5. Open Reports and show the matching total versus the current page, then open one case and update its workflow.
+6. Adjust the three planner controls, run the scenario, and state that it is an estimate with assumptions.
+7. Open Theme & Display to show persistent operator preferences, export the intelligence brief, and close on Catalyst-native deployment.
 
 ## Final Submission Checklist
 
@@ -176,4 +181,5 @@ flowchart TB
 - [ ] Set the Drive video to “Anyone with the link” or make YouTube unlisted.
 - [ ] Open all links from a device that is not logged into your accounts.
 - [ ] Use current screenshots from the deployed prototype and keep labels readable.
+- [ ] Capture the updated full-panel network graph, forecast disclosure, reports paging, and Theme & Display preferences before finalizing Slide 5.
 - [ ] Do not claim Zia translation or generative AI in the deck; those are not active capabilities in this prototype.

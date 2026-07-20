@@ -430,9 +430,9 @@ const CASE_REPORTS: Omit<CaseReport, "case_master_id">[] = [
   },
 ];
 
-export async function fetchCaseReports(): Promise<ApiResponse<CaseReportsPage>> {
+export async function fetchCaseReports(limit = 20, offset = 0): Promise<ApiResponse<CaseReportsPage>> {
   if (USE_REAL_API) {
-    const data = await apiFetch<CaseReportsPage | CaseReport[]>("/api/reports?limit=20");
+    const data = await apiFetch<CaseReportsPage | CaseReport[]>(`/api/reports?limit=${limit}&offset=${offset}`);
     if (Array.isArray(data)) {
       return wrap({
         items: data.map((report, index) => ({ ...report, case_master_id: report.case_master_id ?? index + 1 })),
@@ -445,10 +445,10 @@ export async function fetchCaseReports(): Promise<ApiResponse<CaseReportsPage>> 
   }
   await delay(500);
   return wrap({
-    items: CASE_REPORTS.map((report, index) => ({ ...report, case_master_id: index + 1 })),
+    items: CASE_REPORTS.slice(offset, offset + limit).map((report, index) => ({ ...report, case_master_id: offset + index + 1 })),
     total: CASE_REPORTS.length,
-    limit: CASE_REPORTS.length,
-    offset: 0,
+    limit,
+    offset,
   });
 }
 

@@ -22,7 +22,7 @@ interface SidebarProps {
 
 export function Sidebar({ active, onChange }: SidebarProps) {
   const { locale } = useLanguage();
-  const [collapsed, setCollapsed] = useState(true);
+  const [collapsed, setCollapsed] = useState(false);
 
   return (
     <aside

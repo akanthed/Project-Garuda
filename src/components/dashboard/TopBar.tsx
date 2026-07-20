@@ -13,6 +13,7 @@ import type { ViewKey } from "@/components/dashboard/Sidebar";
 interface TopBarProps {
   officer: Officer;
   kpis?: KpiMetric[];
+  activeViewLabel: string;
   /** Lets "Ask Garuda" jump the dashboard to the view holding matched cases */
   onNavigate?: (view: ViewKey) => void;
 }
@@ -24,7 +25,7 @@ interface ChatMessage {
   result?: AskResponse;
 }
 
-export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
+export function TopBar({ officer, kpis, activeViewLabel, onNavigate }: TopBarProps) {
   const navigate = useNavigate();
   const { locale, toggle } = useLanguage();
   const { theme, toggle: toggleTheme } = useTheme();
@@ -78,7 +79,7 @@ export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
     <header className="flex min-w-0 items-center justify-between border-b border-white/5 px-3 py-3 sm:px-6">
       <div className="flex min-w-0 items-center gap-3">
         <div className="text-[11px] font-mono uppercase tracking-[0.2em] text-muted-foreground">
-          {t("topbar_intel", locale)}
+          {t("topbar_intel", locale)} · {activeViewLabel}
         </div>
       </div>
 
@@ -121,7 +122,12 @@ export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
                 <button type="button" onClick={() => setChatOpen(false)} className="text-muted-foreground transition hover:text-foreground">×</button>
               </div>
               <div className="max-h-72 space-y-2 overflow-y-auto p-3">
-                {conversation.length === 0 && <p className="text-xs text-muted-foreground">{t("ask_greeting", locale)}</p>}
+                {conversation.length === 0 && (
+                  <>
+                    <p className="text-xs text-muted-foreground">{t("ask_greeting", locale)}</p>
+                    <p className="border-l-2 border-primary/40 pl-2 text-[11px] leading-relaxed text-muted-foreground">{t("ask_explainer", locale)}</p>
+                  </>
+                )}
                 {conversation.map((message) => (
                   <div key={message.id} className={message.role === "user" ? "ml-8 rounded-md bg-primary px-3 py-2 text-xs text-primary-foreground" : "mr-4 rounded-md bg-muted px-3 py-2 text-xs text-foreground"}>
                     <p>{message.text}</p>

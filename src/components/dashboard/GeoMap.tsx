@@ -10,6 +10,7 @@ import { fetchHotspots, fetchPatrols, fetchForecast } from "@/lib/mock-api";
 import type { Hotspot, PatrolUnit, ForecastPoint } from "@/lib/types";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useSimulator } from "@/contexts/SimulatorContext";
+import { useDisplayPreferences } from "@/contexts/DisplayPreferencesContext";
 import { t, type TranslationKey } from "@/lib/i18n";
 import "maplibre-gl/dist/maplibre-gl.css";
 
@@ -31,6 +32,20 @@ const RISK_SIZE: Record<string, number> = {
   med: 22,
   low: 16,
 };
+
+const HOTSPOT_NAME_KEYS: Record<string, TranslationKey> = {
+  "KR Market": "map_place_kr_market",
+  "MG Road": "map_place_mg_road",
+  Whitefield: "map_place_whitefield",
+  Koramangala: "map_place_koramangala",
+  "Electronic City": "map_place_electronic_city",
+  Yeshwantpur: "map_place_yeshwantpur",
+};
+
+function localizedHotspotName(hotspot: Hotspot, showKannadaPlaceNames: boolean) {
+  const key = HOTSPOT_NAME_KEYS[hotspot.label];
+  return showKannadaPlaceNames && key ? t(key, "kn") : hotspot.label;
+}
 
 const INITIAL_LAYERS = [
   { id: "density", labelKey: "map_density_layer", icon: Radio, on: true },
@@ -69,10 +84,12 @@ function DeckGLOverlay(props: ConstructorParameters<typeof MapboxOverlay>[0]) {
 function HotspotMarker({
   hotspot,
   selected,
+  animated,
   onClick,
 }: {
   hotspot: Hotspot;
   selected: boolean;
+  animated: boolean;
   onClick: () => void;
 }) {
   const color = RISK_COLOR[hotspot.risk];
@@ -85,7 +102,7 @@ function HotspotMarker({
     >
       {/* Pulse ring */}
       <div
-        className="absolute inset-0 animate-ping rounded-full opacity-30"
+        className={`absolute inset-0 rounded-full opacity-30 ${animated ? "animate-ping" : ""}`}
         style={{ background: color }}
       />
       {/* Solid dot */}
@@ -108,10 +125,12 @@ function HotspotMarker({
 function HotspotPopupContent({
   hotspot,
   nearestPatrol,
+  showKannadaPlaceNames,
   onClose,
 }: {
   hotspot: Hotspot;
   nearestPatrol: { unit: PatrolUnit; km: number } | null;
+  showKannadaPlaceNames: boolean;
   onClose: () => void;
 }) {
   const { locale } = useLanguage();
@@ -123,7 +142,7 @@ function HotspotPopupContent({
         <div className="flex items-center gap-2">
           <AlertTriangle className="h-3.5 w-3.5 shrink-0" style={{ color }} />
           <div>
-            <div className="text-xs font-medium">{hotspot.label}</div>
+            <div className="text-xs font-medium">{localizedHotspotName(hotspot, showKannadaPlaceNames)}</div>
             <div className="font-mono text-[10px] text-muted-foreground">{hotspot.id}</div>
           </div>
         </div>
@@ -197,6 +216,7 @@ interface GeoMapProps {
 export function GeoMap({ compact = false }: GeoMapProps) {
   const { locale } = useLanguage();
   const { riskScaleFor } = useSimulator();
+  const { animations, autoRefresh, kannadaPlaceNames } = useDisplayPreferences();
   const [hotspots, setHotspots] = useState<Hotspot[]>([]);
   const [forecast, setForecast] = useState<ForecastPoint[]>([]);
   const [patrols, setPatrols] = useState<PatrolUnit[]>(FALLBACK_PATROLS);
@@ -210,12 +230,14 @@ export function GeoMap({ compact = false }: GeoMapProps) {
     if (!compact) {
       fetchForecast().then(({ data }) => setForecast(data));
       fetchPatrols().then(({ data }) => setPatrols(data));
-      const interval = setInterval(() => {
-        fetchPatrols().then(({ data }) => setPatrols(data));
-      }, 20_000);
-      return () => clearInterval(interval);
+      if (autoRefresh) {
+        const interval = setInterval(() => {
+          fetchPatrols().then(({ data }) => setPatrols(data));
+        }, 20_000);
+        return () => clearInterval(interval);
+      }
     }
-  }, [compact]);
+  }, [autoRefresh, compact]);
 
   const toggle = (id: string) => {
     const layer = layers.find((item) => item.id === id);
@@ -317,7 +339,7 @@ export function GeoMap({ compact = false }: GeoMapProps) {
                   colorAggregation: "MEAN",
                   radius: 220,
                   elevationScale: compact ? 20 : 6,
-                  extruded: !compact,
+                  extruded: false,
                   pickable: false,
                   opacity: predictedMode ? 0.55 : 0.75,
                   colorRange: predictedMode
@@ -346,6 +368,7 @@ export function GeoMap({ compact = false }: GeoMapProps) {
                 <HotspotMarker
                   hotspot={h}
                   selected={selected?.id === h.id}
+                  animated={animations}
                   onClick={() => setSelected(selected?.id === h.id ? null : h)}
                 />
               </Marker>
@@ -375,7 +398,7 @@ export function GeoMap({ compact = false }: GeoMapProps) {
               closeOnClick={false}
               style={{ background: "transparent", border: "none", padding: 0 }}
             >
-              <HotspotPopupContent hotspot={selected} nearestPatrol={nearestPatrol} onClose={() => setSelected(null)} />
+              <HotspotPopupContent hotspot={selected} nearestPatrol={nearestPatrol} showKannadaPlaceNames={kannadaPlaceNames} onClose={() => setSelected(null)} />
             </Popup>
           )}
         </Map>
@@ -431,6 +454,13 @@ export function GeoMap({ compact = false }: GeoMapProps) {
                 </button>
               ))}
             </div>
+            {predictedMode && forecast[0] && (
+              <div className="mt-3 border-t border-white/5 pt-2 text-[10px] leading-relaxed text-muted-foreground">
+                <div className="font-medium text-foreground">{t("map_forecast_details", locale)}</div>
+                <div>{t("map_forecast_model", locale)}: {forecast[0].model} · {t("map_forecast_window", locale)}: {forecast[0].horizon_days}{locale === "kn" ? " ದಿನ" : "d"}</div>
+                <div className="mt-1 text-amber-300/80">{t("map_forecast_notice", locale)}</div>
+              </div>
+            )}
             <div className="mt-3 border-t border-white/5 pt-2 font-mono text-[10px] text-muted-foreground">
               LAT 12.9716° · LON 77.5946°
             </div>

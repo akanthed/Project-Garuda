@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import ForceGraph2D, { type ForceGraphMethods } from "react-force-graph-2d";
 import { X, User, MapPin, Car, FileText, AlertTriangle, Info, Move } from "lucide-react";
 import { fetchNetwork } from "@/lib/mock-api";
@@ -227,21 +227,30 @@ export function LinkGraph({ compact = false }: LinkGraphProps) {
   const [rawLinks, setRawLinks]   = useState<FGLink[]>([]);
   const [loading, setLoading]     = useState(true);
   const [selected, setSelected]   = useState<FGNode | null>(null);
-  const [dimensions, setDimensions] = useState({ width: 400, height: compact ? 180 : 360 });
+  const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
 
   // Measure container for responsive canvas size
-  useEffect(() => {
+  useLayoutEffect(() => {
     const observe = () => {
       if (containerRef.current) {
         const { width, height } = containerRef.current.getBoundingClientRect();
-        if (width > 0 && height > 0) setDimensions({ width, height });
+        if (width > 0 && height > 0) {
+          setDimensions((current) =>
+            current.width === width && current.height === height ? current : { width, height }
+          );
+        }
       }
     };
-    observe();
+    const frame = window.requestAnimationFrame(observe);
     const ro = new ResizeObserver(observe);
     if (containerRef.current) ro.observe(containerRef.current);
-    return () => ro.disconnect();
-  }, [loading]);
+    window.addEventListener("resize", observe);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      ro.disconnect();
+      window.removeEventListener("resize", observe);
+    };
+  }, [compact]);
 
   // Load network data
   useEffect(() => {
@@ -358,7 +367,7 @@ export function LinkGraph({ compact = false }: LinkGraphProps) {
   }
 
   return (
-    <div className="relative flex flex-col overflow-hidden rounded-xl border border-white/5 bg-card">
+    <div className="relative flex h-full min-h-[460px] flex-col overflow-hidden rounded-xl border border-white/5 bg-card">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-white/5 px-5 py-3">
         <div>
@@ -384,14 +393,14 @@ export function LinkGraph({ compact = false }: LinkGraphProps) {
       {/* Graph canvas */}
       <div
         ref={containerRef}
-        className="relative flex-1"
+        className="relative min-h-0 flex-1"
         style={{ minHeight: compact ? 160 : 380 }}
         onClick={(e) => {
           // Click on empty canvas → deselect
           if (!compact && (e.target as HTMLElement).tagName === "CANVAS") setSelected(null);
         }}
       >
-        <ForceGraph2D
+        {dimensions.width > 0 && dimensions.height > 0 && <ForceGraph2D
           ref={graphRef}
           graphData={graphData}
           width={dimensions.width}
@@ -424,7 +433,7 @@ export function LinkGraph({ compact = false }: LinkGraphProps) {
           }}
           linkDirectionalParticleColor={() => "rgba(90,140,255,0.8)"}
           linkDirectionalParticleSpeed={0.005}
-        />
+        />}
 
         {/* Node detail panel */}
         {selected && !compact && (

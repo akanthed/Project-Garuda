@@ -10,6 +10,7 @@ interface KpiCardProps {
   icon: LucideIcon;
   data: number[];
   accent?: "electric" | "danger" | "default";
+  compact?: boolean;
 }
 
 function Sparkline({ data, accent = "electric" }: { data: number[]; accent?: KpiCardProps["accent"] }) {
@@ -44,11 +45,11 @@ function Sparkline({ data, accent = "electric" }: { data: number[]; accent?: Kpi
   );
 }
 
-export function KpiCard({ label, value, delta, trend, positive = true, icon: Icon, data, accent = "electric" }: KpiCardProps) {
+export function KpiCard({ label, value, delta, trend, positive = true, icon: Icon, data, accent = "electric", compact = false }: KpiCardProps) {
   const good = (trend === "up" && positive) || (trend === "down" && !positive);
   const TrendIcon = trend === "up" ? ArrowUpRight : ArrowDownRight;
   return (
-    <div className="group relative overflow-hidden rounded-xl border border-white/5 bg-card p-5 transition-colors hover:border-white/10">
+    <div className={cn("group relative overflow-hidden rounded-xl border border-white/5 bg-card transition-colors hover:border-white/10", compact ? "p-3.5" : "p-5")}>
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
           <Icon className="h-3.5 w-3.5" strokeWidth={1.75} />
@@ -64,8 +65,8 @@ export function KpiCard({ label, value, delta, trend, positive = true, icon: Ico
           {delta}
         </div>
       </div>
-      <div className="mt-4 flex items-end justify-between">
-        <div className="font-mono text-3xl font-medium tracking-tight tabular-nums text-foreground">
+      <div className={cn("flex items-end justify-between", compact ? "mt-2" : "mt-4")}>
+        <div className={cn("font-mono font-medium tracking-tight tabular-nums text-foreground", compact ? "text-2xl" : "text-3xl")}>
           {value}
         </div>
         <Sparkline data={data} accent={accent} />

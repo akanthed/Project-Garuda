@@ -198,6 +198,7 @@ function StatCard({ label, value, sub }: { label: string; value: string | number
 // ─── Main component ────────────────────────────────────────────────────────────
 
 const SEVERITY_ORDER: CaseSeverity[] = ["critical", "high", "medium", "low"];
+const PAGE_SIZE = 20;
 
 const CRIME_HEADS = [
   [1, "Cyber Crime", "ಸೈಬರ್ ಅಪರಾಧ"], [2, "Property Theft", "ಆಸ್ತಿ ಕಳ್ಳತನ"], [3, "Vehicle Theft", "ವಾಹನ ಕಳ್ಳತನ"], [4, "Assault & Violence", "ದಾಳಿ ಮತ್ತು ಹಿಂಸಾಚಾರ"],
@@ -290,25 +291,29 @@ export function ReportsView() {
   const [selected, setSelected] = useState<CaseReport | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [intakeOpen, setIntakeOpen] = useState(false);
+  const [offset, setOffset] = useState(0);
 
-  const load = () => {
+  const load = (nextOffset = 0, showRefresh = false) => {
     setLoading(true);
-    fetchCaseReports().then(({ data }) => {
+    if (showRefresh) setRefreshing(true);
+    fetchCaseReports(PAGE_SIZE, nextOffset).then(({ data }) => {
       setReports(data.items);
       setTotalReports(data.total);
+      setOffset(data.offset);
       setLoading(false);
+      setRefreshing(false);
     });
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(0); }, []);
 
   const refresh = () => {
-    setRefreshing(true);
-    fetchCaseReports().then(({ data }) => {
-      setReports(data.items);
-      setTotalReports(data.total);
-      setRefreshing(false);
-    });
+    load(offset, true);
+  };
+
+  const goToPage = (nextOffset: number) => {
+    setSelected(null);
+    load(nextOffset);
   };
 
   const filtered = reports
@@ -341,11 +346,11 @@ export function ReportsView() {
         </div>
       </div>
 
-      {intakeOpen && <IncidentIntakeForm onClose={() => setIntakeOpen(false)} onSubmitted={load} />}
+      {intakeOpen && <IncidentIntakeForm onClose={() => setIntakeOpen(false)} onSubmitted={() => load(0)} />}
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatCard label={t("reports_total", locale)} value={totalReports} sub={t("reports_all_districts", locale)} />
+        <StatCard label={t("reports_matching_total", locale)} value={totalReports} sub={t("reports_result_scope", locale)} />
         <StatCard label={t("reports_active", locale)} value={openCount} sub={t("reports_attention", locale)} />
         <StatCard label={t("reports_critical", locale)} value={criticalCount} sub={t("reports_immediate", locale)} />
         <StatCard label={t("reports_stations", locale)} value="1,100+" sub={t("reports_network", locale)} />
@@ -477,8 +482,16 @@ export function ReportsView() {
         )}
         {!loading && filtered.length > 0 && (
           <div className="flex items-center justify-between border-t border-white/5 px-4 py-2.5 font-mono text-[10px] text-muted-foreground">
-            <span>{t("reports_showing", locale)} {filtered.length} {t("reports_of", locale)} {totalReports}</span>
-            <span>KSP · {new Date().toLocaleDateString("en-IN")}</span>
+            <span>{t("reports_showing", locale)} {offset + 1}-{Math.min(offset + reports.length, totalReports)} {t("reports_of", locale)} {totalReports}</span>
+            <div className="flex items-center gap-2">
+              <button onClick={() => goToPage(Math.max(0, offset - PAGE_SIZE))} disabled={offset === 0} className="rounded border border-white/10 px-2 py-1 transition hover:border-primary/40 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40">
+                {t("reports_previous", locale)}
+              </button>
+              <button onClick={() => goToPage(offset + PAGE_SIZE)} disabled={offset + PAGE_SIZE >= totalReports} className="rounded border border-white/10 px-2 py-1 transition hover:border-primary/40 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40">
+                {t("reports_next", locale)}
+              </button>
+              <span>KSP · {new Date().toLocaleDateString("en-IN")}</span>
+            </div>
           </div>
         )}
       </div>

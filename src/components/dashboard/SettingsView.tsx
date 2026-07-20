@@ -8,6 +8,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { t, type TranslationKey } from "@/lib/i18n";
 import { getSession } from "@/lib/auth";
+import { type DisplayDensity, type DisplayPreference, useDisplayPreferences } from "@/contexts/DisplayPreferencesContext";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -40,9 +41,9 @@ const ALERT_TOGGLES: ToggleSetting[] = [
 
 const DISPLAY_TOGGLES: ToggleSetting[] = [
   { id: "animations", labelKey: "settings_display_animations", descriptionKey: "settings_display_animations_desc", default: true },
-  { id: "compact-kpi", labelKey: "settings_display_compact", descriptionKey: "settings_display_compact_desc", default: false },
-  { id: "auto-refresh", labelKey: "settings_display_refresh", descriptionKey: "settings_display_refresh_desc", default: true },
-  { id: "kannada", labelKey: "settings_display_kannada", descriptionKey: "settings_display_kannada_desc", default: false },
+  { id: "compactCards", labelKey: "settings_display_compact", descriptionKey: "settings_display_compact_desc", default: false },
+  { id: "autoRefresh", labelKey: "settings_display_refresh", descriptionKey: "settings_display_refresh_desc", default: true },
+  { id: "kannadaPlaceNames", labelKey: "settings_display_kannada", descriptionKey: "settings_display_kannada_desc", default: false },
 ];
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -173,7 +174,7 @@ function ThemeRow() {
   );
 }
 
-function DisplaySection({ toggles, values, onChange }: { toggles: ToggleSetting[]; values: Record<string, boolean>; onChange: (id: string, v: boolean) => void }) {
+function DisplaySection({ toggles, values, density, onChange, onDensityChange }: { toggles: ToggleSetting[]; values: Record<string, boolean>; density: DisplayDensity; onChange: (id: string, v: boolean) => void; onDensityChange: (density: DisplayDensity) => void }) {
   const { locale } = useLanguage();
   return (
     <div className="space-y-4">
@@ -186,12 +187,15 @@ function DisplaySection({ toggles, values, onChange }: { toggles: ToggleSetting[
         ))}
       </SectionCard>
       <SectionCard title={t("settings_section_density", locale)}>
-        {(["settings_density_compact", "settings_density_standard", "settings_density_comfortable"] as const).map((opt) => (
-          <div key={opt} className="flex items-center justify-between py-3 text-sm">
-            <span>{t(opt, locale)}</span>
-            {opt === "settings_density_standard" && <span className="rounded-full bg-primary/20 px-2 py-0.5 font-mono text-[10px] text-primary">{t("settings_active", locale)}</span>}
-          </div>
-        ))}
+        {(["compact", "standard", "comfortable"] as DisplayDensity[]).map((option) => {
+          const labelKey = `settings_density_${option}` as TranslationKey;
+          return (
+            <button key={option} onClick={() => onDensityChange(option)} className="flex w-full items-center justify-between py-3 text-left text-sm">
+              <span>{t(labelKey, locale)}</span>
+              {density === option && <span className="rounded-full bg-primary/20 px-2 py-0.5 font-mono text-[10px] text-primary">{t("settings_active", locale)}</span>}
+            </button>
+          );
+        })}
       </SectionCard>
     </div>
   );
@@ -258,13 +262,12 @@ function SecuritySection() {
 
 export function SettingsView() {
   const { locale } = useLanguage();
+  const { animations, compactCards, autoRefresh, kannadaPlaceNames, density, setPreference, setDensity } = useDisplayPreferences();
   const [active, setActive] = useState<SettingsSection>("profile");
   const [alertValues, setAlertValues] = useState<Record<string, boolean>>(
     Object.fromEntries(ALERT_TOGGLES.map((t) => [t.id, t.default]))
   );
-  const [displayValues, setDisplayValues] = useState<Record<string, boolean>>(
-    Object.fromEntries(DISPLAY_TOGGLES.map((t) => [t.id, t.default]))
-  );
+  const displayValues = { animations, compactCards, autoRefresh, kannadaPlaceNames };
 
   const handleAlertChange = (id: string, v: boolean) => {
     setAlertValues((prev) => ({ ...prev, [id]: v }));
@@ -273,7 +276,7 @@ export function SettingsView() {
   };
 
   const handleDisplayChange = (id: string, v: boolean) => {
-    setDisplayValues((prev) => ({ ...prev, [id]: v }));
+    setPreference(id as DisplayPreference, v);
     const setting = DISPLAY_TOGGLES.find((t) => t.id === id);
     toast(`${setting ? t(setting.labelKey, locale) : ""} ${t(v ? "settings_enabled" : "settings_disabled", locale)}`);
   };
@@ -318,7 +321,7 @@ export function SettingsView() {
       <div className="flex-1">
         {active === "profile" && <ProfileSection />}
         {active === "alerts" && <AlertsSection toggles={ALERT_TOGGLES} values={alertValues} onChange={handleAlertChange} />}
-        {active === "display" && <DisplaySection toggles={DISPLAY_TOGGLES} values={displayValues} onChange={handleDisplayChange} />}
+        {active === "display" && <DisplaySection toggles={DISPLAY_TOGGLES} values={displayValues} density={density} onChange={handleDisplayChange} onDensityChange={setDensity} />}
         {active === "integrations" && <IntegrationsSection />}
         {active === "security" && <SecuritySection />}
       </div>

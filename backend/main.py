@@ -896,7 +896,8 @@ def _ask(query: str) -> dict:
          "gravity": int(row["GravityOffenceID"])}
         for _, row in top.iterrows()
     ]
-    return {"answer": answer, "matched_cases": matched_cases, "suggested_view": "reports"}
+    suggested_view = "network" if matched_station or matched_crime else "reports"
+    return {"answer": answer, "matched_cases": matched_cases, "suggested_view": suggested_view}
 
 @app.post("/api/ask")
 async def ask_garuda(body: AskRequest, request: Request):

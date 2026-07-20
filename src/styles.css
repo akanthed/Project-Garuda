@@ -142,6 +142,12 @@
     -webkit-font-smoothing: antialiased;
     letter-spacing: -0.01em;
   }
+  html[data-density="compact"] body {
+    font-size: 0.9375rem;
+  }
+  html[data-density="comfortable"] body {
+    font-size: 1.0625rem;
+  }
 }
 
 @utility glass-panel {
