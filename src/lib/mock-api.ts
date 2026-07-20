@@ -619,5 +619,9 @@ export async function askGaruda(query: string): Promise<ApiResponse<AskResponse>
     answer: `Ask Garuda requires the backend (set VITE_API_URL) to search real case data for "${query}".`,
     matched_cases: [],
     suggested_view: "reports" as const,
+    source: "rules" as const,
+    language: "en" as const,
+    confidence: 0,
+    tool_calls: [],
   });
 }

@@ -1,11 +1,11 @@
 ﻿import { useState } from "react";
-import { Bot, LogOut, FileDown, Loader2, ArrowRight, Moon, Sun, Send } from "lucide-react";
+import { Bot, LogOut, FileDown, Loader2, ArrowRight, Moon, Sun, Send, Sparkles, ShieldCheck, X } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "@tanstack/react-router";
 import { logout, type Officer } from "@/lib/auth";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
-import { t } from "@/lib/i18n";
+import { t, type TranslationKey } from "@/lib/i18n";
 import { exportBrief, askGaruda } from "@/lib/mock-api";
 import type { AskResponse, KpiMetric } from "@/lib/types";
 import type { ViewKey } from "@/components/dashboard/Sidebar";
@@ -23,6 +23,12 @@ interface ChatMessage {
   text: string;
   result?: AskResponse;
 }
+
+const TOOL_LABELS: Record<AskResponse["tool_calls"][number]["tool"], TranslationKey> = {
+  search_cases: "ask_tool_search_cases",
+  show_hotspots: "ask_tool_show_hotspots",
+  investigate_network: "ask_tool_investigate_network",
+};
 
 export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
   const navigate = useNavigate();
@@ -114,29 +120,62 @@ export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
               }}
               role="dialog"
               aria-label={t("topbar_ask_label", locale)}
-              className="absolute right-0 top-[calc(100%+8px)] z-20 flex w-[min(23rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-lg border border-border bg-popover shadow-xl"
+              className="absolute right-0 top-[calc(100%+8px)] z-20 flex w-[min(31rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-lg border border-primary/20 bg-popover shadow-2xl"
             >
-              <div className="flex items-center justify-between border-b border-border px-3 py-2.5">
-                <div className="flex items-center gap-2 text-sm font-medium"><Bot className="h-4 w-4 text-primary" /> {t("topbar_ask_label", locale)}</div>
-                <button type="button" onClick={() => setChatOpen(false)} className="text-muted-foreground transition hover:text-foreground">×</button>
+              <div className="border-b border-border bg-primary/[0.04] px-4 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-primary/20 bg-primary/10 text-primary"><Sparkles className="h-4 w-4" /></span>
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-foreground">{t("topbar_ask_label", locale)}</div>
+                      <div className="mt-0.5 flex items-center gap-1 text-[10px] text-muted-foreground"><ShieldCheck className="h-3 w-3 text-emerald-500" /> {t("ask_grounded_notice", locale)}</div>
+                    </div>
+                  </div>
+                  <button type="button" onClick={() => setChatOpen(false)} title={t("ask_close", locale)} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground"><X className="h-4 w-4" /></button>
+                </div>
               </div>
-              <div className="max-h-72 space-y-2 overflow-y-auto p-3">
-                {conversation.length === 0 && <p className="text-xs text-muted-foreground">{t("ask_greeting", locale)}</p>}
+              <div className="max-h-[25rem] space-y-3 overflow-y-auto p-3 sm:p-4">
+                {conversation.length === 0 && (
+                  <div className="space-y-3 py-2">
+                    <p className="max-w-sm text-xs leading-5 text-muted-foreground">{t("ask_greeting", locale)}</p>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {(["ask_sample_hotspots", "ask_sample_network"] as const).map((key) => (
+                        <button key={key} type="button" onClick={() => setQ(t(key, locale))} className="min-h-14 rounded-md border border-border bg-background/60 px-3 py-2 text-left text-xs leading-4 text-foreground transition hover:border-primary/40 hover:bg-primary/[0.05]">
+                          {t(key, locale)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {conversation.map((message) => (
-                  <div key={message.id} className={message.role === "user" ? "ml-8 rounded-md bg-primary px-3 py-2 text-xs text-primary-foreground" : "mr-4 rounded-md bg-muted px-3 py-2 text-xs text-foreground"}>
-                    <p>{message.text}</p>
-                    {message.result && message.result.matched_cases.length > 0 && (
-                      <>
-                        <div className="mt-2 space-y-1 border-t border-border pt-2 font-mono text-[10px] text-muted-foreground">
-                          {message.result.matched_cases.slice(0, 3).map((caseRecord) => <div key={caseRecord.id} className="flex justify-between gap-2"><span className="truncate">{caseRecord.id}</span><span className="shrink-0">{caseRecord.station}</span></div>)}
-                        </div>
-                        {onNavigate && <button type="button" onClick={() => { onNavigate(message.result!.suggested_view); setChatOpen(false); }} className="mt-2 flex items-center gap-1 text-[11px] text-primary hover:underline">{t("ask_view_results", locale)} <ArrowRight className="h-3 w-3" /></button>}
-                      </>
+                  <div key={message.id} className={message.role === "user" ? "ml-10 rounded-md bg-primary px-3 py-2.5 text-xs leading-5 text-primary-foreground" : "mr-2 rounded-md border border-border bg-muted/60 px-3 py-3 text-xs text-foreground"}>
+                    {message.result && (
+                      <div className="mb-2.5 flex items-center justify-between gap-2 border-b border-border pb-2">
+                        <span className={`inline-flex items-center gap-1 rounded px-1.5 py-1 text-[9px] font-semibold uppercase ${message.result.source === "quickml" ? "bg-emerald-500/10 text-emerald-500" : "bg-amber-500/10 text-amber-500"}`}>
+                          {message.result.source === "quickml" && <Sparkles className="h-2.5 w-2.5" />}
+                          {t(message.result.source === "quickml" ? "ask_quickml" : "ask_fallback", locale)}
+                        </span>
+                        <span className="font-mono text-[9px] text-muted-foreground">{Math.round(message.result.confidence * 100)}%</span>
+                      </div>
                     )}
+                    <p className="leading-5">{message.text}</p>
+                    {message.result?.tool_calls.map((call) => (
+                      <div key={call.tool} className="mt-2.5 flex items-center justify-between gap-3 rounded-md border border-emerald-500/15 bg-emerald-500/[0.04] px-2.5 py-2 text-[10px]">
+                        <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400"><ShieldCheck className="h-3 w-3" /> {t(TOOL_LABELS[call.tool], locale)}</span>
+                        <span className="shrink-0 font-mono text-muted-foreground">{call.result_count.toLocaleString()} {t("ask_result_count", locale)}</span>
+                      </div>
+                    ))}
+                    {message.result && message.result.matched_cases.length > 0 && (
+                      <div className="mt-2 space-y-1 border-t border-border pt-2 font-mono text-[10px] text-muted-foreground">
+                        {message.result.matched_cases.slice(0, 3).map((caseRecord) => <div key={caseRecord.id} className="flex justify-between gap-2"><span className="truncate">{caseRecord.id}</span><span className="shrink-0">{caseRecord.station}</span></div>)}
+                      </div>
+                    )}
+                    {message.result && onNavigate && <button type="button" onClick={() => { onNavigate(message.result!.suggested_view); setChatOpen(false); }} className="mt-2.5 flex items-center gap-1 text-[11px] font-medium text-primary hover:underline">{t("ask_view_results", locale)} <ArrowRight className="h-3 w-3" /></button>}
                   </div>
                 ))}
+                {asking && <div className="mr-24 flex items-center gap-2 rounded-md border border-border bg-muted/60 px-3 py-3 text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin text-primary" /> {t("ask_thinking", locale)}</div>}
               </div>
-              <div className="flex items-center gap-2 border-t border-border p-2">
+              <div className="flex items-center gap-2 border-t border-border bg-background/40 p-2.5">
                 <input value={q} onChange={(e) => setQ(e.target.value)} className="min-w-0 flex-1 bg-transparent px-2 py-1.5 text-sm text-foreground outline-none placeholder:text-muted-foreground" placeholder={t("ask_placeholder", locale)} />
                 <button type="submit" disabled={!q.trim() || asking} title={t("ask_send", locale)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50"><Send className="h-3.5 w-3.5" /></button>
               </div>

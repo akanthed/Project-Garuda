@@ -71,6 +71,14 @@ export interface AskResponse {
   answer: string;
   matched_cases: AskMatchedCase[];
   suggested_view: "dashboard" | "geospatial" | "network" | "reports" | "settings";
+  source: "quickml" | "rules";
+  language: "en" | "kn";
+  confidence: number;
+  tool_calls: Array<{
+    tool: "search_cases" | "show_hotspots" | "investigate_network";
+    status: "completed";
+    result_count: number;
+  }>;
 }
 
 // ─── Criminal Network ─────────────────────────────────────────────────────────

@@ -18,7 +18,19 @@ python main.py
 | GET | `/api/network` | Criminal network graph (nodes + edges) |
 | POST | `/api/simulator/run` | Causal impact simulation |
 | GET | `/api/kpi` | Executive KPI metrics |
+| POST | `/api/ask` | QuickML-planned, backend-executed bilingual analysis |
+| POST | `/api/admin/seed-datastore` | Protected resumable Data Store chunk upload |
 | GET | `/health` | AppSail health check |
+
+## Scale Data and Upload
+
+```powershell
+python scale_data.py --target-cases 100000
+$env:SEED_TOKEN = "<AppSail SEED_TOKEN>"
+python upload_data.py --base-url https://garuda-api-<id>.catalystappsail.com
+```
+
+The uploader preserves and skips the existing seeded prefix recorded in `data/scale_manifest.json`. See the root `DEPLOY.md` and `QUICKML_INTEGRATION.md` for deployment and AI configuration.
 
 ## Zoho Catalyst AppSail Deployment
 

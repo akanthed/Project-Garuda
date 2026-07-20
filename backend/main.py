@@ -19,6 +19,7 @@ Run locally:  python main.py
 Swagger docs: http://localhost:8000/docs
 """
 
+import asyncio
 import base64
 import hashlib
 import hmac
@@ -26,7 +27,10 @@ import json
 import os
 import logging
 import random
+import re
 import time
+import urllib.error
+import urllib.request
 from contextlib import asynccontextmanager
 from io import BytesIO
 from threading import Lock
@@ -95,7 +99,9 @@ def zcql_query(capp, sql: str) -> list[dict]:
 # falls back to the local cache instead of crashing the request.
 
 _LOCAL_CACHE: dict[str, tuple[float, object]] = {}
+_ACCUSED_IDENTITY_COUNTS: Optional[pd.Series] = None
 CACHE_TTL_SECONDS = 30
+ZIA_RISK_MODEL_ID = os.environ.get("ZIA_RISK_MODEL_ID", "52319000000096025").strip()
 
 def cache_get(capp, key: str):
     if capp is not None:
@@ -116,6 +122,66 @@ def cache_set(capp, key: str, value, ttl: int = CACHE_TTL_SECONDS) -> None:
         except Exception:
             pass
     _LOCAL_CACHE[key] = (time.time(), value)
+
+def _reset_risk_feature_cache() -> None:
+    global _ACCUSED_IDENTITY_COUNTS
+    _ACCUSED_IDENTITY_COUNTS = None
+
+def _risk_features(case_master_id: int) -> dict[str, int]:
+    global _ACCUSED_IDENTITY_COUNTS
+    case_rows = DB.cases[DB.cases["CaseMasterID"].astype(int) == case_master_id]
+    if case_rows.empty:
+        raise KeyError(case_master_id)
+    case = case_rows.iloc[0]
+    case_accused = DB.accused[DB.accused["CaseMasterID"].astype(int) == case_master_id]
+    case_arrests = DB.arrests[DB.arrests["CaseMasterID"].astype(int) == case_master_id]
+
+    repeat_accused_count = 0
+    if not case_accused.empty:
+        if _ACCUSED_IDENTITY_COUNTS is None:
+            normalized_all = DB.accused["AccusedName"].astype(str).str.strip().str.casefold()
+            _ACCUSED_IDENTITY_COUNTS = normalized_all.value_counts()
+        normalized_case = case_accused["AccusedName"].astype(str).str.strip().str.casefold()
+        repeat_accused_count = int(normalized_case.map(_ACCUSED_IDENTITY_COUNTS).gt(1).sum())
+
+    accused_count = len(case_accused)
+    arrest_count = len(case_arrests)
+    arrest_rate = round(min(1.0, arrest_count / max(accused_count, 1)) * 100)
+    station_id = int(case["PoliceStationID"])
+    crime_type_id = int(case["CrimeMajorHeadID"])
+    latest_date = pd.to_datetime(DB.cases["CrimeRegisteredDate"], errors="coerce").max()
+    case_date = pd.to_datetime(case["CrimeRegisteredDate"], errors="coerce")
+    days_since_latest = max(0, int((latest_date - case_date).days)) if pd.notna(latest_date) and pd.notna(case_date) else 0
+    return {
+        "gravity_level": int(case["GravityOffenceID"]),
+        "repeat_accused_count": repeat_accused_count,
+        "accused_count": accused_count,
+        "arrest_count": arrest_count,
+        "arrest_rate_percent": arrest_rate,
+        "station_case_volume": int((DB.cases["PoliceStationID"].astype(int) == station_id).sum()),
+        "crime_type_volume": int((DB.cases["CrimeMajorHeadID"].astype(int) == crime_type_id).sum()),
+        "days_since_latest": days_since_latest,
+    }
+
+def _local_risk_prediction(features: dict[str, int]) -> dict:
+    score = (
+        features["gravity_level"] * 3.0
+        + min(features["accused_count"], 4) * 0.8
+        + min(features["repeat_accused_count"], 4) * 1.3
+        - min(features["arrest_rate_percent"], 100) * 0.006
+    )
+    risk_class = "high" if score >= 14 else ("medium" if score >= 10 else "low")
+    return {"risk_class": risk_class, "scores": {risk_class: 100.0}}
+
+def _zia_risk_prediction(capp, features: dict[str, int]) -> dict:
+    if capp is None or not ZIA_RISK_MODEL_ID:
+        raise RuntimeError("Zia AutoML is unavailable")
+    result = capp.zia().auto_ml(int(ZIA_RISK_MODEL_ID), features)
+    scores = result.get("classification_result", result) if isinstance(result, dict) else {}
+    if not isinstance(scores, dict) or not scores:
+        raise RuntimeError("Zia AutoML returned no classification result")
+    normalized_scores = {str(label): float(score) for label, score in scores.items()}
+    return {"risk_class": max(normalized_scores, key=normalized_scores.get), "scores": normalized_scores}
 
 # ─── Session tokens (HMAC-signed, no external deps) ──────────────────────────
 
@@ -246,10 +312,14 @@ def load_from_catalyst(capp) -> None:
     """Used by the on-demand /api/admin/reload-from-datastore endpoint only —
     there's no request context at startup, so boot always uses CSV instead."""
     log.info("Loading from Catalyst Data Store via ZCQL…")
-    DB.cases       = pd.DataFrame(_zcql_query_all(capp, "CaseMaster", 5000))
-    DB.accused     = pd.DataFrame(_zcql_query_all(capp, "Accused", 10000))
-    DB.arrests     = pd.DataFrame(_zcql_query_all(capp, "ArrestSurrender", 10000))
+    case_limit = int(os.environ.get("DATASTORE_CASE_LIMIT", "100000"))
+    accused_limit = int(os.environ.get("DATASTORE_ACCUSED_LIMIT", "200000"))
+    arrest_limit = int(os.environ.get("DATASTORE_ARREST_LIMIT", "150000"))
+    DB.cases       = pd.DataFrame(_zcql_query_all(capp, "CaseMaster", case_limit))
+    DB.accused     = pd.DataFrame(_zcql_query_all(capp, "Accused", accused_limit))
+    DB.arrests     = pd.DataFrame(_zcql_query_all(capp, "ArrestSurrender", arrest_limit))
     DB.crime_heads = pd.DataFrame(_zcql_query_all(capp, "CrimeHead", 300))
+    _reset_risk_feature_cache()
     _coerce_dtypes()
     log.info(f"Loaded {len(DB.cases)} cases from Catalyst")
 
@@ -310,31 +380,37 @@ def load_from_csv() -> None:
     DB.accused     = pd.read_csv(f"{data_dir}/Accused.csv")
     DB.arrests     = pd.read_csv(f"{data_dir}/ArrestSurrender.csv")
     DB.crime_heads = pd.read_csv(f"{data_dir}/CrimeHead.csv")
+    _reset_risk_feature_cache()
     log.info(f"Loaded {len(DB.cases)} cases, {len(DB.accused)} accused from CSV")
 
 def build_graph() -> None:
     """
-    Bipartite graph: Accused nodes ↔ FIR nodes.
-    NetworkX computes centrality to rank key suspects.
+    Bounded bipartite graph: repeat accused identities ↔ FIR nodes.
+
+    The full case corpus remains available for tabular/map analytics. Keeping
+    only repeated identities here makes the network meaningful and prevents a
+    100k-case dataset from creating hundreds of thousands of disconnected
+    NetworkX objects during AppSail startup.
     """
     if DB.accused.empty:
         return
+    graph_suspect_limit = int(os.environ.get("GRAPH_SUSPECT_LIMIT", "5000"))
+    accused = DB.accused.dropna(subset=["AccusedName", "CaseMasterID"]).copy()
+    accused["NormalizedIdentity"] = accused["AccusedName"].astype(str).str.strip().str.casefold()
+    identity_counts = accused["NormalizedIdentity"].value_counts()
+    repeat_identities = set(identity_counts[identity_counts >= 2].head(graph_suspect_limit).index)
+    accused = accused[accused["NormalizedIdentity"].isin(repeat_identities)]
+
     G = nx.Graph()
-    for _, row in DB.accused.iterrows():
-        acc_id = f"A-{int(row['AccusedMasterID'])}"
-        fir_id = f"FIR-{int(row['CaseMasterID'])}"
-        G.add_node(acc_id, label=str(row["AccusedName"]), type="Suspect",
-                   weight=1, risk="low")
+    for row in accused.itertuples(index=False):
+        identity = str(row.NormalizedIdentity)
+        acc_id = f"A-{hashlib.sha1(identity.encode()).hexdigest()[:12]}"
+        fir_id = f"FIR-{int(row.CaseMasterID)}"
+        degree = int(identity_counts[identity])
+        G.add_node(acc_id, label=str(row.AccusedName), type="Suspect",
+                   weight=min(12, degree), risk="high" if degree >= 4 else "med")
         G.add_node(fir_id, label=fir_id, type="FIR", weight=1)
         G.add_edge(acc_id, fir_id, relation="Accused In")
-
-    centrality = nx.degree_centrality(G)
-    for n, data in G.nodes(data=True):
-        if data.get("type") == "Suspect":
-            score = centrality.get(n, 0)
-            deg = G.degree(n)
-            G.nodes[n]["weight"] = max(1, int(score * 80))
-            G.nodes[n]["risk"]   = "high" if deg >= 4 else ("med" if deg >= 2 else "low")
 
     DB.graph = G
     log.info(f"Graph: {G.number_of_nodes()} nodes, {G.number_of_edges()} edges")
@@ -557,46 +633,32 @@ async def health():
 # date format, encoding, or row-count limits are the usual causes). Guarded by
 # a shared-secret header so it can't be triggered by an anonymous request.
 
-_SEED_TABLES = ["CrimeHead", "CaseMaster", "Accused", "ArrestSurrender"]
-_SEED_BATCH_SIZE = 200
-
-def _csv_rows_for_seed(table_name: str) -> list[dict]:
-    data_dir = os.path.join(os.path.dirname(__file__), "data")
-    df = pd.read_csv(f"{data_dir}/{table_name}.csv")
-    # Route through pandas' own JSON encoder so numpy int64/float64 become
-    # plain Python int/float/str — the SDK's HTTP client can't serialize
-    # numpy scalar types directly.
-    return json.loads(df.to_json(orient="records"))
+class SeedChunkRequest(BaseModel):
+    table: Literal["CrimeHead", "CaseMaster", "Accused", "ArrestSurrender"]
+    offset: int = Field(default=0, ge=0)
+    rows: list[dict] = Field(min_length=1, max_length=200)
 
 @app.post("/api/admin/seed-datastore")
-async def seed_datastore(request: Request):
+async def seed_datastore(body: SeedChunkRequest, request: Request):
     if request.headers.get("X-Seed-Token") != os.environ.get("SEED_TOKEN"):
         raise HTTPException(403, "Missing or invalid X-Seed-Token")
     capp = _try_catalyst_app(request)
     if capp is None:
         raise HTTPException(400, "Catalyst Data Store is unavailable in this environment")
 
-    results = {}
-    for table_name in _SEED_TABLES:
-        try:
-            rows = _csv_rows_for_seed(table_name)
-            table = capp.datastore().table(table_name)
-            inserted, errors = 0, []
-            for i in range(0, len(rows), _SEED_BATCH_SIZE):
-                batch = rows[i : i + _SEED_BATCH_SIZE]
-                try:
-                    table.insert_rows(batch)
-                    inserted += len(batch)
-                except Exception as e:
-                    errors.append(f"rows {i}-{i + len(batch)}: {type(e).__name__}: {e}")
-            results[table_name] = {"total": len(rows), "inserted": inserted, "errors": errors}
-        except FileNotFoundError:
-            results[table_name] = {"error": f"{table_name}.csv not found"}
-        except Exception as e:
-            log.exception(f"seed_datastore failed for table {table_name}")
-            results[table_name] = {"error": f"{type(e).__name__}: {e}"}
-
-    return results
+    try:
+        table = capp.datastore().table(body.table)
+        table.insert_rows(body.rows)
+        next_offset = body.offset + len(body.rows)
+        return {
+            "table": body.table,
+            "offset": body.offset,
+            "inserted": len(body.rows),
+            "next_offset": next_offset,
+        }
+    except Exception as exc:
+        log.exception(f"seed_datastore failed for {body.table} at offset {body.offset}")
+        raise HTTPException(502, f"Insert failed at offset {body.offset}: {type(exc).__name__}: {exc}")
 
 # ─── POST /api/admin/reload-from-datastore ────────────────────────────────────
 # On-demand refresh of the in-memory dataset from Catalyst Data Store via
@@ -834,59 +896,158 @@ async def get_anomalies(request: Request):
     cache_set(capp, "anomalies", result)
     return result
 
-# ─── POST /api/ask (Ask Garuda — rule-based NLU, no hosted LLM configured) ───
-# Extracts crime-type / location / time-window entities from free text via
-# keyword matching, then filters the in-memory case data. Deterministic and
-# fully local — swap the body of `_ask()` for a real LLM/Zia GenAI call later
-# without changing this endpoint's request/response contract.
+# ─── POST /api/ask (Ask Garuda — QuickML-planned, backend-executed tools) ─────
 
 class AskRequest(BaseModel):
     query: str
 
-def _ask(query: str) -> dict:
+class AgentPlan(BaseModel):
+    action: Literal["search_cases", "show_hotspots", "investigate_network"] = "search_cases"
+    crime_type: Optional[str] = None
+    area: Optional[str] = None
+    time_window: Literal["today", "this_week", "last_month", "last_30_days", "this_year", "all"] = "all"
+    language: Literal["en", "kn"] = "en"
+    confidence: float = Field(default=0.5, ge=0, le=1)
+
+QUICKML_ENDPOINT = os.environ.get("QUICKML_LLM_ENDPOINT", "").strip()
+QUICKML_ENDPOINT_KEY = os.environ.get("QUICKML_ENDPOINT_KEY", "").strip()
+QUICKML_ACCESS_TOKEN = os.environ.get("QUICKML_ACCESS_TOKEN", "").strip()
+QUICKML_ORG_ID = os.environ.get("QUICKML_ORG_ID", "").strip()
+QUICKML_MODEL = os.environ.get("QUICKML_MODEL", "").strip()
+
+def _extract_quickml_text(payload) -> str:
+    if isinstance(payload, str):
+        return payload
+    if isinstance(payload, list):
+        for item in payload:
+            text = _extract_quickml_text(item)
+            if text:
+                return text
+        return ""
+    if isinstance(payload, dict):
+        for key in ("generated_text", "response", "output", "content", "text", "message", "data", "choices"):
+            if key in payload:
+                text = _extract_quickml_text(payload[key])
+                if text:
+                    return text
+    return ""
+
+def _parse_plan_json(text: str) -> AgentPlan:
+    fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL | re.IGNORECASE)
+    candidate = fenced.group(1) if fenced else text[text.find("{"):text.rfind("}") + 1]
+    if not candidate:
+        raise ValueError("QuickML response did not contain a JSON object")
+    return AgentPlan.model_validate(json.loads(candidate))
+
+def _quickml_plan_sync(query: str) -> AgentPlan:
+    if not all((QUICKML_ENDPOINT, QUICKML_ENDPOINT_KEY, QUICKML_ACCESS_TOKEN, QUICKML_ORG_ID)):
+        raise RuntimeError("QuickML LLM configuration is incomplete")
+
+    prompt = f"""You are the intent planner for Project Garuda, a Karnataka police decision-support prototype.
+Interpret the English or Kannada request below. Return JSON only, with no markdown or explanation.
+Schema:
+{{"action":"search_cases|show_hotspots|investigate_network","crime_type":string|null,"area":string|null,"time_window":"today|this_week|last_month|last_30_days|this_year|all","language":"en|kn","confidence":number}}
+Never invent a crime type or area. Use null when absent. This plan is advisory and will be validated before any tool runs.
+Request: {query}"""
+    body = {
+        "prompt": prompt,
+        "temperature": 0.1,
+        "top_p": 0.2,
+        "max_tokens": 300,
+    }
+    if QUICKML_MODEL:
+        body["model"] = QUICKML_MODEL
+    request = urllib.request.Request(
+        QUICKML_ENDPOINT,
+        data=json.dumps(body).encode("utf-8"),
+        headers={
+            "Authorization": f"Zoho-oauthtoken {QUICKML_ACCESS_TOKEN}",
+            "CATALYST-ORG": QUICKML_ORG_ID,
+            "X-QUICKML-ENDPOINT-KEY": QUICKML_ENDPOINT_KEY,
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=12) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")[:500]
+        raise RuntimeError(f"QuickML returned HTTP {exc.code}: {detail}") from exc
+    return _parse_plan_json(_extract_quickml_text(payload))
+
+def _rule_plan(query: str) -> AgentPlan:
+    q = query.lower().strip()
+    language = "kn" if re.search(r"[\u0c80-\u0cff]", query) else "en"
+    action = "investigate_network" if any(word in q for word in ("network", "link", "repeat", "ಸಂಪರ್ಕ")) else "search_cases"
+    if any(word in q for word in ("hotspot", "risk area", "ಹಾಟ್‌ಸ್ಪಾಟ್", "ಅಪಾಯ ಪ್ರದೇಶ")):
+        action = "show_hotspots"
+    if "today" in q or "ಇಂದು" in q:
+        time_window = "today"
+    elif "this week" in q or "ಈ ವಾರ" in q:
+        time_window = "this_week"
+    elif "last month" in q or "ಕಳೆದ ತಿಂಗಳು" in q:
+        time_window = "last_month"
+    elif any(term in q for term in ("this month", "last 30 days", "month", "ಈ ತಿಂಗಳು")):
+        time_window = "last_30_days"
+    elif "this year" in q or "ಈ ವರ್ಷ" in q:
+        time_window = "this_year"
+    else:
+        time_window = "all"
+    return AgentPlan(action=action, time_window=time_window, language=language, confidence=0.45)
+
+def _ask(query: str, plan: AgentPlan, source: Literal["quickml", "rules"]) -> dict:
     q = query.lower().strip()
     df = DB.cases
     if df.empty:
-        return {"answer": "No case data loaded.", "matched_cases": [], "suggested_view": "reports"}
+        return {"answer": "No case data loaded.", "matched_cases": [], "suggested_view": "reports", "source": source,
+                "language": plan.language, "confidence": plan.confidence, "tool_calls": []}
 
     matched = df
     matched_crime = None
     if not DB.crime_heads.empty:
         for _, ch in DB.crime_heads.iterrows():
             name = str(ch["CrimeGroupName"])
-            if name.lower() in q or any(word in q for word in name.lower().split()):
+            requested_crime = (plan.crime_type or "").lower()
+            if (requested_crime and (name.lower() in requested_crime or requested_crime in name.lower())) or name.lower() in q or any(word in q for word in name.lower().split()):
                 matched_crime = ch["CrimeHeadID"]
                 matched = matched[matched["CrimeMajorHeadID"] == matched_crime]
                 break
 
     matched_station = None
-    for sid in range(1, 101):
-        area = BENGALURU_AREAS[(sid - 1) % len(BENGALURU_AREAS)].lower()
-        if area in q:
-            matched_station = sid
-            matched = matched[matched["PoliceStationID"] == sid]
+    requested_area = (plan.area or "").lower()
+    for area_index, area_name in enumerate(BENGALURU_AREAS):
+        area = area_name.lower()
+        if area in q or (requested_area and (area in requested_area or requested_area in area)):
+            station_ids = list(range(area_index + 1, 101, len(BENGALURU_AREAS)))
+            matched_station = station_ids[0]
+            matched = matched[matched["PoliceStationID"].isin(station_ids)]
             break
 
-    now = pd.Timestamp.now()
+    latest_case_date = pd.to_datetime(DB.cases["CrimeRegisteredDate"], errors="coerce").max()
+    now = min(pd.Timestamp.now(), latest_case_date) if pd.notna(latest_case_date) else pd.Timestamp.now()
     dates = pd.to_datetime(matched["CrimeRegisteredDate"], errors="coerce")
-    if "today" in q:
+    if plan.time_window == "today":
         matched = matched[dates.dt.date == now.date()]
-    elif "this week" in q:
+    elif plan.time_window == "this_week":
         matched = matched[dates >= now - pd.Timedelta(days=7)]
-    elif "last month" in q:
+    elif plan.time_window == "last_month":
         matched = matched[(dates >= now - pd.Timedelta(days=60)) & (dates < now - pd.Timedelta(days=30))]
-    elif "this month" in q or "last 30 days" in q or "month" in q:
+    elif plan.time_window == "last_30_days":
         matched = matched[dates >= now - pd.Timedelta(days=30)]
-    elif "this year" in q:
+    elif plan.time_window == "this_year":
         matched = matched[dates >= now - pd.Timedelta(days=365)]
 
     count = len(matched)
-    parts = [f"Found {count} matching case{'s' if count != 1 else ''}"]
+    if plan.language == "kn":
+        parts = [f"{count} ಹೊಂದಾಣಿಕೆಯ ಪ್ರಕರಣಗಳು ಕಂಡುಬಂದಿವೆ"]
+    else:
+        parts = [f"Found {count} matching case{'s' if count != 1 else ''}"]
     if matched_crime is not None and not DB.crime_heads.empty:
         crime_name = DB.crime_heads.loc[DB.crime_heads["CrimeHeadID"] == matched_crime, "CrimeGroupName"].iloc[0]
-        parts.append(f"of type {crime_name}")
+        parts.append(f"- {crime_name}" if plan.language == "kn" else f"of type {crime_name}")
     if matched_station is not None:
-        parts.append(f"at {station_name(matched_station)}")
+        parts.append(f"- {station_name(matched_station)}" if plan.language == "kn" else f"at {station_name(matched_station)}")
     answer = " ".join(parts) + "."
 
     top = matched.sort_values("CrimeRegisteredDate", ascending=False).head(10)
@@ -896,15 +1057,32 @@ def _ask(query: str) -> dict:
          "gravity": int(row["GravityOffenceID"])}
         for _, row in top.iterrows()
     ]
-    return {"answer": answer, "matched_cases": matched_cases, "suggested_view": "reports"}
+    suggested_view = {"search_cases": "reports", "show_hotspots": "geospatial", "investigate_network": "network"}[plan.action]
+    return {
+        "answer": answer,
+        "matched_cases": matched_cases,
+        "suggested_view": suggested_view,
+        "source": source,
+        "language": plan.language,
+        "confidence": round(plan.confidence, 2),
+        "tool_calls": [{"tool": plan.action, "status": "completed", "result_count": count}],
+    }
 
 @app.post("/api/ask")
 async def ask_garuda(body: AskRequest, request: Request):
     if not body.query.strip():
         raise HTTPException(400, "Empty query")
+    require_session(request)
     if not ensure_data_loaded(request):
         raise HTTPException(503, "Data not loaded")
-    return _ask(body.query)
+    source: Literal["quickml", "rules"] = "rules"
+    try:
+        plan = await asyncio.to_thread(_quickml_plan_sync, body.query.strip())
+        source = "quickml"
+    except Exception as exc:
+        log.info(f"QuickML planner unavailable; using deterministic planner: {exc}")
+        plan = _rule_plan(body.query)
+    return _ask(body.query, plan, source)
 
 # ─── POST /api/incidents — operational intake ─────────────────────────────────
 
@@ -969,6 +1147,7 @@ async def create_incident(body: IncidentIntakeRequest, request: Request):
     DB.cases = pd.concat([DB.cases, pd.DataFrame([case_row])], ignore_index=True)
     if accused_rows:
         DB.accused = pd.concat([DB.accused, pd.DataFrame(accused_rows)], ignore_index=True)
+        _reset_risk_feature_cache()
     build_graph()
     _LOCAL_CACHE.clear()
 
@@ -1082,6 +1261,34 @@ async def get_reports(
             "suspects":       int(accused_counts.get(case_id, 0)),
         })
     return {"items": results, "total": total, "limit": limit, "offset": offset}
+
+@app.get("/api/risk/{case_master_id}")
+async def predict_case_risk(case_master_id: int, request: Request):
+    require_session(request)
+    if not ensure_data_loaded(request):
+        raise HTTPException(503, "Data not loaded")
+    try:
+        features = _risk_features(case_master_id)
+    except KeyError:
+        raise HTTPException(404, "Case not found")
+
+    capp = _try_catalyst_app(request)
+    source = "zia_automl"
+    try:
+        prediction = _zia_risk_prediction(capp, features)
+    except Exception as exc:
+        log.info(f"Zia risk prediction unavailable; using transparent local fallback: {exc}")
+        prediction = _local_risk_prediction(features)
+        source = "local_fallback"
+    return {
+        "case_master_id": case_master_id,
+        "model_id": ZIA_RISK_MODEL_ID if source == "zia_automl" else None,
+        "model_name": "Garuda Case Risk Classifier",
+        "source": source,
+        "features": features,
+        **prediction,
+        "advisory": "Synthetic prototype score for supervisor review; not an enforcement decision.",
+    }
 
 @app.patch("/api/reports/{case_master_id}/workflow")
 async def update_case_workflow(case_master_id: int, body: CaseWorkflowUpdate, request: Request):

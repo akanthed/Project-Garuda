@@ -37,8 +37,18 @@ export const translations = {
   topbar_alerts:     { en: "3 new alerts",           kn: "3 ಹೊಸ ಎಚ್ಚರಿಕೆಗಳು" },
   topbar_alerts_desc:{ en: "High-risk activity in Whitefield and KR Market.", kn: "ವೈಟ್‌ಫೀಲ್ಡ್ ಮತ್ತು ಕೆಆರ್ ಮಾರ್ಕೆಟ್‌ನಲ್ಲಿ ಹೆಚ್ಚಿನ ಅಪಾಯದ ಚಟುವಟಿಕೆ." },
   topbar_ask_label: { en: "ASK GARUDA", kn: "ಗರುಡವನ್ನು ಕೇಳಿ" },
-  ask_greeting: { en: "Ask about a crime type, area, or time period.", kn: "ಅಪರಾಧ ಪ್ರಕಾರ, ಪ್ರದೇಶ ಅಥವಾ ಸಮಯದ ಬಗ್ಗೆ ಕೇಳಿ." },
+  ask_greeting: { en: "Ask in English or Kannada. Garuda will choose a safe analysis tool and show its evidence.", kn: "ಇಂಗ್ಲಿಷ್ ಅಥವಾ ಕನ್ನಡದಲ್ಲಿ ಕೇಳಿ. ಗರುಡ ಸುರಕ್ಷಿತ ವಿಶ್ಲೇಷಣಾ ಸಾಧನವನ್ನು ಆಯ್ಕೆ ಮಾಡಿ ಸಾಕ್ಷ್ಯವನ್ನು ತೋರಿಸುತ್ತದೆ." },
   ask_send: { en: "Send question", kn: "ಪ್ರಶ್ನೆ ಕಳುಹಿಸಿ" },
+  ask_close: { en: "Close Ask Garuda", kn: "ಗರುಡವನ್ನು ಮುಚ್ಚಿ" },
+  ask_quickml: { en: "QuickML AI", kn: "QuickML AI" },
+  ask_fallback: { en: "Local fallback", kn: "ಸ್ಥಳೀಯ ಪರ್ಯಾಯ" },
+  ask_tool_search_cases: { en: "Searched case records", kn: "ಪ್ರಕರಣ ದಾಖಲೆಗಳನ್ನು ಹುಡುಕಲಾಗಿದೆ" },
+  ask_tool_show_hotspots: { en: "Analyzed hotspot evidence", kn: "ಹಾಟ್‌ಸ್ಪಾಟ್ ಸಾಕ್ಷ್ಯವನ್ನು ವಿಶ್ಲೇಷಿಸಲಾಗಿದೆ" },
+  ask_tool_investigate_network: { en: "Investigated connected records", kn: "ಸಂಪರ್ಕಿತ ದಾಖಲೆಗಳನ್ನು ಪರಿಶೀಲಿಸಲಾಗಿದೆ" },
+  ask_result_count: { en: "records", kn: "ದಾಖಲೆಗಳು" },
+  ask_sample_hotspots: { en: "High-risk theft areas this month", kn: "ಈ ತಿಂಗಳ ಹೆಚ್ಚಿನ ಅಪಾಯದ ಕಳ್ಳತನ ಪ್ರದೇಶಗಳು" },
+  ask_sample_network: { en: "Find repeat accused links", kn: "ಪುನರಾವರ್ತಿತ ಆರೋಪಿಗಳ ಸಂಪರ್ಕ ಹುಡುಕಿ" },
+  ask_grounded_notice: { en: "AI plans the request. Garuda validates and runs approved tools.", kn: "AI ವಿನಂತಿಯನ್ನು ಯೋಜಿಸುತ್ತದೆ. ಗರುಡ ಪರಿಶೀಲಿಸಿ ಅನುಮೋದಿತ ಸಾಧನಗಳನ್ನು ಚಲಾಯಿಸುತ್ತದೆ." },
   topbar_ask_failed: { en: "Ask Garuda failed",      kn: "ಗರುಡ ಹುಡುಕಾಟ ವಿಫಲವಾಗಿದೆ" },
   topbar_ask_failed_desc: { en: "Could not reach the backend.", kn: "ಬ್ಯಾಕೆಂಡ್ ಸಂಪರ್ಕಿಸಲಾಗಲಿಲ್ಲ." },
   topbar_export_title: { en: "Generate Intelligence Brief (PDF)", kn: "ಬುದ್ಧಿವಂತಿಕೆ ವರದಿ (PDF) ರಚಿಸಿ" },
@@ -357,7 +367,7 @@ export const translations = {
   map_layer_predicted:  { en: "Predicted (30d)",    kn: "ಮುನ್ಸೂಚನೆ (30 ದಿನ)" },
 
   // ─── Ask Garuda (NL search) ────────────────────────────────────────────────
-  ask_placeholder:  { en: "Ask Garuda — e.g. \"cyber crime this month\"…", kn: "ಗರುಡವನ್ನು ಕೇಳಿ…" },
+  ask_placeholder:  { en: "Ask about cases, hotspots, or links…", kn: "ಪ್ರಕರಣಗಳು, ಹಾಟ್‌ಸ್ಪಾಟ್‌ಗಳು ಅಥವಾ ಸಂಪರ್ಕಗಳ ಬಗ್ಗೆ ಕೇಳಿ…" },
   ask_thinking:     { en: "Searching case records…", kn: "ಪ್ರಕರಣ ದಾಖಲೆ ಹುಡುಕಲಾಗುತ್ತಿದೆ…" },
   ask_view_results: { en: "View matching cases →",   kn: "ಹೊಂದಾಣಿಕೆ ಪ್ರಕರಣ ನೋಡಿ →" },
 } as const;

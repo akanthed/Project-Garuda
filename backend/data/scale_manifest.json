@@ -1,0 +1,16 @@
+{
+  "generated_at": "2026-07-20T15:58:18",
+  "original_rows": {
+    "CaseMaster": 5000,
+    "Accused": 8722,
+    "ArrestSurrender": 6105,
+    "CrimeHead": 15
+  },
+  "total_rows": {
+    "CaseMaster": 100000,
+    "Accused": 175191,
+    "ArrestSurrender": 122800,
+    "CrimeHead": 15
+  },
+  "target_cases": 100000
+}
