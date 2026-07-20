@@ -9,6 +9,7 @@ import { t, type TranslationKey } from "@/lib/i18n";
 import type { CaseReport, CaseSeverity, CaseStatus, IncidentIntake } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { RiskAssessment } from "./RiskAssessment";
 
 // ─── Badge helpers ─────────────────────────────────────────────────────────────
 
@@ -163,6 +164,11 @@ function CaseDetailDrawer({ report, onClose, onWorkflowUpdated }: { report: Case
       <div className="mt-4 flex items-center gap-3">
         <SeverityBadge severity={report.severity} />
         <StatusBadge status={report.status} />
+      </div>
+
+      {/* Risk Assessment */}
+      <div className="mt-4 border-t border-white/5 pt-4">
+        <RiskAssessment caseMasterId={report.case_master_id} />
       </div>
 
       <div className="mt-4 grid gap-3 border-t border-white/5 pt-4 md:grid-cols-[1fr_180px_auto]">
