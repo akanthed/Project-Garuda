@@ -15,6 +15,7 @@ import type { KpiMetric, StationAnomaly } from "@/lib/types";
 import { getSession, isAuthenticated, type Officer } from "@/lib/auth";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useScope } from "@/contexts/ScopeContext";
 import { SimulatorProvider } from "@/contexts/SimulatorContext";
 import { t, type TranslationKey } from "@/lib/i18n";
 
@@ -157,6 +158,7 @@ function Dashboard() {
   const [view, setView] = useState<ViewKey>("dashboard");
   const { locale } = useLanguage();
   const { theme } = useTheme();
+  const { districtId } = useScope();
   const [kpis, setKpis] = useState<KpiMetric[]>([]);
   const [kpisLoading, setKpisLoading] = useState(true);
   const [selectedAnomaly, setSelectedAnomaly] = useState<StationAnomaly | null>(null);
@@ -172,11 +174,12 @@ function Dashboard() {
   });
 
   useEffect(() => {
-    fetchKpiMetrics().then(({ data }) => {
+    setKpisLoading(true);
+    fetchKpiMetrics({ districtId }).then(({ data }) => {
       setKpis(data);
       setKpisLoading(false);
     });
-  }, []);
+  }, [districtId]);
 
   useEffect(() => {
     localStorage.setItem(OPERATION_TIMELINE_KEY, JSON.stringify(operationEvents));
@@ -310,7 +313,7 @@ function Dashboard() {
             {view === "settings" && <SettingsView />}
 
             <footer className="flex items-center justify-between pt-2 font-mono text-[10px] text-muted-foreground">
-              <div>GARUDA BLR v4.2.1 · secure channel</div>
+              <div>GARUDA v4.2.1 · secure channel</div>
               <div>build 0a4f9f · region ap-south-blr</div>
             </footer>
           </main>

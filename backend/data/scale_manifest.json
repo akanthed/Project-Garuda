@@ -7,10 +7,67 @@
     "CrimeHead": 15
   },
   "total_rows": {
+    "CaseMaster": 124000,
+    "Accused": 217167,
+    "ArrestSurrender": 152139,
+    "CrimeHead": 15
+  },
+  "target_cases": 100000,
+  "schema_version": 2,
+  "statewide_generated_at": "2026-08-20T22:39:21",
+  "statewide_seed": 20260820,
+  "pre_statewide_rows": {
     "CaseMaster": 100000,
     "Accused": 175191,
     "ArrestSurrender": 122800,
     "CrimeHead": 15
   },
-  "target_cases": 100000
+  "district_case_counts": {
+    "Mysuru": 3000,
+    "Dakshina Kannada": 3000,
+    "Belagavi": 3000,
+    "Kalaburagi": 3000,
+    "Ballari": 3000,
+    "Tumakuru": 3000,
+    "Dharwad": 3000,
+    "Udupi": 3000
+  },
+  "district_station_ranges": {
+    "Bengaluru Urban": [
+      1,
+      100
+    ],
+    "Mysuru": [
+      101,
+      108
+    ],
+    "Dakshina Kannada": [
+      109,
+      116
+    ],
+    "Belagavi": [
+      117,
+      124
+    ],
+    "Kalaburagi": [
+      125,
+      132
+    ],
+    "Ballari": [
+      133,
+      140
+    ],
+    "Tumakuru": [
+      141,
+      148
+    ],
+    "Dharwad": [
+      149,
+      156
+    ],
+    "Udupi": [
+      157,
+      164
+    ]
+  }
 }

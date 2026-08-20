@@ -88,7 +88,7 @@ function LoginPage() {
             {t("login_org", locale)}
           </div>
           <h1 className="mt-1 text-2xl font-medium tracking-tight text-foreground">
-            Garuda BLR
+            Garuda
           </h1>
           <p className="mt-1 font-mono text-xs text-muted-foreground">
             {t("login_platform", locale)}

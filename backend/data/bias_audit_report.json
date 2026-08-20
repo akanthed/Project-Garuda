@@ -1,0 +1,82 @@
+{
+  "generated_at": "2026-08-20T22:55:46.294544",
+  "total_cases": 124000,
+  "overall_high_risk_flag_rate_percent": 32.04,
+  "deviation_threshold": 1.3,
+  "demographic_attributes_used": [],
+  "methodology": "Vectorized reimplementation of _local_risk_prediction() applied to every case, grouped by district (via the PoliceStationID -> DistrictID mapping already assigned at load time). Flags districts whose high-risk rate deviates more than the threshold from the statewide average. This is a distributional check, not a causal explanation \u2014 a flagged deviation means 'review this district's data and context,' not 'the model is wrong here.'",
+  "by_district": [
+    {
+      "district_id": 1,
+      "name": "Bengaluru Urban",
+      "total_cases": 100000,
+      "high_risk_flag_rate_percent": 32.03,
+      "flag_rate_note": null,
+      "anomaly_station_rate_percent": 4.0
+    },
+    {
+      "district_id": 2,
+      "name": "Mysuru",
+      "total_cases": 3000,
+      "high_risk_flag_rate_percent": 32.63,
+      "flag_rate_note": null,
+      "anomaly_station_rate_percent": 0.0
+    },
+    {
+      "district_id": 3,
+      "name": "Dakshina Kannada",
+      "total_cases": 3000,
+      "high_risk_flag_rate_percent": 30.8,
+      "flag_rate_note": null,
+      "anomaly_station_rate_percent": 0.0
+    },
+    {
+      "district_id": 4,
+      "name": "Belagavi",
+      "total_cases": 3000,
+      "high_risk_flag_rate_percent": 32.03,
+      "flag_rate_note": null,
+      "anomaly_station_rate_percent": 0.0
+    },
+    {
+      "district_id": 5,
+      "name": "Kalaburagi",
+      "total_cases": 3000,
+      "high_risk_flag_rate_percent": 33.27,
+      "flag_rate_note": null,
+      "anomaly_station_rate_percent": 0.0
+    },
+    {
+      "district_id": 6,
+      "name": "Ballari",
+      "total_cases": 3000,
+      "high_risk_flag_rate_percent": 31.63,
+      "flag_rate_note": null,
+      "anomaly_station_rate_percent": 0.0
+    },
+    {
+      "district_id": 7,
+      "name": "Tumakuru",
+      "total_cases": 3000,
+      "high_risk_flag_rate_percent": 31.63,
+      "flag_rate_note": null,
+      "anomaly_station_rate_percent": 0.0
+    },
+    {
+      "district_id": 8,
+      "name": "Dharwad",
+      "total_cases": 3000,
+      "high_risk_flag_rate_percent": 31.8,
+      "flag_rate_note": null,
+      "anomaly_station_rate_percent": 25.0
+    },
+    {
+      "district_id": 9,
+      "name": "Udupi",
+      "total_cases": 3000,
+      "high_risk_flag_rate_percent": 32.93,
+      "flag_rate_note": null,
+      "anomaly_station_rate_percent": 0.0
+    }
+  ]
+}

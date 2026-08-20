@@ -5,6 +5,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { logout, type Officer } from "@/lib/auth";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useScope } from "@/contexts/ScopeContext";
 import { t, type TranslationKey } from "@/lib/i18n";
 import { exportBrief, askGaruda } from "@/lib/mock-api";
 import type { AskResponse, KpiMetric } from "@/lib/types";
@@ -28,17 +29,39 @@ const TOOL_LABELS: Record<AskResponse["tool_calls"][number]["tool"], Translation
   search_cases: "ask_tool_search_cases",
   show_hotspots: "ask_tool_show_hotspots",
   investigate_network: "ask_tool_investigate_network",
+  compare_districts: "ask_tool_compare_districts",
+  summarize_trends: "ask_tool_summarize_trends",
+  find_connection: "ask_tool_find_connection",
+  rank_offenders: "ask_tool_rank_offenders",
+  explain_correlations: "ask_tool_explain_correlations",
+};
+
+const TRACE_STEP_LABELS: Record<string, TranslationKey> = {
+  interpret: "ask_trace_interpret",
+  execute: "ask_trace_execute",
+  observe: "ask_trace_observe",
+  answer: "ask_trace_answer",
 };
 
 export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
   const navigate = useNavigate();
   const { locale, toggle } = useLanguage();
   const { theme, toggle: toggleTheme } = useTheme();
+  const { districtId, districts, setDistrictId } = useScope();
   const [q, setQ] = useState("");
   const [exporting, setExporting] = useState(false);
   const [asking, setAsking] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [conversation, setConversation] = useState<ChatMessage[]>([]);
+  const [expandedTraces, setExpandedTraces] = useState<Set<string>>(new Set());
+
+  const toggleTrace = (id: string) => {
+    setExpandedTraces((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
 
   const handleLogout = () => {
     logout();
@@ -86,6 +109,22 @@ export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
         <div className="text-[11px] font-mono uppercase tracking-[0.2em] text-muted-foreground">
           {t("topbar_intel", locale)}
         </div>
+        {districts.length > 0 && (
+          <select
+            value={districtId ?? ""}
+            onChange={(e) => setDistrictId(e.target.value ? Number(e.target.value) : null)}
+            aria-label={t("topbar_scope_label", locale)}
+            title={t("topbar_scope_label", locale)}
+            className="h-7 shrink-0 rounded-md border border-border bg-background/60 px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
+          >
+            <option value="">{t("topbar_scope_statewide", locale)}</option>
+            {districts.map((d) => (
+              <option key={d.district_id} value={d.district_id}>
+                {d.name}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
@@ -139,7 +178,7 @@ export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
                   <div className="space-y-3 py-2">
                     <p className="max-w-sm text-xs leading-5 text-muted-foreground">{t("ask_greeting", locale)}</p>
                     <div className="grid gap-2 sm:grid-cols-2">
-                      {(["ask_sample_hotspots", "ask_sample_network"] as const).map((key) => (
+                      {(["ask_sample_hotspots", "ask_sample_network", "ask_sample_compare", "ask_sample_kingpins"] as const).map((key) => (
                         <button key={key} type="button" onClick={() => setQ(t(key, locale))} className="min-h-14 rounded-md border border-border bg-background/60 px-3 py-2 text-left text-xs leading-4 text-foreground transition hover:border-primary/40 hover:bg-primary/[0.05]">
                           {t(key, locale)}
                         </button>
@@ -165,11 +204,93 @@ export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
                         <span className="shrink-0 font-mono text-muted-foreground">{call.result_count.toLocaleString()} {t("ask_result_count", locale)}</span>
                       </div>
                     ))}
+
+                    {/* District comparison table */}
+                    {message.result?.district_comparison && message.result.district_comparison.length > 0 && (
+                      <div className="mt-2 space-y-1 border-t border-border pt-2 text-[10px]">
+                        {message.result.district_comparison.map((row) => (
+                          <div key={row.district_id} className="flex items-center justify-between gap-2 font-mono">
+                            <span className="truncate text-foreground">{row.name}</span>
+                            <span className="shrink-0 text-muted-foreground">
+                              {t("ask_cases", locale)} {row.total_cases.toLocaleString()} · {t("ask_arrest_rate", locale)} {row.arrest_rate_percent}%
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Offender ranking */}
+                    {message.result?.offender_ranking && message.result.offender_ranking.length > 0 && (
+                      <div className="mt-2 space-y-1 border-t border-border pt-2 text-[10px]">
+                        {message.result.offender_ranking.slice(0, 5).map((row) => (
+                          <div key={row.id} className="flex items-center justify-between gap-2 font-mono">
+                            <span className="truncate text-foreground">{row.label}</span>
+                            <span className="shrink-0 text-muted-foreground">{t("ask_kingpin_score", locale)} {row.kingpin_score.toFixed(3)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Suspect connection path */}
+                    {message.result?.connection_result && (
+                      <div className="mt-2 border-t border-border pt-2 text-[10px]">
+                        <span className={`rounded-full px-1.5 py-0.5 font-mono uppercase ${message.result.connection_result.connected ? "bg-emerald-500/10 text-emerald-500" : "bg-muted text-muted-foreground"}`}>
+                          {t(message.result.connection_result.connected ? "ask_connected" : "ask_not_connected", locale)}
+                        </span>
+                        {message.result.connection_result.connected && (
+                          <div className="mt-1.5 flex flex-wrap items-center gap-1 font-mono text-muted-foreground">
+                            {message.result.connection_result.path.map((node, i) => (
+                              <span key={node.id} className="flex items-center gap-1">
+                                {i > 0 && <ArrowRight className="h-2.5 w-2.5" />}
+                                <span className="truncate">{node.label}</span>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Trend summary */}
+                    {message.result?.trend_summary && (
+                      <div className="mt-2 border-t border-border pt-2 font-mono text-[10px] text-muted-foreground">
+                        {message.result.trend_summary.direction} · {message.result.trend_summary.active_anomalies.length} {t("ask_result_count", locale)}
+                      </div>
+                    )}
+
                     {message.result && message.result.matched_cases.length > 0 && (
                       <div className="mt-2 space-y-1 border-t border-border pt-2 font-mono text-[10px] text-muted-foreground">
                         {message.result.matched_cases.slice(0, 3).map((caseRecord) => <div key={caseRecord.id} className="flex justify-between gap-2"><span className="truncate">{caseRecord.id}</span><span className="shrink-0">{caseRecord.station}</span></div>)}
                       </div>
                     )}
+
+                    {/* Reasoning trace — the visible plan -> execute -> observe -> answer loop */}
+                    {message.result?.trace && message.result.trace.length > 0 && (
+                      <div className="mt-2.5 border-t border-border pt-2">
+                        <button
+                          type="button"
+                          onClick={() => toggleTrace(message.id)}
+                          className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground transition hover:text-foreground"
+                        >
+                          <Sparkles className="h-2.5 w-2.5" />
+                          {t(expandedTraces.has(message.id) ? "ask_trace_hide" : "ask_trace_toggle", locale)}
+                        </button>
+                        {expandedTraces.has(message.id) && (
+                          <ol className="mt-1.5 space-y-1 border-l border-border pl-2.5">
+                            {message.result.trace.map((step, i) => (
+                              <li key={i} className="font-mono text-[9.5px] leading-relaxed text-muted-foreground">
+                                <span className="font-semibold uppercase text-foreground/70">{t(TRACE_STEP_LABELS[step.step] ?? "ask_trace_execute", locale)}</span>
+                                {step.tool && <span> · {step.tool}</span>}
+                                {step.detail && <span className="block text-foreground/80">{step.detail}</span>}
+                                {step.parameters && (
+                                  <span className="block truncate">{JSON.stringify(step.parameters)}</span>
+                                )}
+                              </li>
+                            ))}
+                          </ol>
+                        )}
+                      </div>
+                    )}
+
                     {message.result && onNavigate && <button type="button" onClick={() => { onNavigate(message.result!.suggested_view); setChatOpen(false); }} className="mt-2.5 flex items-center gap-1 text-[11px] font-medium text-primary hover:underline">{t("ask_view_results", locale)} <ArrowRight className="h-3 w-3" /></button>}
                   </div>
                 ))}

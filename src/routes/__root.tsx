@@ -7,6 +7,7 @@ import {
 } from "@tanstack/react-router";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
+import { ScopeProvider } from "@/contexts/ScopeContext";
 
 function NotFoundComponent() {
   return (
@@ -77,9 +78,11 @@ function RootComponent() {
   return (
     <ThemeProvider>
       <LanguageProvider>
-        <QueryClientProvider client={queryClient}>
-          <Outlet />
-        </QueryClientProvider>
+        <ScopeProvider>
+          <QueryClientProvider client={queryClient}>
+            <Outlet />
+          </QueryClientProvider>
+        </ScopeProvider>
       </LanguageProvider>
     </ThemeProvider>
   );

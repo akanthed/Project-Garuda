@@ -112,3 +112,5 @@ htmlcov/
 local_data/
 backend/vendor/*
 .env.production
+
+backend/data/backup_*/

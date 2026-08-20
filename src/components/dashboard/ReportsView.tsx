@@ -5,6 +5,7 @@ import { FileText, Search, Filter, ChevronDown, ExternalLink, RefreshCw, Languag
 import { createIncident, fetchCaseReports, updateCaseWorkflow } from "@/lib/mock-api";
 import { translateTexts } from "@/lib/translate";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useScope } from "@/contexts/ScopeContext";
 import { t, type TranslationKey } from "@/lib/i18n";
 import type { CaseReport, CaseSeverity, CaseStatus, IncidentIntake } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -287,6 +288,7 @@ function IncidentIntakeForm({ onClose, onSubmitted }: { onClose: () => void; onS
 
 export function ReportsView() {
   const { locale } = useLanguage();
+  const { districtId } = useScope();
   const [reports, setReports] = useState<CaseReport[]>([]);
   const [totalReports, setTotalReports] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -299,18 +301,18 @@ export function ReportsView() {
 
   const load = () => {
     setLoading(true);
-    fetchCaseReports().then(({ data }) => {
+    fetchCaseReports({ districtId }).then(({ data }) => {
       setReports(data.items);
       setTotalReports(data.total);
       setLoading(false);
     });
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [districtId]);
 
   const refresh = () => {
     setRefreshing(true);
-    fetchCaseReports().then(({ data }) => {
+    fetchCaseReports({ districtId }).then(({ data }) => {
       setReports(data.items);
       setTotalReports(data.total);
       setRefreshing(false);

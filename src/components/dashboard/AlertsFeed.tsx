@@ -5,6 +5,7 @@ import { AlertTriangle, ArrowUpRight, ShieldAlert, Info, ClipboardCheck } from "
 import { fetchAnomalies } from "@/lib/mock-api";
 import type { StationAnomaly } from "@/lib/types";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useScope } from "@/contexts/ScopeContext";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -17,15 +18,17 @@ interface AlertsFeedProps {
 
 export function AlertsFeed({ onOpenView, onOpenBrief }: AlertsFeedProps) {
   const { locale } = useLanguage();
+  const { districtId } = useScope();
   const [anomalies, setAnomalies] = useState<StationAnomaly[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchAnomalies().then(({ data }) => {
+    setLoading(true);
+    fetchAnomalies({ districtId }).then(({ data }) => {
       setAnomalies(data);
       setLoading(false);
     });
-  }, []);
+  }, [districtId]);
 
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-xl border border-white/5 bg-card">

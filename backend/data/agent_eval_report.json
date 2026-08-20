@@ -1,0 +1,26 @@
+{
+  "queries_file": "agent_eval_queries.json",
+  "quickml_configured": false,
+  "results": [
+    {
+      "planner": "rules",
+      "total_queries": 64,
+      "failures": 0,
+      "fallback_rate_percent": 0.0,
+      "tool_selection_accuracy_percent": 100.0,
+      "parameter_accuracy_percent": 100.0,
+      "parameter_samples_checked": 17,
+      "avg_latency_ms": 0.05,
+      "per_action_accuracy": {
+        "search_cases": 100.0,
+        "show_hotspots": 100.0,
+        "investigate_network": 100.0,
+        "compare_districts": 100.0,
+        "rank_offenders": 100.0,
+        "explain_correlations": 100.0,
+        "summarize_trends": 100.0,
+        "find_connection": 100.0
+      }
+    }
+  ]
+}

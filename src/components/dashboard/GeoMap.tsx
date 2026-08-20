@@ -4,13 +4,15 @@ import { useEffect, useMemo, useState } from "react";
 import { Map, Marker, Popup, useControl } from "react-map-gl/maplibre";
 import { MapboxOverlay } from "@deck.gl/mapbox";
 import { HexagonLayer } from "@deck.gl/aggregation-layers";
-import { Layers, Maximize2, Radio, Satellite, X, AlertTriangle, Car, TrendingUp } from "lucide-react";
+import { Layers, Maximize2, Radio, Satellite, X, AlertTriangle, Car, TrendingUp, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
-import { fetchHotspots, fetchPatrols, fetchForecast } from "@/lib/mock-api";
-import type { Hotspot, PatrolUnit, ForecastPoint } from "@/lib/types";
+import { fetchHotspots, fetchPatrols, fetchForecast, fetchForecastBacktest } from "@/lib/mock-api";
+import type { Hotspot, PatrolUnit, ForecastPoint, ForecastBacktest } from "@/lib/types";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useSimulator } from "@/contexts/SimulatorContext";
+import { useScope } from "@/contexts/ScopeContext";
 import { t, type TranslationKey } from "@/lib/i18n";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -197,6 +199,7 @@ interface GeoMapProps {
 export function GeoMap({ compact = false }: GeoMapProps) {
   const { locale } = useLanguage();
   const { riskScaleFor } = useSimulator();
+  const { districtId, activeDistrict } = useScope();
   const [hotspots, setHotspots] = useState<Hotspot[]>([]);
   const [forecast, setForecast] = useState<ForecastPoint[]>([]);
   const [patrols, setPatrols] = useState<PatrolUnit[]>(FALLBACK_PATROLS);
@@ -204,18 +207,27 @@ export function GeoMap({ compact = false }: GeoMapProps) {
   const [expanded, setExpanded] = useState(false);
   const [selected, setSelected] = useState<Hotspot | null>(null);
   const [predictedMode, setPredictedMode] = useState(false);
+  const [backtest, setBacktest] = useState<ForecastBacktest | null>(null);
 
   useEffect(() => {
-    fetchHotspots().then(({ data }) => setHotspots(data));
+    fetchHotspots({ districtId }).then(({ data }) => setHotspots(data));
     if (!compact) {
-      fetchForecast().then(({ data }) => setForecast(data));
+      fetchForecast({ districtId }).then(({ data }) => setForecast(data));
       fetchPatrols().then(({ data }) => setPatrols(data));
       const interval = setInterval(() => {
         fetchPatrols().then(({ data }) => setPatrols(data));
       }, 20_000);
       return () => clearInterval(interval);
     }
-  }, [compact]);
+  }, [compact, districtId]);
+
+  // Backtest is fetched lazily on first switch to Predicted mode — it's a
+  // validation aid for that view, not needed for the default historical map.
+  useEffect(() => {
+    if (!compact && predictedMode && !backtest) {
+      fetchForecastBacktest(6).then(({ data }) => setBacktest(data)).catch(() => {});
+    }
+  }, [compact, predictedMode, backtest]);
 
   const toggle = (id: string) => {
     const layer = layers.find((item) => item.id === id);
@@ -293,10 +305,11 @@ export function GeoMap({ compact = false }: GeoMapProps) {
         }`}
       >
         <Map
+          key={districtId ?? "statewide"}
           initialViewState={{
-            longitude: BENGALURU_CENTER[0],
-            latitude: BENGALURU_CENTER[1],
-            zoom: compact ? 10.3 : 11.5,
+            longitude: activeDistrict ? activeDistrict.centroid.lng : BENGALURU_CENTER[0],
+            latitude: activeDistrict ? activeDistrict.centroid.lat : BENGALURU_CENTER[1],
+            zoom: activeDistrict ? (compact ? 9.5 : 10.6) : (compact ? 6.6 : 7.2),
             pitch: compact ? 0 : 45,
           }}
           style={{ width: "100%", height: "100%" }}
@@ -398,20 +411,73 @@ export function GeoMap({ compact = false }: GeoMapProps) {
             </div>
 
             {/* Historical / Predicted toggle */}
-            <div className="mb-2 flex items-center gap-1 rounded-md bg-white/5 p-0.5 text-[10px]">
-              <button
-                onClick={() => setPredictedMode(false)}
-                className={`flex-1 rounded px-2 py-1 transition ${!predictedMode ? "bg-primary/20 text-primary" : "text-muted-foreground"}`}
-              >
-                {t("map_layer_historical", locale)}
-              </button>
-              <button
-                onClick={() => setPredictedMode(true)}
-                className={`flex flex-1 items-center justify-center gap-1 rounded px-2 py-1 transition ${predictedMode ? "bg-primary/20 text-primary" : "text-muted-foreground"}`}
-              >
-                <TrendingUp className="h-3 w-3" />
-                {t("map_layer_predicted", locale)}
-              </button>
+            <div className="mb-2 flex items-center gap-1.5">
+              <div className="flex flex-1 items-center gap-1 rounded-md bg-white/5 p-0.5 text-[10px]">
+                <button
+                  onClick={() => setPredictedMode(false)}
+                  className={`flex-1 rounded px-2 py-1 transition ${!predictedMode ? "bg-primary/20 text-primary" : "text-muted-foreground"}`}
+                >
+                  {t("map_layer_historical", locale)}
+                </button>
+                <button
+                  onClick={() => setPredictedMode(true)}
+                  className={`flex flex-1 items-center justify-center gap-1 rounded px-2 py-1 transition ${predictedMode ? "bg-primary/20 text-primary" : "text-muted-foreground"}`}
+                >
+                  <TrendingUp className="h-3 w-3" />
+                  {t("map_layer_predicted", locale)}
+                </button>
+              </div>
+              {predictedMode && (
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      title={t("map_model_validation_open", locale)}
+                      aria-label={t("map_model_validation_open", locale)}
+                      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-white/10 text-muted-foreground transition hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
+                    >
+                      <ShieldCheck className="h-3 w-3" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-80 border-white/10 bg-background/95 p-4 backdrop-blur-sm">
+                    <div className="text-sm font-medium">{t("map_model_validation_title", locale)}</div>
+                    {!backtest ? (
+                      <div className="mt-2 text-[11px] text-muted-foreground">{t("common_loading", locale)}</div>
+                    ) : (
+                      <>
+                        <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+                          {backtest.methodology} ({backtest.test_months} {t("map_model_test_months", locale)})
+                        </p>
+                        <div className="mt-3 space-y-1.5">
+                          {backtest.models.map((m) => (
+                            <div
+                              key={m.model}
+                              className={`flex items-center justify-between rounded-md px-2 py-1.5 text-[10px] ${
+                                m.model === backtest.deployed_model ? "bg-primary/[0.08] text-foreground" : "text-muted-foreground"
+                              }`}
+                            >
+                              <span className="flex items-center gap-1.5 font-mono">
+                                {m.model}
+                                {m.model === backtest.deployed_model && (
+                                  <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[9px] uppercase text-primary">
+                                    {t("map_model_deployed", locale)}
+                                  </span>
+                                )}
+                              </span>
+                              <span className="font-mono">
+                                {t("map_model_mae", locale)} {m.mae} · {t("map_model_pai", locale)} {m.pai}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="mt-3 border-l-2 border-amber-400/70 bg-amber-400/5 px-3 py-2 text-[10px] leading-relaxed text-amber-100/80">
+                          <div className="mb-0.5 font-medium uppercase tracking-wide">{t("map_model_feedback_loop_title", locale)}</div>
+                          {backtest.feedback_loop_caution}
+                        </div>
+                      </>
+                    )}
+                  </PopoverContent>
+                </Popover>
+              )}
             </div>
 
             <div className="space-y-1.5">

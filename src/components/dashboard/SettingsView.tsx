@@ -309,7 +309,7 @@ export function SettingsView() {
 
         <div className="mt-6 rounded-lg border border-white/5 bg-card p-3">
           <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">{t("settings_version", locale)}</div>
-          <div className="mt-1 font-mono text-xs">Garuda BLR v4.2.1</div>
+          <div className="mt-1 font-mono text-xs">Garuda v4.2.1</div>
           <div className="font-mono text-[10px] text-muted-foreground">build 0a4f9f · ap-south</div>
         </div>
       </div>
