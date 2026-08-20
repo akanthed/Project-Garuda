@@ -31,6 +31,7 @@ import re
 import time
 import urllib.error
 import urllib.request
+import uuid
 from contextlib import asynccontextmanager
 from io import BytesIO
 from threading import Lock
@@ -100,6 +101,20 @@ class DataStore:
     community_of: dict[str, int]    = {}
 
 DB = DataStore()
+
+_DATA_MANIFEST: dict = {}
+
+def _load_data_manifest() -> dict:
+    data_dir = os.path.join(os.path.dirname(__file__), "data")
+    path = f"{data_dir}/scale_manifest.json"
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        log.warning("Failed to read scale_manifest.json", exc_info=True)
+        return {}
 
 # ─── ZCQL helper ──────────────────────────────────────────────────────────────
 
@@ -220,6 +235,32 @@ def _zia_risk_prediction(capp, features: dict[str, int]) -> dict:
 SESSION_SECRET = os.environ.get("SESSION_SECRET", "dev-insecure-secret-change-me")
 SESSION_TTL_SECONDS = 12 * 60 * 60
 
+_DEFAULT_SESSION_SECRET = "dev-insecure-secret-change-me"
+
+def _assert_production_secrets_configured() -> None:
+    """Hard-fail startup rather than silently run insecurely on Catalyst AppSail.
+
+    Only enforced when X_ZOHO_CATALYST_LISTEN_PORT is present (Catalyst always
+    injects it for AppSail deployments — see the CORS note below), so local
+    dev/testing with the placeholder secret still works unmodified.
+    """
+    if os.environ.get("X_ZOHO_CATALYST_LISTEN_PORT") and SESSION_SECRET == _DEFAULT_SESSION_SECRET:
+        raise RuntimeError(
+            "SESSION_SECRET is unset (using the insecure default) while running under "
+            "Catalyst AppSail. Set a real SESSION_SECRET env var before deploying."
+        )
+
+def _require_admin_token(request: Request) -> None:
+    """Shared guard for admin endpoints. Deny-by-default when SEED_TOKEN is unset —
+    a prior version compared `header != os.environ.get("SEED_TOKEN")` directly, which
+    passed when BOTH were None (no header sent, no env var set), a real auth bypass.
+    Uses hmac.compare_digest for a timing-safe comparison.
+    """
+    expected = os.environ.get("SEED_TOKEN")
+    provided = request.headers.get("X-Seed-Token")
+    if not expected or not provided or not hmac.compare_digest(provided, expected):
+        raise HTTPException(403, "Missing or invalid X-Seed-Token")
+
 def sign_session(payload: dict) -> str:
     body = {**payload, "exp": time.time() + SESSION_TTL_SECONDS}
     raw = json.dumps(body, separators=(",", ":")).encode()
@@ -313,9 +354,13 @@ def _lookup_officer(capp, badge: str) -> Optional[dict]:
 
 # ─── Simple in-memory IP rate limiter (defense-in-depth; API Gateway does not
 #     support AppSail as a target, so throttling is enforced in-app instead) ──
+# Configurable via env vars so a load test (which, from one test machine, hits
+# this from a single source IP and would otherwise trip the per-IP cap almost
+# immediately, a different signal than production request volume from many
+# distinct officer IPs) can raise the ceiling for its own runs.
 
-_RATE_LIMIT_WINDOW = 60
-_RATE_LIMIT_MAX = 120
+_RATE_LIMIT_WINDOW = int(os.environ.get("RATE_LIMIT_WINDOW_SECONDS", 60))
+_RATE_LIMIT_MAX = int(os.environ.get("RATE_LIMIT_MAX_REQUESTS", 120))
 _rate_buckets: dict[str, list[float]] = {}
 
 def _rate_limited(ip: str) -> bool:
@@ -425,6 +470,8 @@ def load_from_csv() -> None:
     DB.crime_heads = pd.read_csv(f"{data_dir}/CrimeHead.csv")
     _reset_risk_feature_cache()
     _assign_districts()
+    global _DATA_MANIFEST
+    _DATA_MANIFEST = _load_data_manifest()
     log.info(f"Loaded {len(DB.cases)} cases, {len(DB.accused)} accused from CSV")
 
 def build_graph() -> None:
@@ -821,6 +868,7 @@ def _patrol_units() -> list[dict]:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _assert_production_secrets_configured()  # not caught — must hard-fail startup
     try:
         load_from_csv()
         build_graph()
@@ -856,6 +904,14 @@ if not os.environ.get("X_ZOHO_CATALYST_LISTEN_PORT"):
     )
 
 @app.middleware("http")
+async def request_id_middleware(request: Request, call_next):
+    request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+    request.state.request_id = request_id
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
+    return response
+
+@app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next):
     ip = request.client.host if request.client else "unknown"
     if _rate_limited(ip):
@@ -864,11 +920,19 @@ async def rate_limit_middleware(request: Request, call_next):
 
 # Safety net: any unhandled exception otherwise falls through to Starlette's
 # generic plain-text 500 (no useful detail, hard to debug on a platform with
-# no easy log access like Catalyst AppSail). Surface it as JSON instead.
+# no easy log access like Catalyst AppSail). Surface it as JSON instead. The
+# full exception is logged server-side only — the client response is a
+# generic message + request_id so internals (stack traces, query params,
+# library versions) never leak to callers, correlated via X-Request-ID.
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
-    log.exception(f"Unhandled exception on {request.url.path}")
-    return JSONResponse(status_code=500, content={"error": f"{type(exc).__name__}: {exc}"})
+    request_id = getattr(request.state, "request_id", None) or str(uuid.uuid4())
+    log.exception(f"Unhandled exception on {request.url.path} (request_id={request_id})")
+    return JSONResponse(
+        status_code=500,
+        content={"error": "Internal server error", "request_id": request_id},
+        headers={"X-Request-ID": request_id},
+    )
 
 # ─── Models ───────────────────────────────────────────────────────────────────
 
@@ -920,8 +984,15 @@ async def root(request: Request):
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "cases": len(DB.cases),
-            "graph_nodes": DB.graph.number_of_nodes()}
+    ready = len(DB.cases) > 0
+    return {
+        "status": "ok" if ready else "degraded",
+        "ready": ready,
+        "cases": len(DB.cases),
+        "graph_nodes": DB.graph.number_of_nodes(),
+        "schema_version": _DATA_MANIFEST.get("schema_version"),
+        "data_generated_at": _DATA_MANIFEST.get("statewide_generated_at") or _DATA_MANIFEST.get("generated_at"),
+    }
 
 # ─── POST /api/admin/seed-datastore ───────────────────────────────────────────
 # One-time bulk-loader that pushes backend/data/*.csv straight into Catalyst
@@ -937,8 +1008,7 @@ class SeedChunkRequest(BaseModel):
 
 @app.post("/api/admin/seed-datastore")
 async def seed_datastore(body: SeedChunkRequest, request: Request):
-    if request.headers.get("X-Seed-Token") != os.environ.get("SEED_TOKEN"):
-        raise HTTPException(403, "Missing or invalid X-Seed-Token")
+    _require_admin_token(request)
     capp = _try_catalyst_app(request)
     if capp is None:
         raise HTTPException(400, "Catalyst Data Store is unavailable in this environment")
@@ -955,7 +1025,7 @@ async def seed_datastore(body: SeedChunkRequest, request: Request):
         }
     except Exception as exc:
         log.exception(f"seed_datastore failed for {body.table} at offset {body.offset}")
-        raise HTTPException(502, f"Insert failed at offset {body.offset}: {type(exc).__name__}: {exc}")
+        raise HTTPException(502, f"Insert failed at offset {body.offset}")
 
 # ─── POST /api/admin/reload-from-datastore ────────────────────────────────────
 # On-demand refresh of the in-memory dataset from Catalyst Data Store via
@@ -964,8 +1034,7 @@ async def seed_datastore(body: SeedChunkRequest, request: Request):
 
 @app.post("/api/admin/reload-from-datastore")
 async def reload_from_datastore(request: Request):
-    if request.headers.get("X-Seed-Token") != os.environ.get("SEED_TOKEN"):
-        raise HTTPException(403, "Missing or invalid X-Seed-Token")
+    _require_admin_token(request)
     capp = _try_catalyst_app(request)
     if capp is None:
         raise HTTPException(400, "Catalyst Data Store is unavailable in this environment")
@@ -973,7 +1042,8 @@ async def reload_from_datastore(request: Request):
         load_from_catalyst(capp)
         build_graph()
     except Exception as e:
-        raise HTTPException(500, f"Reload failed: {e}")
+        log.exception("reload_from_datastore failed")
+        raise HTTPException(500, "Reload failed")
     return {"status": "ok", "cases": len(DB.cases), "graph_nodes": DB.graph.number_of_nodes()}
 
 # ─── POST /api/auth/login ─────────────────────────────────────────────────────
