@@ -32,6 +32,7 @@ import time
 import urllib.error
 import urllib.request
 import uuid
+from collections import Counter
 from contextlib import asynccontextmanager
 from datetime import datetime
 from io import BytesIO
@@ -372,12 +373,64 @@ _RATE_LIMIT_WINDOW = int(os.environ.get("RATE_LIMIT_WINDOW_SECONDS", 60))
 _RATE_LIMIT_MAX = int(os.environ.get("RATE_LIMIT_MAX_REQUESTS", 120))
 _rate_buckets: dict[str, list[float]] = {}
 
+def _client_ip(request: Request) -> str:
+    """Real client IP behind AppSail's proxy — request.client.host alone is the
+    proxy's own address there (every officer would collapse into one bucket),
+    not the caller's. Trust the leftmost X-Forwarded-For hop (set by Catalyst's
+    gateway, not attacker-controlled on AppSail since clients can't reach the
+    app directly), falling back to request.client.host outside Catalyst."""
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
 def _rate_limited(ip: str) -> bool:
     now = time.time()
     bucket = [t for t in _rate_buckets.get(ip, []) if now - t < _RATE_LIMIT_WINDOW]
     bucket.append(now)
     _rate_buckets[ip] = bucket
     return len(bucket) > _RATE_LIMIT_MAX
+
+# ─── Self-instrumented visitor analytics (Catalyst has no built-in web
+#     analytics for Web Client Hosting — verified live in Console: the
+#     hosting page shows only deploy history, nothing else). In-memory
+#     counters back the live /api/analytics/summary view (reset on AppSail
+#     restart/redeploy, same accepted tradeoff as the rate limiter/local
+#     cache above); every visit is also best-effort written to the
+#     `VisitEvents` NoSQL table for a durable audit trail across restarts. ──
+
+_VISIT_TOTAL = 0
+_VISIT_UNIQUE_CLIENTS: set[str] = set()
+_VISIT_BY_DAY: Counter = Counter()
+_VISIT_BY_PATH: Counter = Counter()
+_VISIT_NOSQL_TABLE = os.environ.get("VISIT_NOSQL_TABLE", "VisitEvents").strip()
+# Caps guard against a flood of bogus client_id/path values (anyone can call
+# this unauthenticated endpoint) exhausting memory via unbounded set/dict
+# growth — plenty of headroom for this app's real traffic scale.
+_VISIT_MAX_UNIQUE_CLIENTS = 50_000
+_VISIT_MAX_DISTINCT_PATHS = 1_000
+
+def _record_visit(client_id: str, path: str, referrer: Optional[str], capp=None) -> None:
+    global _VISIT_TOTAL
+    now = pd.Timestamp.now()
+    day = now.strftime("%Y-%m-%d")
+    _VISIT_TOTAL += 1
+    if client_id in _VISIT_UNIQUE_CLIENTS or len(_VISIT_UNIQUE_CLIENTS) < _VISIT_MAX_UNIQUE_CLIENTS:
+        _VISIT_UNIQUE_CLIENTS.add(client_id)
+    _VISIT_BY_DAY[day] += 1
+    if path in _VISIT_BY_PATH or len(_VISIT_BY_PATH) < _VISIT_MAX_DISTINCT_PATHS:
+        _VISIT_BY_PATH[path] += 1
+    if capp is not None:
+        try:
+            capp.nosql().get_table(_VISIT_NOSQL_TABLE).insert_items({"item": {
+                "visit_id": str(uuid.uuid4()),
+                "ts": now.isoformat(),
+                "client_id": client_id,
+                "path": path,
+                "referrer": referrer or "",
+            }})
+        except Exception:
+            log.debug("Visit NoSQL write failed", exc_info=True)
 
 # ─── Data loaders ─────────────────────────────────────────────────────────────
 
@@ -1055,8 +1108,7 @@ async def request_id_middleware(request: Request, call_next):
 
 @app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next):
-    ip = request.client.host if request.client else "unknown"
-    if _rate_limited(ip):
+    if _rate_limited(_client_ip(request)):
         raise HTTPException(429, "Too many requests")
     return await call_next(request)
 
@@ -1139,12 +1191,44 @@ async def health():
         "data_generated_at": _DATA_MANIFEST.get("statewide_generated_at") or _DATA_MANIFEST.get("generated_at"),
     }
 
+# ─── POST /api/analytics/visit / GET /api/analytics/summary ─────────────────
+# Self-instrumented visitor tracking — Catalyst has no built-in web analytics
+# for Web Client Hosting. Anonymous (no session required, since the login
+# page itself is a "visit"); client_id is a random UUID the frontend keeps in
+# localStorage, never tied to an officer identity.
+
+class VisitRequest(BaseModel):
+    client_id: str = Field(min_length=8, max_length=64)
+    path:      str = Field(min_length=1, max_length=200)
+    referrer:  Optional[str] = Field(default=None, max_length=200)
+
+@app.post("/api/analytics/visit")
+async def record_visit(body: VisitRequest, request: Request):
+    capp = _try_catalyst_app(request)
+    _record_visit(body.client_id, body.path, body.referrer, capp)
+    return {"status": "ok"}
+
+@app.get("/api/analytics/summary")
+async def analytics_summary(request: Request):
+    require_session(request)  # aggregate traffic is operational info, not public
+    today = pd.Timestamp.now().strftime("%Y-%m-%d")
+    by_day = sorted(_VISIT_BY_DAY.items())[-14:]
+    return {
+        "total_visits": _VISIT_TOTAL,
+        "unique_visitors": len(_VISIT_UNIQUE_CLIENTS),
+        "today_visits": _VISIT_BY_DAY.get(today, 0),
+        "by_day": [{"date": d, "visits": c} for d, c in by_day],
+        "top_paths": [{"path": p, "visits": c} for p, c in _VISIT_BY_PATH.most_common(5)],
+        "note": "Counters reset on process restart/redeploy; every visit is also durably logged to the VisitEvents NoSQL table.",
+    }
+
 # ─── POST /api/admin/seed-datastore ───────────────────────────────────────────
 # One-time bulk-loader that pushes backend/data/*.csv straight into Catalyst
 # Data Store via the SDK's Table.insert_rows(), bypassing the console's CSV
 # importer entirely (useful when the console upload UI rejects a file — wrong
 # date format, encoding, or row-count limits are the usual causes). Guarded by
 # a shared-secret header so it can't be triggered by an anonymous request.
+
 
 class SeedChunkRequest(BaseModel):
     table: Literal["CrimeHead", "CaseMaster", "Accused", "ArrestSurrender"]
@@ -1531,13 +1615,23 @@ QUICKML_MODEL = os.environ.get("QUICKML_MODEL", "").strip()
 QUICKML_CONNECTION_LINK_NAME = os.environ.get("QUICKML_CONNECTION_LINK_NAME", "garudaquickml").strip()
 
 def _quickml_connection_headers(capp) -> Optional[dict]:
-    if capp is None or not QUICKML_CONNECTION_LINK_NAME:
+    if capp is None:
+        log.info("QuickML Connections skipped: no Catalyst app context for this request")
+        return None
+    if not QUICKML_CONNECTION_LINK_NAME:
+        log.info("QuickML Connections skipped: QUICKML_CONNECTION_LINK_NAME is unset")
         return None
     try:
         resp = capp.connections().get_connection_credentials(QUICKML_CONNECTION_LINK_NAME)
-        return (resp or {}).get("connections", {}).get("headers") or None
+        headers = (resp or {}).get("connections", {}).get("headers") or None
+        if not headers:
+            log.info(f"QuickML Connections returned no headers: raw response keys={list((resp or {}).keys())}")
+        return headers
     except Exception as exc:
-        log.debug(f"QuickML Connections lookup unavailable, falling back to static token: {exc}")
+        # Temporarily logged at info (not debug) to diagnose a live fallback issue;
+        # LOG_LEVEL env var is currently a no-op (basicConfig hardcodes INFO), so
+        # debug-level messages never reach Catalyst's Application logs.
+        log.info(f"QuickML Connections lookup unavailable, falling back to static token: {exc}")
         return None
 
 def _extract_quickml_text(payload) -> str:
