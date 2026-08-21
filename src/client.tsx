@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { RouterProvider } from "@tanstack/react-router";
 import { getRouter } from "./router";
+import { trackVisit } from "./lib/analytics";
 import "./styles.css";
 
 // Restore the real path after the public/404.html → index.html?p=... redirect
@@ -25,6 +26,8 @@ import "./styles.css";
 })();
 
 const router = getRouter();
+
+trackVisit(window.location.pathname);
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

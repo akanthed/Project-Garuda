@@ -11,6 +11,7 @@
 
 import type {
   AskResponse,
+  AnalyticsSummary,
   ApiResponse,
   CaseReport,
   CaseReportsPage,
@@ -814,4 +815,32 @@ export async function askGaruda(query: string): Promise<ApiResponse<AskResponse>
     confidence: 0,
     tool_calls: [],
   });
+}
+
+// ─── GET /api/analytics/summary (self-instrumented site visit tracking) ─────
+// See src/lib/analytics.ts for the visit ping fired once per app load.
+
+const MOCK_ANALYTICS_SUMMARY: AnalyticsSummary = {
+  total_visits: 128,
+  unique_visitors: 14,
+  today_visits: 6,
+  by_day: [
+    { date: "2026-08-19", visits: 22 },
+    { date: "2026-08-20", visits: 31 },
+    { date: "2026-08-21", visits: 6 },
+  ],
+  top_paths: [
+    { path: "/app/dashboard", visits: 54 },
+    { path: "/app/login", visits: 30 },
+  ],
+  note: "Local demonstration data; configure VITE_API_URL for real, live counts.",
+};
+
+export async function fetchAnalyticsSummary(): Promise<ApiResponse<AnalyticsSummary>> {
+  if (USE_REAL_API) {
+    const data = await apiFetch<AnalyticsSummary>("/api/analytics/summary");
+    return wrap(data);
+  }
+  await delay(200);
+  return wrap(MOCK_ANALYTICS_SUMMARY);
 }

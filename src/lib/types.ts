@@ -406,6 +406,17 @@ export interface IncidentScanResult {
   advisory: string;
 }
 
+// ─── Site analytics (self-instrumented visit tracking) ───────────────────────
+
+export interface AnalyticsSummary {
+  total_visits: number;
+  unique_visitors: number;
+  today_visits: number;
+  by_day: { date: string; visits: number }[];
+  top_paths: { path: string; visits: number }[];
+  note: string;
+}
+
 // ─── API response wrappers ────────────────────────────────────────────────────
 
 export interface ApiResponse<T> {

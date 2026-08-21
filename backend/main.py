@@ -1622,10 +1622,14 @@ def _quickml_connection_headers(capp) -> Optional[dict]:
         log.info("QuickML Connections skipped: QUICKML_CONNECTION_LINK_NAME is unset")
         return None
     try:
-        resp = capp.connections().get_connection_credentials(QUICKML_CONNECTION_LINK_NAME)
-        headers = (resp or {}).get("connections", {}).get("headers") or None
+        resp = capp.connections().get_connection_credentials(QUICKML_CONNECTION_LINK_NAME) or {}
+        # Verified empirically (2026-08-21 diagnostic logging): the real SDK
+        # response is {"headers": {...}, "parameters": {...}} directly — there
+        # is no wrapping "connections" key, despite the docs/earlier assumption.
+        # Handle both shapes defensively in case a future SDK version nests it.
+        headers = resp.get("headers") or resp.get("connections", {}).get("headers") or None
         if not headers:
-            log.info(f"QuickML Connections returned no headers: raw response keys={list((resp or {}).keys())}")
+            log.info(f"QuickML Connections returned no headers: full response={resp!r}")
         return headers
     except Exception as exc:
         # Temporarily logged at info (not debug) to diagnose a live fallback issue;

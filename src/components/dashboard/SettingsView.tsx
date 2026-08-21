@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Settings, Shield, Bell, Monitor, Globe2, Key, ChevronRight, Check, Sun, Moon } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "@tanstack/react-router";
@@ -9,6 +9,8 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { t, type TranslationKey } from "@/lib/i18n";
 import { getSession, logout } from "@/lib/auth";
+import { fetchAnalyticsSummary } from "@/lib/mock-api";
+import type { AnalyticsSummary } from "@/lib/types";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -198,6 +200,56 @@ function DisplaySection({ toggles, values, onChange }: { toggles: ToggleSetting[
   );
 }
 
+function AnalyticsSection() {
+  const { locale } = useLanguage();
+  const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchAnalyticsSummary()
+      .then((res) => { if (!cancelled) setSummary(res.data); })
+      .catch(() => { if (!cancelled) setFailed(true); });
+    return () => { cancelled = true; };
+  }, []);
+
+  if (failed) {
+    return (
+      <SectionCard title={t("settings_section_analytics", locale)}>
+        <div className="py-3 text-sm text-muted-foreground">{t("settings_analytics_unavailable", locale)}</div>
+      </SectionCard>
+    );
+  }
+
+  return (
+    <SectionCard title={t("settings_section_analytics", locale)}>
+      <div className="grid grid-cols-3 gap-3 py-3">
+        {([
+          [t("settings_analytics_total_visits", locale), summary?.total_visits],
+          [t("settings_analytics_unique_visitors", locale), summary?.unique_visitors],
+          [t("settings_analytics_today", locale), summary?.today_visits],
+        ] as const).map(([label, value]) => (
+          <div key={label} className="rounded-lg border border-foreground/5 bg-background/40 px-3 py-2.5 text-center">
+            <div className="font-mono text-lg text-foreground">{value ?? "-"}</div>
+            <div className="mt-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
+          </div>
+        ))}
+      </div>
+      {!!summary?.top_paths.length && (
+        <div className="py-3">
+          <div className="mb-1.5 text-[10px] uppercase tracking-widest text-muted-foreground">{t("settings_analytics_top_pages", locale)}</div>
+          {summary.top_paths.map((p) => (
+            <div key={p.path} className="flex items-center justify-between py-1 text-sm">
+              <span className="font-mono text-xs text-muted-foreground">{p.path}</span>
+              <span className="font-mono text-xs">{p.visits}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
 function IntegrationsSection() {
   const { locale } = useLanguage();
   const integrations: { id: string; name: string; status: "connected" | "pending"; descriptionKey: TranslationKey }[] = [
@@ -208,22 +260,25 @@ function IntegrationsSection() {
   ];
 
   return (
-    <SectionCard title={t("settings_section_services", locale)}>
-      {integrations.map((i) => (
-        <div key={i.id} className="flex items-center justify-between py-3">
-          <div>
-            <div className="text-sm">{i.name}</div>
-            <div className="mt-0.5 text-[11px] text-muted-foreground">{t(i.descriptionKey, locale)}</div>
+    <div className="space-y-4">
+      <AnalyticsSection />
+      <SectionCard title={t("settings_section_services", locale)}>
+        {integrations.map((i) => (
+          <div key={i.id} className="flex items-center justify-between py-3">
+            <div>
+              <div className="text-sm">{i.name}</div>
+              <div className="mt-0.5 text-[11px] text-muted-foreground">{t(i.descriptionKey, locale)}</div>
+            </div>
+            <span className={cn(
+              "rounded-full px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-wide",
+              i.status === "connected" ? "bg-emerald-500/10 text-emerald-400" : "bg-amber-500/10 text-amber-400"
+            )}>
+              {t(i.status === "connected" ? "settings_connected" : "settings_pending", locale)}
+            </span>
           </div>
-          <span className={cn(
-            "rounded-full px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-wide",
-            i.status === "connected" ? "bg-emerald-500/10 text-emerald-400" : "bg-amber-500/10 text-amber-400"
-          )}>
-            {t(i.status === "connected" ? "settings_connected" : "settings_pending", locale)}
-          </span>
-        </div>
-      ))}
-    </SectionCard>
+        ))}
+      </SectionCard>
+    </div>
   );
 }
 
