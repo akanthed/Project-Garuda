@@ -33,6 +33,7 @@ import urllib.error
 import urllib.request
 import uuid
 from contextlib import asynccontextmanager
+from datetime import datetime
 from io import BytesIO
 from threading import Lock
 from typing import Literal, Optional
@@ -40,7 +41,7 @@ from typing import Literal, Optional
 import networkx as nx
 import numpy as np
 import pandas as pd
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field, field_validator
@@ -2112,6 +2113,154 @@ async def get_case_brief(case_master_id: int, request: Request):
         ],
         "trace": trace,
         "advisory": "Assembled from synthetic prototype data for supervisor review; not an enforcement decision.",
+    }
+
+# ─── POST /api/incidents/scan — OCR-assisted FIR intake draft ────────────────
+# Uses Zia OCR (capp.zia().extract_optical_characters()) to read a photographed
+# or scanned FIR document, then heuristically extracts fields matching
+# IncidentIntakeRequest so the officer only has to REVIEW/correct a pre-filled
+# form rather than retype it. This endpoint NEVER creates a case — it only
+# returns a draft; the officer must still submit it via the existing
+# POST /api/incidents, exactly like a manually-typed entry. Zia OCR returns
+# plain text only (no structured fields, no bounding boxes — confirmed against
+# the vendored SDK's ICatalystZiaOCR type), so every field below is a
+# best-effort regex/keyword guess over that text, not a guaranteed match.
+# Accuracy on handwritten or Kannada-script FIRs is unverified — flagged to
+# the officer via `low_confidence_fields` rather than silently guessing wrong.
+
+_FIR_NUMBER_RE = re.compile(r"\b([A-Z]{2,5}[\/\-][A-Za-z0-9]{2,10}[\/\-]\d{3,10})\b")
+_SECTION_RE = re.compile(r"\b(?:U/S|SECTION|SEC)\.?\s*([\d,\s&/]+)\b", re.IGNORECASE)
+_DATE_PATTERNS = (
+    "%d-%m-%Y", "%d/%m/%Y", "%d.%m.%Y", "%Y-%m-%d", "%d %B %Y", "%d %b %Y",
+)
+# Common FIR-boilerplate words that a naive capitalized-phrase regex would
+# otherwise mistake for a person's name (only used by the no-NER fallback).
+_FIR_BOILERPLATE_WORDS = {
+    "Police", "Station", "Date", "Registration", "Report", "Karnataka",
+    "State", "District", "FIR", "Section", "Complainant", "Accused",
+    "Crime", "Case", "Number", "No", "Under",
+}
+
+def _extract_fir_date(text: str) -> Optional[str]:
+    for raw in re.findall(r"\b(\d{1,2}[-/.\s][A-Za-z0-9]{2,9}[-/.\s]\d{2,4})\b", text):
+        for fmt in _DATE_PATTERNS:
+            try:
+                return datetime.strptime(raw.strip(), fmt).strftime("%Y-%m-%d")
+            except ValueError:
+                continue
+    return None
+
+def _extract_station_id(text: str) -> Optional[int]:
+    """Fuzzy-match any known locality name (Bengaluru or statewide) against the
+    OCR'd text. Localities are short and distinctive enough for a substring
+    match to be a reasonable first-pass heuristic — not a claim of accuracy."""
+    lowered = text.lower()
+    for district in KARNATAKA_DISTRICTS:
+        for offset, locality in enumerate(district.localities):
+            if locality.lower() in lowered:
+                return district.station_start + offset
+    return None
+
+def _extract_crime_head_id(text: str) -> Optional[int]:
+    if DB.crime_heads.empty:
+        return None
+    lowered = text.lower()
+    for _, row in DB.crime_heads.iterrows():
+        name = str(row["CrimeGroupName"])
+        if name.lower() in lowered or any(word.lower() in lowered for word in name.split() if len(word) > 4):
+            return int(row["CrimeHeadID"])
+    return None
+
+def _extract_accused_names(text: str, capp) -> tuple[list[str], bool]:
+    """Returns (names, used_ner). Tries Zia NER first (real entities beat
+    regex guessing at picking out proper names); falls back to a
+    capitalized-word-sequence heuristic when Zia is unavailable."""
+    if capp is not None:
+        try:
+            entities = capp.zia().get_NER_prediction([text])
+            names = [
+                str(item.get("value") or item.get("text") or "").strip()
+                for doc in (entities or []) for item in (doc.get("entities") or doc.get("data") or [])
+                if str(item.get("type") or item.get("label") or "").upper() in ("PERSON", "PER", "NAME")
+            ]
+            names = [n for n in names if n]
+            if names:
+                return names[:10], True
+        except Exception as exc:
+            log.debug(f"Zia NER unavailable for FIR scan; using heuristic name extraction: {exc}")
+    # No NER available — a naive capitalized-phrase regex without a stopword
+    # filter would also catch document boilerplate ("Police Station", "Date
+    # of Registration"), so this fallback is explicitly the weaker of the two
+    # paths and is labelled `accused_names_source: "heuristic"` in the response.
+    normalized = re.sub(r"\s+", " ", text)
+    guesses = re.findall(r"\b(?:[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})\b", normalized)
+    seen: list[str] = []
+    for g in guesses:
+        words = g.split()
+        if any(w in _FIR_BOILERPLATE_WORDS for w in words):
+            continue
+        if g not in seen:
+            seen.append(g)
+    return seen[:10], False
+
+@app.post("/api/incidents/scan")
+async def scan_incident_document(request: Request, file: UploadFile = File(...)):
+    """Runs Zia OCR + heuristic extraction over an uploaded FIR photo/scan and
+    returns a DRAFT for the officer to review — it does not create a case."""
+    require_session(request)
+    if file.content_type not in ("image/jpeg", "image/png", "image/webp", "application/pdf"):
+        raise HTTPException(400, "Upload a JPEG/PNG/WebP photo or a PDF scan")
+
+    contents = await file.read()
+    if len(contents) > 10 * 1024 * 1024:
+        raise HTTPException(400, "File too large (10MB limit)")
+
+    capp = _try_catalyst_app(request)
+    if capp is None:
+        raise HTTPException(400, "OCR requires a Catalyst deployment (Zia is unavailable in local/dev mode)")
+
+    try:
+        ocr_result = capp.zia().extract_optical_characters(BytesIO(contents), {"language": "eng"})
+    except Exception as exc:
+        log.warning(f"Zia OCR failed: {exc}")
+        raise HTTPException(502, "OCR extraction failed — try a clearer photo or enter the incident manually")
+
+    text = str((ocr_result or {}).get("text") or "")
+    if not text.strip():
+        raise HTTPException(422, "No text could be read from this document — try a clearer photo")
+
+    fir_match = _FIR_NUMBER_RE.search(text)
+    section_match = _SECTION_RE.search(text)
+    station_id = _extract_station_id(text)
+    crime_head_id = _extract_crime_head_id(text)
+    registered_date = _extract_fir_date(text)
+    accused_names, used_ner = _extract_accused_names(text, capp)
+
+    low_confidence_fields = [
+        field for field, found in (
+            ("crime_no", bool(fir_match)), ("registered_date", bool(registered_date)),
+            ("police_station_id", station_id is not None), ("crime_major_head_id", crime_head_id is not None),
+        ) if not found
+    ]
+
+    return {
+        "draft": {
+            "crime_no": fir_match.group(1) if fir_match else "",
+            "registered_date": registered_date or datetime.now().strftime("%Y-%m-%d"),
+            "police_station_id": station_id or 1,
+            "crime_major_head_id": crime_head_id or 2,
+            "gravity_offence_id": 3,
+            "latitude": 12.9716,
+            "longitude": 77.5946,
+            "brief_facts": text.strip()[:1000],
+            "accused_names": accused_names,
+        },
+        "ipc_sections": section_match.group(1).strip() if section_match else None,
+        "low_confidence_fields": low_confidence_fields,
+        "accused_names_source": "zia_ner" if used_ner else "heuristic",
+        "ocr_confidence": (ocr_result or {}).get("confidence"),
+        "raw_text": text.strip(),
+        "advisory": "OCR-extracted draft for officer review — verify every field before submitting. Not a substitute for reading the original document.",
     }
 
 # ─── POST /api/incidents — operational intake ─────────────────────────────────

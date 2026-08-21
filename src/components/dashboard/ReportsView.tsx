@@ -1,13 +1,13 @@
 'use client';
 
-import { useEffect, useState } from "react";
-import { FileText, Search, Filter, ChevronDown, ExternalLink, RefreshCw, Languages, Loader2, Plus, X } from "lucide-react";
-import { createIncident, fetchCaseReports, updateCaseWorkflow } from "@/lib/mock-api";
+import { useEffect, useRef, useState } from "react";
+import { FileText, Search, Filter, ChevronDown, ExternalLink, RefreshCw, Languages, Loader2, Plus, X, ScanLine } from "lucide-react";
+import { createIncident, fetchCaseReports, scanIncidentDocument, updateCaseWorkflow } from "@/lib/mock-api";
 import { translateTexts } from "@/lib/translate";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useScope } from "@/contexts/ScopeContext";
 import { t, districtName, type TranslationKey } from "@/lib/i18n";
-import type { CaseReport, CaseSeverity, CaseStatus, IncidentIntake } from "@/lib/types";
+import type { CaseReport, CaseSeverity, CaseStatus, IncidentIntake, IncidentScanResult } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { RiskAssessment } from "./RiskAssessment";
@@ -226,10 +226,10 @@ const INITIAL_INTAKE: IncidentIntake = {
   accused_names: [],
 };
 
-function IncidentIntakeForm({ onClose, onSubmitted }: { onClose: () => void; onSubmitted: () => void }) {
+function IncidentIntakeForm({ onClose, onSubmitted, initialDraft, scanMeta }: { onClose: () => void; onSubmitted: () => void; initialDraft?: IncidentIntake; scanMeta?: IncidentScanResult }) {
   const { locale } = useLanguage();
-  const [intake, setIntake] = useState<IncidentIntake>(INITIAL_INTAKE);
-  const [accusedInput, setAccusedInput] = useState("");
+  const [intake, setIntake] = useState<IncidentIntake>(initialDraft ?? INITIAL_INTAKE);
+  const [accusedInput, setAccusedInput] = useState((initialDraft?.accused_names ?? []).join(", "));
   const [submitting, setSubmitting] = useState(false);
 
   const update = <K extends keyof IncidentIntake>(key: K, value: IncidentIntake[K]) => {
@@ -264,6 +264,15 @@ function IncidentIntakeForm({ onClose, onSubmitted }: { onClose: () => void; onS
         </div>
         <button type="button" onClick={onClose} title={t("reports_close_intake", locale)} className="text-muted-foreground transition hover:text-foreground"><X className="h-4 w-4" /></button>
       </div>
+
+      {scanMeta && (
+        <div className="mt-4 rounded-lg border border-primary/20 bg-primary/[0.04] p-3 text-xs leading-relaxed text-muted-foreground">
+          <div className="flex items-center gap-2 text-primary"><ScanLine className="h-3.5 w-3.5" />{t("reports_scan_banner", locale)}</div>
+          {scanMeta.low_confidence_fields.length > 0 && (
+            <div className="mt-1.5">{t("reports_scan_low_confidence", locale)}: {scanMeta.low_confidence_fields.join(", ")}</div>
+          )}
+        </div>
+      )}
 
       <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <label className="text-xs text-muted-foreground">{t("reports_fir_number", locale)}<input required value={intake.crime_no} onChange={(event) => update("crime_no", event.target.value)} placeholder="KSP/2026/0001" className="mt-1.5 w-full rounded-md border border-foreground/10 bg-background/50 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50" /></label>
@@ -300,6 +309,9 @@ export function ReportsView() {
   const [selected, setSelected] = useState<CaseReport | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [intakeOpen, setIntakeOpen] = useState(false);
+  const [scanDraft, setScanDraft] = useState<IncidentScanResult | undefined>(undefined);
+  const [scanning, setScanning] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const load = () => {
     setLoading(true);
@@ -332,6 +344,23 @@ export function ReportsView() {
   const criticalCount = reports.filter((r) => r.severity === "critical").length;
   const openCount = reports.filter((r) => r.status === "open" || r.status === "investigating").length;
 
+  const handleScanFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setScanning(true);
+    try {
+      const { data } = await scanIncidentDocument(file);
+      setScanDraft(data);
+      setIntakeOpen(true);
+      toast.success(t("reports_scan_fir", locale), { description: data.advisory });
+    } catch (error) {
+      toast.error(t("reports_scan_failed", locale), { description: error instanceof Error ? error.message : t("reports_review_details", locale) });
+    } finally {
+      setScanning(false);
+    }
+  };
+
   return (
     <div className="space-y-5">
       {/* Page header */}
@@ -349,12 +378,21 @@ export function ReportsView() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setIntakeOpen((open) => !open)} className="flex items-center gap-2 rounded-md bg-primary/15 px-3 py-1.5 text-xs text-primary transition hover:bg-primary/25"><Plus className="h-3.5 w-3.5" />{t("reports_add_incident", locale)}</button>
+          <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp,application/pdf" capture="environment" className="hidden" onChange={handleScanFile} />
+          <button onClick={() => fileInputRef.current?.click()} disabled={scanning} className="flex items-center gap-2 rounded-md border border-primary/20 bg-primary/[0.06] px-3 py-1.5 text-xs text-primary transition hover:bg-primary/15 disabled:opacity-60">{scanning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ScanLine className="h-3.5 w-3.5" />}{scanning ? t("reports_scanning", locale) : t("reports_scan_fir", locale)}</button>
+          <button onClick={() => { setScanDraft(undefined); setIntakeOpen((open) => !open); }} className="flex items-center gap-2 rounded-md bg-primary/15 px-3 py-1.5 text-xs text-primary transition hover:bg-primary/25"><Plus className="h-3.5 w-3.5" />{t("reports_add_incident", locale)}</button>
           <button onClick={refresh} disabled={refreshing} className="flex items-center gap-2 rounded-md border border-foreground/5 bg-foreground/[0.02] px-3 py-1.5 text-xs text-muted-foreground transition hover:border-foreground/15 hover:text-foreground disabled:opacity-50"><RefreshCw className={cn("h-3 w-3", refreshing && "animate-spin")} />{t("reports_refresh", locale)}</button>
         </div>
       </div>
 
-      {intakeOpen && <IncidentIntakeForm onClose={() => setIntakeOpen(false)} onSubmitted={load} />}
+      {intakeOpen && (
+        <IncidentIntakeForm
+          onClose={() => { setIntakeOpen(false); setScanDraft(undefined); }}
+          onSubmitted={load}
+          initialDraft={scanDraft?.draft}
+          scanMeta={scanDraft}
+        />
+      )}
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">

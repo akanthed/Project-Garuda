@@ -25,6 +25,7 @@ import type {
   Hotspot,
   IncidentIntake,
   IncidentIntakeResult,
+  IncidentScanResult,
   KingpinRow,
   KpiMetric,
   NetworkGraph,
@@ -654,6 +655,35 @@ export async function createIncident(input: IncidentIntake): Promise<ApiResponse
     persistence: "session",
     warning: "Local demonstration record; configure the backend for Data Store persistence.",
   });
+}
+
+// ─── POST /api/incidents/scan — OCR-assisted FIR intake draft ────────────────
+// Real backend only: needs Zia OCR (Catalyst), so this deliberately throws in
+// mock mode instead of faking a plausible-looking scan result — a fabricated
+// OCR draft would be misleading in a way a fabricated KPI number isn't.
+
+export async function scanIncidentDocument(file: File): Promise<ApiResponse<IncidentScanResult>> {
+  if (!USE_REAL_API) {
+    throw new Error("FIR scanning requires the backend (set VITE_API_URL) — Zia OCR has no local mock.");
+  }
+  const token = getToken();
+  const body = new FormData();
+  body.append("file", file);
+  const res = await fetch(`${API_BASE}/api/incidents/scan`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    body,
+  });
+  if (res.status === 401) {
+    logout();
+    window.location.assign(`${import.meta.env.BASE_URL}login`);
+    throw new Error("Officer session expired. Please sign in again.");
+  }
+  if (!res.ok) {
+    const detail = await res.json().catch(() => null);
+    throw new Error(detail?.detail || `Scan failed: ${res.status} ${res.statusText}`);
+  }
+  return wrap(await res.json() as IncidentScanResult);
 }
 
 // ─── POST /api/export_brief ───────────────────────────────────────────────────

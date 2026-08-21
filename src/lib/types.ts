@@ -396,6 +396,16 @@ export interface IncidentIntakeResult {
   warning?: string | null;
 }
 
+export interface IncidentScanResult {
+  draft: IncidentIntake;
+  ipc_sections: string | null;
+  low_confidence_fields: string[];
+  accused_names_source: "zia_ner" | "heuristic";
+  ocr_confidence?: string | null;
+  raw_text: string;
+  advisory: string;
+}
+
 // ─── API response wrappers ────────────────────────────────────────────────────
 
 export interface ApiResponse<T> {
