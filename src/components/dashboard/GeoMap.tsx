@@ -279,7 +279,11 @@ export function GeoMap({ compact = false }: GeoMapProps) {
           <div className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
             {t("map_title", locale)}
           </div>
-          <div className="mt-0.5 text-sm font-medium">{t("map_subtitle", locale)}</div>
+          <div className="mt-0.5 text-sm font-medium">
+            {activeDistrict
+              ? `${activeDistrict.name} — ${t("map_live_suffix", locale)}`
+              : t("map_subtitle_statewide", locale)}
+          </div>
         </div>
         <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
           {!compact && (
@@ -328,7 +332,9 @@ export function GeoMap({ compact = false }: GeoMapProps) {
                   getColorWeight: (d: { weight: number }) => d.weight,
                   elevationAggregation: "MEAN",
                   colorAggregation: "MEAN",
-                  radius: 220,
+                  // Radius is in metres. The compact map sits ~3-4 zoom levels
+                  // further out than the full map, where 220m is sub-pixel.
+                  radius: compact ? (activeDistrict ? 1200 : 9000) : 220,
                   elevationScale: compact ? 20 : 6,
                   extruded: !compact,
                   pickable: false,

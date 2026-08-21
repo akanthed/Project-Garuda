@@ -100,6 +100,9 @@ export const translations = {
   // ─── GeoMap ────────────────────────────────────────────────────────────────
   map_title:        { en: "Crime Map",                   kn: "ಅಪರಾಧ ನಕ್ಷೆ" },
   map_subtitle:     { en: "Bengaluru City — Live Map",   kn: "ಬೆಂಗಳೂರು — ನೇರ ನಕ್ಷೆ" },
+  map_live_suffix:  { en: "Live Map",                     kn: "ನೇರ ನಕ್ಷೆ" },
+  map_subtitle_statewide: { en: "All Karnataka — Live Map", kn: "ಎಲ್ಲಾ ಕರ್ನಾಟಕ — ನೇರ ನಕ್ಷೆ" },
+  footer_secure_channel: { en: "secure channel",          kn: "ಸುರಕ್ಷಿತ ಸಂಪರ್ಕ" },
   map_layers:       { en: "Map Layers",                   kn: "ನಕ್ಷೆ ಪದರಗಳು" },
   map_threat_layer: { en: "Danger Areas",                 kn: "ಅಪಾಯದ ಪ್ರದೇಶಗಳು" },
   map_patrol_layer: { en: "Patrol Teams",                 kn: "ಗಸ್ತು ತಂಡಗಳು" },

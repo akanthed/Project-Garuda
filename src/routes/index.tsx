@@ -314,7 +314,7 @@ function Dashboard() {
             {view === "settings" && <SettingsView />}
 
             <footer className="flex items-center justify-between pt-2 font-mono text-[10px] text-muted-foreground">
-              <div>GARUDA v4.2.1 · secure channel</div>
+              <div>GARUDA v4.2.1 · {t("footer_secure_channel", locale)}</div>
               <div>build 0a4f9f · region ap-south-blr</div>
             </footer>
           </main>

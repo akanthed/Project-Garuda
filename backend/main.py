@@ -1263,13 +1263,27 @@ async def get_kpis(
         except Exception:
             return [0] * 12
 
+    def month_delta(spark: list[int]) -> tuple[str, str]:
+        """Month-over-month change from the last two sparkline buckets."""
+        if len(spark) < 2 or spark[-2] == 0:
+            return "0.0%", "down"
+        change = (spark[-1] - spark[-2]) / spark[-2] * 100
+        return f"{abs(change):.1f}%", ("up" if change >= 0 else "down")
+
+    nodes_spark = sparkline(cases["CrimeRegisteredDate"])
+    nodes_delta, nodes_trend = month_delta(nodes_spark)
+    hotspot_spark = sparkline(cases.loc[cases["GravityOffenceID"] >= 4, "CrimeRegisteredDate"])
+    hotspot_delta, hotspot_trend = month_delta(hotspot_spark)
+
     result = [
         {"id": "criminal-nodes", "label": "Criminal Nodes Analyzed",
-         "value": f"{total:,}", "delta": "4.2%", "trend": "up", "positive": False,
-         "sparkline": sparkline(cases["CrimeRegisteredDate"]), "accent": "electric"},
+         "value": f"{total:,}", "delta": nodes_delta, "trend": nodes_trend,
+         "positive": nodes_trend == "down",
+         "sparkline": nodes_spark, "accent": "electric"},
         {"id": "hotspot-alerts", "label": "Spatio-Temporal Hotspot Alerts",
-         "value": str(high_risk), "delta": "12.1%", "trend": "up", "positive": False,
-         "sparkline": sparkline(cases.loc[cases["GravityOffenceID"] >= 4, "CrimeRegisteredDate"]),
+         "value": str(high_risk), "delta": hotspot_delta, "trend": hotspot_trend,
+         "positive": hotspot_trend == "down",
+         "sparkline": hotspot_spark,
          "accent": "danger"},
         {"id": "risk-volatility", "label": "Causal Risk Volatility Index",
          "value": str(volatility), "delta": f"{len(anomalies)} active",
@@ -1317,7 +1331,10 @@ async def get_hotspots(
         lambda g: "high" if g >= 4 else ("med" if g == 3 else "low"))
 
     results = []
-    for _, row in df.head(limit).iterrows():
+    # head() returns the first rows of the file, which at statewide scope are
+    # all Bengaluru (it holds ~80% of cases) — sample so every district shows.
+    subset = df.sample(n=limit, random_state=42) if len(df) > limit else df
+    for _, row in subset.iterrows():
         sid = int(row["PoliceStationID"])
         factors = _station_factors(sid)
         results.append({
