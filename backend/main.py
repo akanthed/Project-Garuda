@@ -1084,9 +1084,11 @@ class SimulationRequest(BaseModel):
     rapid_response:  float = 45.0
 
 class ExportBriefRequest(BaseModel):
-    kpis:              dict
-    hotspot_count:     int
-    top_crime_types:   list[str]
+    """Scope only — every figure in the brief is computed server-side from
+    live data, never trusted from the client, so the PDF can't go stale or
+    show numbers that don't match what the officer was actually looking at."""
+    district_id:       Optional[int] = None
+    station_id:        Optional[int] = None
     simulation_impact: Optional[int] = None
 
 class LoginRequest(BaseModel):
@@ -2908,17 +2910,101 @@ async def update_case_workflow(case_master_id: int, body: CaseWorkflowUpdate, re
 
 # ─── POST /api/export_brief (SmartBrowz PDF) ─────────────────────────────────
 
+def _brief_scope_name(district_id: Optional[int], station_id: Optional[int]) -> str:
+    if station_id is not None:
+        return station_name(station_id)
+    if district_id is not None:
+        d = district_by_id(district_id)
+        return d.name if d else "Unknown District"
+    return "Statewide — All Karnataka"
+
+def _brief_top_crime_types(cases: pd.DataFrame, limit: int = 5) -> list[str]:
+    if DB.crime_heads.empty or cases.empty:
+        return []
+    merged = cases.merge(DB.crime_heads[["CrimeHeadID", "CrimeGroupName"]],
+                         left_on="CrimeMajorHeadID", right_on="CrimeHeadID", how="left")
+    return merged["CrimeGroupName"].value_counts().head(limit).index.tolist()
+
+def _brief_top_kingpins(district_id: Optional[int], station_id: Optional[int], limit: int = 5) -> list[dict]:
+    """Same centrality data as /api/network/kingpins, inlined here (rather
+    than calling the route function directly) since that endpoint enforces
+    its own clearance check — this section is gated by canExport instead,
+    already checked once at the top of export_brief."""
+    if not DB.network_analytics_ready or DB.co_graph.number_of_nodes() == 0:
+        return []
+    case_station = _case_station_map()
+
+    def in_scope(node_id: str) -> bool:
+        if district_id is None and station_id is None:
+            return True
+        for cid in _suspect_case_ids(node_id):
+            sid = case_station.get(cid)
+            if sid is None:
+                continue
+            if station_id is not None and sid == station_id:
+                return True
+            if district_id is not None and district_of_station(sid).district_id == district_id:
+                return True
+        return False
+
+    rows = [
+        {"label": DB.graph.nodes[n].get("label", n), "score": _kingpin_score(n), "cases": len(_suspect_case_ids(n))}
+        for n in DB.co_graph.nodes if in_scope(n)
+    ]
+    rows.sort(key=lambda r: r["score"], reverse=True)
+    return rows[:limit]
+
 @app.post("/api/export_brief")
 async def export_brief(body: ExportBriefRequest, request: Request):
     """
+    Every section is computed here from live scoped data (same helpers the
+    dashboard itself uses — _scope_filter/_compute_anomalies/_kingpin_score)
+    rather than trusted from the request body, so the PDF always reflects
+    what the officer was actually looking at, never stale or fabricated
+    frontend placeholder values.
+
     CATALYST mode: SmartBrowz headless PDF generation.
     LOCAL mode:    fpdf2 fallback.
     """
-    require_permission(request, "canExport")
+    officer = require_permission(request, "canExport")
+    if not ensure_data_loaded(request):
+        raise HTTPException(503, "Data not loaded")
+
+    cases = _scope_filter(DB.cases, body.district_id, body.station_id)
+    case_ids = None if (body.district_id is None and body.station_id is None) else set(cases["CaseMasterID"])
+    arrests = DB.arrests if case_ids is None else DB.arrests[DB.arrests["CaseMasterID"].isin(case_ids)]
+
+    total = len(cases)
+    high_risk = int((cases["GravityOffenceID"] >= 4).sum())
+    cases_with_arrest = int(arrests["CaseMasterID"].nunique()) if not arrests.empty else 0
+    arrest_rate = round(cases_with_arrest / max(total, 1) * 100, 1)
+    anomalies = _compute_anomalies(cases)
+    volatility = round(sum(a["z_score"] for a in anomalies) / len(anomalies), 2) if anomalies else 0.0
+
+    brief = {
+        "scope": _brief_scope_name(body.district_id, body.station_id),
+        "generated_by": officer.get("badge", "Unknown Officer"),
+        "generated_at": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M IST"),
+        "kpis": {
+            "Cases in Scope": f"{total:,}",
+            "High-Risk Cases": str(high_risk),
+            "Arrest Rate": f"{arrest_rate}%",
+            "Risk Volatility Index": str(volatility),
+        },
+        "top_crime_types": _brief_top_crime_types(cases),
+        "anomalies": [
+            {"station": a["station_name"], "z_score": a["z_score"],
+             "current_count": a["current_count"], "mean_count": a["mean_count"], "severity": a["severity"]}
+            for a in anomalies[:5]
+        ],
+        "kingpins": _brief_top_kingpins(body.district_id, body.station_id),
+        "simulation_impact": body.simulation_impact,
+    }
+
     capp = _try_catalyst_app(request)
     if capp is not None:
         try:
-            html    = _brief_html(body)
+            html    = _brief_html(brief)
             sb      = capp.smart_browz()
             # zcatalyst-sdk 1.4.0's SmartBrowz has no `generate_pdf(html_content=...)`
             # method — the real API is `convert_to_pdf(source)`, which accepts either
@@ -2931,7 +3017,18 @@ async def export_brief(body: ExportBriefRequest, request: Request):
         except Exception as e:
             log.error(f"SmartBrowz failed: {e}")
 
-    # fpdf2 fallback
+    # fpdf2 fallback — its default Helvetica core font is Latin-1 only, so any
+    # curly quote/em-dash/bullet (e.g. Faker-generated names like "D'Alia"
+    # using U+2019) crashes cell() with FPDFUnicodeEncodingException. Every
+    # dynamic string below is run through this before hitting a pdf.cell().
+    def _pdf_safe(text: str) -> str:
+        return (str(text)
+                .replace("\u2018", "'").replace("\u2019", "'")
+                .replace("\u201c", '"').replace("\u201d", '"')
+                .replace("\u2013", "-").replace("\u2014", "-")
+                .replace("\u2022", "-")
+                .encode("latin-1", errors="replace").decode("latin-1"))
+
     try:
         from fpdf import FPDF
         pdf = FPDF()
@@ -2940,27 +3037,56 @@ async def export_brief(body: ExportBriefRequest, request: Request):
         pdf.cell(0, 12, "PROJECT GARUDA - INTELLIGENCE BRIEF", ln=True, align="C")
         pdf.set_font("Helvetica", "", 9)
         pdf.cell(0, 6, "Karnataka State Police | RESTRICTED", ln=True, align="C")
+        pdf.set_font("Helvetica", "", 8)
+        pdf.cell(0, 5, _pdf_safe(f"Scope: {brief['scope']} | Generated by {brief['generated_by']} | {brief['generated_at']}"), ln=True, align="C")
         pdf.ln(6)
+
         pdf.set_font("Helvetica", "B", 11)
         pdf.cell(0, 8, "KPI Summary", ln=True)
         pdf.set_font("Helvetica", "", 10)
-        for k, v in body.kpis.items():
-            pdf.cell(0, 7, f"  {k}: {v}", ln=True)
+        for k, v in brief["kpis"].items():
+            pdf.cell(0, 7, _pdf_safe(f"  {k}: {v}"), ln=True)
         pdf.ln(4)
+
         pdf.set_font("Helvetica", "B", 11)
         pdf.cell(0, 8, "Top Crime Categories", ln=True)
         pdf.set_font("Helvetica", "", 10)
-        for c in body.top_crime_types:
-            pdf.cell(0, 7, f"  - {c}", ln=True)
-        if body.simulation_impact:
+        if brief["top_crime_types"]:
+            for c in brief["top_crime_types"]:
+                pdf.cell(0, 7, _pdf_safe(f"  - {c}"), ln=True)
+        else:
+            pdf.cell(0, 7, "  No cases in scope.", ln=True)
+        pdf.ln(4)
+
+        pdf.set_font("Helvetica", "B", 11)
+        pdf.cell(0, 8, "Active Anomaly Alerts", ln=True)
+        pdf.set_font("Helvetica", "", 10)
+        if brief["anomalies"]:
+            for a in brief["anomalies"]:
+                pdf.cell(0, 7, _pdf_safe(f"  - {a['station']}: z={a['z_score']} ({a['current_count']} vs avg {a['mean_count']}, {a['severity']})"), ln=True)
+        else:
+            pdf.cell(0, 7, "  No active anomalies detected in this scope.", ln=True)
+        pdf.ln(4)
+
+        pdf.set_font("Helvetica", "B", 11)
+        pdf.cell(0, 8, "Top Connected Suspects (Network Analysis)", ln=True)
+        pdf.set_font("Helvetica", "", 10)
+        if brief["kingpins"]:
+            for k in brief["kingpins"]:
+                pdf.cell(0, 7, _pdf_safe(f"  - {k['label']}: kingpin score {k['score']}, {k['cases']} linked case(s)"), ln=True)
+        else:
+            pdf.cell(0, 7, "  Network analytics not yet ready or no data in scope.", ln=True)
+
+        if brief["simulation_impact"]:
             pdf.ln(4)
             pdf.set_font("Helvetica", "B", 11)
             pdf.cell(0, 8, "What-If Simulation", ln=True)
             pdf.set_font("Helvetica", "", 10)
-            pdf.cell(0, 7, f"  Predicted reduction: -{body.simulation_impact}%", ln=True)
+            pdf.cell(0, 7, f"  Predicted reduction: -{brief['simulation_impact']}%", ln=True)
+
         pdf.set_y(-15)
         pdf.set_font("Helvetica", "I", 8)
-        pdf.cell(0, 6, f"Generated by Project Garuda | {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M IST')}", align="C")
+        pdf.cell(0, 6, f"Generated by Project Garuda | {brief['generated_at']}", align="C")
         buf = BytesIO()
         pdf.output(buf)
         buf.seek(0)
@@ -2969,23 +3095,33 @@ async def export_brief(body: ExportBriefRequest, request: Request):
     except ImportError:
         raise HTTPException(500, "Install fpdf2: pip install fpdf2")
 
-def _brief_html(body: ExportBriefRequest) -> str:
-    kpi_rows  = "".join(f"<tr><td>{k}</td><td><b>{v}</b></td></tr>" for k, v in body.kpis.items())
-    crimes    = "".join(f"<li>{c}</li>" for c in body.top_crime_types)
-    sim_block = f"<p><b>Simulation Impact:</b> −{body.simulation_impact}% incidents</p>" if body.simulation_impact else ""
+def _brief_html(brief: dict) -> str:
+    kpi_rows  = "".join(f"<tr><td>{k}</td><td><b>{v}</b></td></tr>" for k, v in brief["kpis"].items())
+    crimes    = "".join(f"<li>{c}</li>" for c in brief["top_crime_types"]) or "<li>No cases in scope.</li>"
+    anomaly_rows = "".join(
+        f"<tr><td>{a['station']}</td><td>z={a['z_score']}</td><td>{a['current_count']} vs avg {a['mean_count']}</td><td>{a['severity']}</td></tr>"
+        for a in brief["anomalies"]
+    ) or "<tr><td colspan='4'>No active anomalies detected in this scope.</td></tr>"
+    kingpin_rows = "".join(
+        f"<tr><td>{k['label']}</td><td>{k['score']}</td><td>{k['cases']}</td></tr>" for k in brief["kingpins"]
+    ) or "<tr><td colspan='3'>Network analytics not yet ready or no data in scope.</td></tr>"
+    sim_block = (f"<h2>What-If Simulation</h2><p><b>Predicted reduction:</b> −{brief['simulation_impact']}% incidents</p>"
+                if brief["simulation_impact"] else "")
     return f"""<!DOCTYPE html><html><head><style>
       body{{font-family:sans-serif;background:#0a0a10;color:#e2e8f0;padding:24px}}
-      h1{{color:#5a8cff;font-size:18px}}h2{{color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:2px}}
+      h1{{color:#5a8cff;font-size:18px}}h2{{color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:2px;margin-top:20px}}
       table{{width:100%;border-collapse:collapse}}td{{padding:6px;border-bottom:1px solid #1e293b;font-size:13px}}
       .badge{{background:#dc2626;color:white;padding:2px 8px;border-radius:12px;font-size:10px}}
       footer{{margin-top:32px;color:#475569;font-size:10px;text-align:center}}
     </style></head><body>
     <h1>PROJECT GARUDA — INTELLIGENCE BRIEF <span class="badge">RESTRICTED</span></h1>
-    <p style="color:#64748b;font-size:12px">Karnataka State Police · {pd.Timestamp.now().strftime("%Y-%m-%d %H:%M IST")}</p>
+    <p style="color:#64748b;font-size:12px">Karnataka State Police · Scope: {brief['scope']} · Generated by {brief['generated_by']} · {brief['generated_at']}</p>
     <h2>KPI Summary</h2><table>{kpi_rows}</table>
     <h2>Top Crime Categories</h2><ul>{crimes}</ul>
+    <h2>Active Anomaly Alerts</h2><table>{anomaly_rows}</table>
+    <h2>Top Connected Suspects (Network Analysis)</h2><table>{kingpin_rows}</table>
     {sim_block}
-    <footer>Project Garuda | Powered by Zoho Catalyst SmartBrowz | CONFIDENTIAL</footer>
+    <footer>Project Garuda | Synthetic prototype data for supervisor review, not an enforcement decision | Powered by Zoho Catalyst SmartBrowz | CONFIDENTIAL</footer>
     </body></html>"""
 
 # ─── Entry ────────────────────────────────────────────────────────────────────

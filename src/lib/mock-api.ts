@@ -687,11 +687,13 @@ export async function scanIncidentDocument(file: File): Promise<ApiResponse<Inci
 }
 
 // ─── POST /api/export_brief ───────────────────────────────────────────────────
+// Scope only — every figure in the brief is now computed server-side from
+// live data (see backend/main.py's export_brief), so the frontend no longer
+// assembles or fakes any KPI/crime-type numbers itself.
 
 export async function exportBrief(payload: {
-  kpis: Record<string, string>;
-  hotspot_count: number;
-  top_crime_types: string[];
+  districtId?: number | null;
+  stationId?: number | null;
   simulation_impact?: number;
 }): Promise<Blob> {
   if (!USE_REAL_API) {
@@ -704,7 +706,11 @@ export async function exportBrief(payload: {
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      district_id: payload.districtId ?? null,
+      station_id: payload.stationId ?? null,
+      simulation_impact: payload.simulation_impact,
+    }),
   });
   if (!res.ok) throw new Error(`Export failed: ${res.status}`);
   return res.blob();

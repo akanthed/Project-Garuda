@@ -22,7 +22,7 @@ interface SimulatorProps {
 export function Simulator({ onComplete }: SimulatorProps) {
   const { locale } = useLanguage();
   const { activeDistrict } = useScope();
-  const { values: vals, setValue, setDefaults } = useSimulator();
+  const { values: vals, setValue, setDefaults, setLastImpactPercent } = useSimulator();
   const [variables, setVariables] = useState<SimulatorVariable[]>([]);
   const [running, setRunning] = useState(false);
   const [lastResult, setLastResult] = useState<{
@@ -65,6 +65,7 @@ export function Simulator({ onComplete }: SimulatorProps) {
         assumptions: data.assumptions,
       });
       onComplete?.(data.impactPercent);
+      setLastImpactPercent(data.impactPercent);
       toast.success(`${t("sim_complete", locale)} · −${data.impactPercent}% ${t("sim_incidents", locale)}`, {
         description: `${t("sim_model", locale)}: ${data.modelVersion} · ${data.windowDays}${locale === "kn" ? " ದಿನ" : "d"} ${t("sim_rolling_window", locale).replace("30d ", "")}`,
       });

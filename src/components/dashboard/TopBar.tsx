@@ -6,6 +6,7 @@ import { logout, type Officer } from "@/lib/auth";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useScope } from "@/contexts/ScopeContext";
+import { useSimulator } from "@/contexts/SimulatorContext";
 import { t, districtName, type TranslationKey } from "@/lib/i18n";
 import { exportBrief, askGaruda } from "@/lib/mock-api";
 import {
@@ -56,6 +57,7 @@ export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
   const { locale, toggle } = useLanguage();
   const { theme, toggle: toggleTheme } = useTheme();
   const { districtId, districts, setDistrictId } = useScope();
+  const { lastImpactPercent } = useSimulator();
   const [q, setQ] = useState("");
   const [exporting, setExporting] = useState(false);
   const [asking, setAsking] = useState(false);
@@ -105,18 +107,9 @@ export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
     setExporting(true);
     toast(t("topbar_exporting", locale), { description: t("topbar_export_service", locale) });
     try {
-      const kpiMap = Object.fromEntries((kpis ?? []).map((k) => [k.label, k.value]));
-      const hotspotValue = kpis?.find((k) => k.id === "hotspot-alerts")?.value;
       const blob = await exportBrief({
-        kpis: Object.keys(kpiMap).length > 0 ? kpiMap : {
-          "Criminal Nodes": "1,284",
-          "Hotspot Alerts": "27",
-          "Risk Volatility": "0.74",
-          "Resource Readiness": "92%",
-        },
-        hotspot_count: hotspotValue ? parseInt(hotspotValue, 10) || 0 : 27,
-        top_crime_types: ["Cyber Crime", "Property Theft", "Narcotics", "Assault"],
-        simulation_impact: 58,
+        districtId,
+        simulation_impact: lastImpactPercent ?? undefined,
       });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");

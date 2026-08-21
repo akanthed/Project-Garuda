@@ -27,6 +27,11 @@ interface SimulatorContextValue {
    * that factor, so the effect reads as "fixing the weakest link helps most."
    */
   riskScaleFor: (basePatrol?: number, baseInfra?: number) => number;
+  /** Set once an officer actually runs the What-If simulator this session —
+   * lets the export brief include a real predicted-reduction figure instead
+   * of a fabricated placeholder. Null until a simulation has been run. */
+  lastImpactPercent: number | null;
+  setLastImpactPercent: (v: number) => void;
 }
 
 const SimulatorContext = createContext<SimulatorContextValue>({
@@ -34,11 +39,14 @@ const SimulatorContext = createContext<SimulatorContextValue>({
   setValue: () => {},
   setDefaults: () => {},
   riskScaleFor: () => 1,
+  lastImpactPercent: null,
+  setLastImpactPercent: () => {},
 });
 
 export function SimulatorProvider({ children }: { children: ReactNode }) {
   const [values, setValues] = useState<SimulatorValues>(SIMULATOR_DEFAULTS);
   const [defaults, setDefaultsState] = useState<SimulatorValues>(SIMULATOR_DEFAULTS);
+  const [lastImpactPercent, setLastImpactPercent] = useState<number | null>(null);
 
   const setValue = (id: string, v: number) =>
     setValues((prev) => ({ ...prev, [id]: v }));
@@ -58,7 +66,7 @@ export function SimulatorProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <SimulatorContext.Provider value={{ values, setValue, setDefaults, riskScaleFor }}>
+    <SimulatorContext.Provider value={{ values, setValue, setDefaults, riskScaleFor, lastImpactPercent, setLastImpactPercent }}>
       {children}
     </SimulatorContext.Provider>
   );
