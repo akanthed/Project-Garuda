@@ -1769,24 +1769,48 @@ _AGENT_DISPATCH = {
 }
 
 _AGENT_AUDIT_LOG = logging.getLogger("garuda.audit")
+_AGENT_AUDIT_NOSQL_TABLE = os.environ.get("AGENT_AUDIT_NOSQL_TABLE", "AgentAuditEvents").strip()
 
-def _emit_agent_audit_event(source: str, plan: AgentPlan, officer_badge: Optional[str], result_count: Optional[int]) -> None:
+def _emit_agent_audit_event(
+    source: str, plan: AgentPlan, officer_badge: Optional[str], result_count: Optional[int], capp=None
+) -> None:
     """One structured, sanitized JSON line per agent call — no query text or
-    case narrative is logged, only the validated plan and outcome shape."""
+    case narrative is logged, only the validated plan and outcome shape.
+    Written to both the local log (always) and Catalyst NoSQL (when running
+    on Catalyst), so the reasoning trail survives AppSail restarts/redeploys
+    and is queryable, not just grep-able from ephemeral container logs."""
+    event = {
+        "ts": pd.Timestamp.now().isoformat(),
+        "officer": officer_badge,
+        "source": source,
+        "action": plan.action,
+        "language": plan.language,
+        "confidence": round(plan.confidence, 2),
+        "result_count": result_count,
+    }
     try:
-        _AGENT_AUDIT_LOG.info(json.dumps({
-            "ts": pd.Timestamp.now().isoformat(),
-            "officer": officer_badge,
-            "source": source,
-            "action": plan.action,
-            "language": plan.language,
-            "confidence": round(plan.confidence, 2),
-            "result_count": result_count,
-        }))
+        _AGENT_AUDIT_LOG.info(json.dumps(event))
     except Exception:
         log.debug("Agent audit event logging failed", exc_info=True)
+    if capp is not None:
+        try:
+            capp.nosql().get_table(_AGENT_AUDIT_NOSQL_TABLE).insert_items({"item": {
+                "event_id": str(uuid.uuid4()),
+                "ts": event["ts"],
+                "officer": officer_badge or "",
+                "source": source,
+                "action": plan.action,
+                "language": plan.language,
+                "confidence": str(event["confidence"]),
+                "result_count": str(result_count) if result_count is not None else "",
+            }})
+        except Exception:
+            log.debug("Agent audit NoSQL write failed", exc_info=True)
 
-def _run_agent(query: str, plan: AgentPlan, source: Literal["quickml", "rules"], officer_badge: Optional[str] = None) -> dict:
+def _run_agent(
+    query: str, plan: AgentPlan, source: Literal["quickml", "rules"],
+    officer_badge: Optional[str] = None, capp=None,
+) -> dict:
     """The visible plan -> execute -> observe -> answer loop. `trace` is
     returned to the client so the reasoning is inspectable, not just the
     final answer — every tool call is deterministic backend code; the
@@ -1807,7 +1831,7 @@ def _run_agent(query: str, plan: AgentPlan, source: Literal["quickml", "rules"],
     result["confidence"] = round(plan.confidence, 2)
     result["trace"] = trace
     result_count = (result.get("tool_calls") or [{}])[0].get("result_count")
-    _emit_agent_audit_event(source, plan, officer_badge, result_count)
+    _emit_agent_audit_event(source, plan, officer_badge, result_count, capp)
     return result
 
 @app.post("/api/ask")
@@ -1817,15 +1841,15 @@ async def ask_garuda(body: AskRequest, request: Request):
     officer = require_session(request)
     if not ensure_data_loaded(request):
         raise HTTPException(503, "Data not loaded")
+    capp = _try_catalyst_app(request)
     source: Literal["quickml", "rules"] = "rules"
     try:
-        capp = _try_catalyst_app(request)
         plan = await asyncio.to_thread(_quickml_plan_sync, body.query.strip(), capp)
         source = "quickml"
     except Exception as exc:
         log.info(f"QuickML planner unavailable; using deterministic planner: {exc}")
         plan = _rule_plan(body.query)
-    return _run_agent(body.query, plan, source, officer.get("badge"))
+    return _run_agent(body.query, plan, source, officer.get("badge"), capp)
 
 # ─── GET /api/agent/case-brief/{case_master_id} — case-briefing agent ────────
 # Chains 4 existing tools (risk score, network centrality, causal context,
