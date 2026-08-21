@@ -1,0 +1,3 @@
+# The Catalyst CLI parses .catalystignore with split('\n'), so CRLF would leave a
+# trailing \r on every pattern and silently match nothing.
+backend/.catalystignore text eol=lf
