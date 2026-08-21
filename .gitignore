@@ -15,7 +15,8 @@ dist
 dist-ssr
 .output
 .vinxi
-.tanstack/                  # TanStack Router generated cache & temp files
+# TanStack Router generated cache & temp files
+.tanstack/
 .nitro
 *.local
 coverage
@@ -30,10 +31,10 @@ coverage
 .env.test
 
 # ─── Sensitive Configuration Files ──────────────────────────────────────────────
-catalyst.json              # Zoho Catalyst config (may have API keys)
-.catalystrc                # Catalyst runtime config
-backend/app-config.json    # Backend configuration with model IDs
-.dev.vars                  # Local development variables
+# Catalyst runtime config
+.catalystrc
+# Local development variables
+.dev.vars
 
 # ─── Python (backend/) ──────────────────────────────────────────────────────────
 backend/venv
@@ -42,7 +43,8 @@ backend/.venv
 backend/.env
 backend/__pycache__
 backend/**/__pycache__
-backend/vendor/                 # ⭐ DO NOT COMMIT - Python dependencies
+# ⭐ DO NOT COMMIT - Python dependencies
+backend/vendor/
 backend/data/.upload_checkpoint.json
 backend/*.egg-info
 backend/dist/
@@ -54,22 +56,26 @@ backend/build/
 *.so
 
 # ─── TypeScript & Generated Files ──────────────────────────────────────────────
-*.d.ts                      # TypeScript declaration files
-*.d.map                     # TypeScript declaration maps
-*.tsbuildinfo               # TypeScript build info
-src/routes/routeTree.gen.ts # TanStack Router auto-generated route tree
+# TypeScript build info
+*.tsbuildinfo
+# TanStack Router auto-generated route tree
+src/routes/routeTree.gen.ts
 
 # ─── AI/IDE Configuration (user-specific) ───────────────────────────────────────
-.lovable/                  # Lovable AI IDE config
-.claude/                   # Claude config (may have API keys)
-.impeccable/               # Impeccable review-tool cache/critiques
+# Lovable AI IDE config
+.lovable/
+# Claude config (may have API keys)
+.claude/
+# Impeccable review-tool cache/critiques
+.impeccable/
 .vscode/*
 !.vscode/extensions.json
-!.vscode/agents/           # Keep agent instructions (no secrets)
+# Keep agent instructions (no secrets)
+!.vscode/agents/
 !.vscode/agents/**
-.vscode/settings.json      # User-specific settings
-.vscode/keybindings.json   # User keybindings
-.vscode/launch.json        # User debug config
+.vscode/settings.json
+.vscode/keybindings.json
+.vscode/launch.json
 
 # ─── IDE & OS Files ─────────────────────────────────────────────────────────────
 .idea
@@ -83,7 +89,8 @@ src/routes/routeTree.gen.ts # TanStack Router auto-generated route tree
 *.sln
 *.sw?
 *.swp
-.venv-gen/                 # Local Python venv
+# Local Python venv
+.venv-gen/
 Thumbs.db
 
 # ─── Wrangler / Cloudflare ──────────────────────────────────────────────────────
