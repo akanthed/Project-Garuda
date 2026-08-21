@@ -86,6 +86,29 @@ beyond what each endpoint already returns.
   (every mutating/admin endpoint requires a session or the seed token); the API surface
   being inspectable is a reasonable, explicit trade-off for evaluator transparency, not
   an oversight. Would be revisited (auth-gated or disabled) before any real-data pilot.
+- **Catalyst Authentication (native login/signup service) — deliberately not adopted**:
+  investigated as a candidate to replace the hand-rolled HMAC session system, since the
+  challenge's Catalyst-service-mapping guidance lists Catalyst Authentication as the
+  required service for "user auth/login/signup." Both native modes (Hosted and Embedded)
+  were inspected directly in the Console, and Zoho's own "User Management" documentation
+  confirms every path to add a user (Console, SDK, API, or self-signup) sends an **email
+  invite** through which the user sets their own password — there is no admin-settable
+  fixed username/password pair. This is incompatible with the evaluation model this
+  project needs: judges must be able to log in instantly with a pre-set badge/password
+  (e.g. `KSP-BLR-7741` / `sentinel2026`), with no email round-trip. Migrating would have
+  either required evaluators to receive and act on a real email, or fabricating email
+  addresses we don't control inboxes for — neither is viable for live judging. The
+  hand-rolled system (HMAC sessions, PBKDF2-hashed passwords, `Officers` Data Store
+  table) is kept **by deliberate, researched decision**, not because Catalyst
+  integration was skipped for convenience.
+- **Catalyst Connections — adopted instead, for QuickML.** The QuickML OAuth
+  relationship (originally a manually-generated, non-refreshing 1-hour access token —
+  see `QUICKML_INTEGRATION.md`) now runs through the "Catalyst by Zoho" pre-built
+  Connections service (`capp.connections().get_connection_credentials(...)`), which
+  Catalyst refreshes server-side automatically. This is the correct, lower-risk
+  Catalyst-native adoption target: unlike Authentication, it manages a machine-to-machine
+  credential, not an end-user login flow, so it carries none of the email-invite
+  incompatibility above.
 
 ## 4. Tracked-file / git-history secret audit
 

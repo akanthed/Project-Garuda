@@ -78,8 +78,41 @@ which fits a simple JSON-intent-classification task better than a 35B vision-lan
 3. Open **Model Details** for the endpoint URL, OAuth scope, and headers; open **Sample Request and
    Response** for the exact request/response body shape — the two tabs are separate, don't assume
    Model Details alone has everything.
-4. Create an OAuth client with scope `QuickML.deployment.READ` and obtain an access token.
-5. Set these AppSail environment variables in the Catalyst Console:
+4. **Preferred: set up Catalyst Connections instead of a static token** (does this automatically,
+   see below) — avoids the manual OAuth token exchange and the "token expires before judging" risk
+   entirely. If Connections isn't available, fall back to steps 5-7 below (a static access token).
+
+### Preferred: Catalyst Connections (auto-refreshed, no manual token management)
+
+Console → Cloud Scale → Connections → Create Connection → **Default Services** tab → search
+"Catalyst by Zoho" (this exact pre-built connector covers all internal Catalyst OAuth scopes,
+including `QuickML.deployment.READ` — no need for the "Custom Services" tab or a manually-created
+OAuth client). Give it a name and a Connection Link Name (e.g. `garudaquickml`), check
+`QuickML.deployment.READ` under scopes, click **Create and Connect**, then click **Connect** on the
+resulting connection page. No client ID/secret step is needed — Catalyst manages the underlying
+first-party OAuth client for its own services. Status should read **Connected**.
+
+Then set only these two AppSail environment variables (no `QUICKML_ACCESS_TOKEN`/`QUICKML_ORG_ID`
+needed for this path):
+
+```text
+QUICKML_LLM_ENDPOINT=https://api.catalyst.zoho.in/quickml/v1/project/<project_id>/glm/chat
+QUICKML_MODEL=<model field from the Sample Request, e.g. crm-di-glm47b_30b_it>
+QUICKML_CONNECTION_LINK_NAME=garudaquickml   # optional, this is the default
+```
+
+At request time, `backend/main.py`'s `_quickml_connection_headers(capp)` calls
+`capp.connections().get_connection_credentials(QUICKML_CONNECTION_LINK_NAME)`, which returns
+`{"connections": {"headers": {...}, "parameters": {...}}}` — a ready-to-use `Authorization` header
+with a live, Catalyst-refreshed token. This requires `capp` (a real per-request Catalyst app
+instance, per the standing per-request-initialize pattern in this repo — see repo memory), so it
+only activates when actually running on Catalyst AppSail; local/non-Catalyst dev falls through to
+the static-token path below.
+
+### Fallback: static access token (manual refresh required)
+
+Only needed if Connections isn't set up. Create an OAuth client with scope
+`QuickML.deployment.READ` and obtain an access token, then set these AppSail environment variables:
 
 ```text
 QUICKML_LLM_ENDPOINT=https://api.catalyst.zoho.in/quickml/v1/project/<project_id>/glm/chat
@@ -93,7 +126,9 @@ QUICKML_MODEL=<model field from the Sample Request, e.g. crm-di-glm47b_30b_it>
 code still supports it as an optional header (only sent if the env var is set) in case a future model
 requires one — don't assume it's needed by default.
 
-Do not commit these values. OAuth access tokens expire; use the console's recommended refresh-token flow for production. For the hackathon demo, refresh the token shortly before judging.
+Do not commit these values. **This token expires in ~1 hour with no auto-refresh** — this is exactly
+why Connections (above) is the preferred path; only use this fallback if Connections is unavailable,
+and refresh the token shortly before judging if you do.
 
 **Request/response contract is an OpenAI-style chat completion, not a flat `prompt` field** — confirmed
 directly from the Console's "Sample Request and Response" tab:

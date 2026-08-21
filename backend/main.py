@@ -1346,6 +1346,20 @@ QUICKML_ENDPOINT_KEY = os.environ.get("QUICKML_ENDPOINT_KEY", "").strip()
 QUICKML_ACCESS_TOKEN = os.environ.get("QUICKML_ACCESS_TOKEN", "").strip()
 QUICKML_ORG_ID = os.environ.get("QUICKML_ORG_ID", "").strip()
 QUICKML_MODEL = os.environ.get("QUICKML_MODEL", "").strip()
+# Catalyst Connections manages this OAuth relationship server-side (auto-refreshed,
+# no static token to expire) — preferred over QUICKML_ACCESS_TOKEN below, which is
+# kept only as a fallback for local/non-Catalyst dev where Connections isn't reachable.
+QUICKML_CONNECTION_LINK_NAME = os.environ.get("QUICKML_CONNECTION_LINK_NAME", "garudaquickml").strip()
+
+def _quickml_connection_headers(capp) -> Optional[dict]:
+    if capp is None or not QUICKML_CONNECTION_LINK_NAME:
+        return None
+    try:
+        resp = capp.connections().get_connection_credentials(QUICKML_CONNECTION_LINK_NAME)
+        return (resp or {}).get("connections", {}).get("headers") or None
+    except Exception as exc:
+        log.debug(f"QuickML Connections lookup unavailable, falling back to static token: {exc}")
+        return None
 
 def _extract_quickml_text(payload) -> str:
     if isinstance(payload, str):
@@ -1375,8 +1389,11 @@ def _parse_plan_json(text: str) -> AgentPlan:
     # a tool: only a validated AgentPlan is allowed past this line.
     return AgentPlan.model_validate(json.loads(candidate))
 
-def _quickml_plan_sync(query: str) -> AgentPlan:
-    if not all((QUICKML_ENDPOINT, QUICKML_ACCESS_TOKEN, QUICKML_ORG_ID, QUICKML_MODEL)):
+def _quickml_plan_sync(query: str, capp=None) -> AgentPlan:
+    if not QUICKML_ENDPOINT or not QUICKML_MODEL:
+        raise RuntimeError("QuickML LLM configuration is incomplete")
+    connection_headers = _quickml_connection_headers(capp)
+    if not connection_headers and not (QUICKML_ACCESS_TOKEN and QUICKML_ORG_ID):
         raise RuntimeError("QuickML LLM configuration is incomplete")
 
     system_prompt = """You are the intent planner for Project Garuda, a Karnataka police decision-support prototype.
@@ -1405,11 +1422,12 @@ This plan is advisory and will be validated before any tool runs."""
         "temperature": 0.1,
         "stream": False,
     }
-    headers = {
-        "Authorization": f"Zoho-oauthtoken {QUICKML_ACCESS_TOKEN}",
-        "CATALYST-ORG": QUICKML_ORG_ID,
-        "Content-Type": "application/json",
-    }
+    headers = {"Content-Type": "application/json"}
+    if connection_headers:
+        headers.update(connection_headers)
+    else:
+        headers["Authorization"] = f"Zoho-oauthtoken {QUICKML_ACCESS_TOKEN}"
+        headers["CATALYST-ORG"] = QUICKML_ORG_ID
     if QUICKML_ENDPOINT_KEY:
         headers["X-QUICKML-ENDPOINT-KEY"] = QUICKML_ENDPOINT_KEY
     request = urllib.request.Request(
@@ -1801,7 +1819,8 @@ async def ask_garuda(body: AskRequest, request: Request):
         raise HTTPException(503, "Data not loaded")
     source: Literal["quickml", "rules"] = "rules"
     try:
-        plan = await asyncio.to_thread(_quickml_plan_sync, body.query.strip())
+        capp = _try_catalyst_app(request)
+        plan = await asyncio.to_thread(_quickml_plan_sync, body.query.strip(), capp)
         source = "quickml"
     except Exception as exc:
         log.info(f"QuickML planner unavailable; using deterministic planner: {exc}")
