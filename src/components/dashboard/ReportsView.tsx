@@ -6,7 +6,7 @@ import { createIncident, fetchCaseReports, updateCaseWorkflow } from "@/lib/mock
 import { translateTexts } from "@/lib/translate";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useScope } from "@/contexts/ScopeContext";
-import { t, type TranslationKey } from "@/lib/i18n";
+import { t, districtName, type TranslationKey } from "@/lib/i18n";
 import type { CaseReport, CaseSeverity, CaseStatus, IncidentIntake } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -290,7 +290,7 @@ function IncidentIntakeForm({ onClose, onSubmitted }: { onClose: () => void; onS
 
 export function ReportsView() {
   const { locale } = useLanguage();
-  const { districtId } = useScope();
+  const { districtId, activeDistrict } = useScope();
   const [reports, setReports] = useState<CaseReport[]>([]);
   const [totalReports, setTotalReports] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -340,6 +340,9 @@ export function ReportsView() {
           <FileText className="h-4 w-4 text-primary" />
           <div>
             <div className="text-base font-medium">{t("reports_title", locale)}</div>
+            <div className="font-mono text-[11px] text-muted-foreground">
+              {t("reports_subtitle", locale)} — {activeDistrict ? districtName(activeDistrict, locale) : t("topbar_scope_statewide", locale)}
+            </div>
             <div className="font-mono text-[11px] text-muted-foreground">
               {t("reports_workflow_hint", locale)}
             </div>

@@ -349,8 +349,8 @@ const KPI_METRICS: KpiMetric[] = [
   },
   {
     id: "resource-readiness",
-    label: "Resource Deployment Readiness",
-    value: "92%",
+    label: "Case Arrest Rate",
+    value: "82.1%",
     delta: "1.8%",
     trend: "up",
     positive: true,
@@ -374,7 +374,7 @@ const SIMULATOR_VARIABLES: SimulatorVariable[] = [
   {
     id: "patrol-density",
     label: "Patrol Density",
-    hint: "Active units per km² · Bengaluru City",
+    hint: "Active units per km²",
     weight: 0.4,
     defaultValue: 62,
   },

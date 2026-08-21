@@ -1250,8 +1250,10 @@ async def get_kpis(
 
     total     = len(cases)
     high_risk = int((cases["GravityOffenceID"] >= 4).sum())
-    arrest_count = len(arrests)
-    readiness = min(100, round(arrest_count / max(total, 1) * 110))
+    # Share of cases with at least one arrest — the same definition used by
+    # /api/districts/{id}/summary, so the KPI and the drill-down agree.
+    cases_with_arrest = int(arrests["CaseMasterID"].nunique()) if not arrests.empty else 0
+    arrest_rate = round(cases_with_arrest / max(total, 1) * 100, 1)
     anomalies = _compute_anomalies(cases)
     volatility = round(sum(a["z_score"] for a in anomalies) / len(anomalies), 2) if anomalies else 0.0
 
@@ -1275,6 +1277,19 @@ async def get_kpis(
     hotspot_spark = sparkline(cases.loc[cases["GravityOffenceID"] >= 4, "CrimeRegisteredDate"])
     hotspot_delta, hotspot_trend = month_delta(hotspot_spark)
 
+    try:
+        solved = pd.DataFrame({
+            "month": pd.to_datetime(cases["CrimeRegisteredDate"]).dt.to_period("M"),
+            "solved": cases["CaseMasterID"].isin(set(arrests["CaseMasterID"])) if not arrests.empty else False,
+        })
+        rates = (solved.groupby("month")["solved"].mean().sort_index().tail(12) * 100)
+        arrest_spark = [int(round(v)) for v in rates.values.tolist()]
+    except Exception:
+        arrest_spark = []
+    if not arrest_spark:
+        arrest_spark = [int(round(arrest_rate))] * 12
+    arrest_delta, arrest_trend = month_delta(arrest_spark)
+
     result = [
         {"id": "criminal-nodes", "label": "Criminal Nodes Analyzed",
          "value": f"{total:,}", "delta": nodes_delta, "trend": nodes_trend,
@@ -1290,9 +1305,10 @@ async def get_kpis(
          "trend": "up" if anomalies else "down", "positive": not anomalies,
          "sparkline": ([round(a["z_score"] * 10) for a in anomalies[:12]] or [0] * 12),
          "accent": "danger" if anomalies else "electric"},
-        {"id": "resource-readiness", "label": "Resource Deployment Readiness",
-         "value": f"{readiness}%", "delta": "1.8%", "trend": "up", "positive": True,
-         "sparkline": [max(60, min(100, readiness + i - 5)) for i in range(12)],
+        {"id": "resource-readiness", "label": "Case Arrest Rate",
+         "value": f"{arrest_rate}%", "delta": arrest_delta, "trend": arrest_trend,
+         "positive": True,
+         "sparkline": arrest_spark,
          "accent": "electric"},
     ]
     cache_set(capp, cache_key, result)
@@ -2473,6 +2489,7 @@ async def get_districts(request: Request):
         out.append({
             "district_id":   d.district_id,
             "name":          d.name,
+            "name_kn":       d.name_kn,
             "code":          d.code,
             "centroid":      {"lat": d.centroid[0], "lng": d.centroid[1]},
             "bounds":        {"min_lat": min_lat, "max_lat": max_lat, "min_lng": min_lng, "max_lng": max_lng},

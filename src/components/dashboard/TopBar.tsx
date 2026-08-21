@@ -6,7 +6,7 @@ import { logout, type Officer } from "@/lib/auth";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useScope } from "@/contexts/ScopeContext";
-import { t, type TranslationKey } from "@/lib/i18n";
+import { t, districtName, type TranslationKey } from "@/lib/i18n";
 import { exportBrief, askGaruda } from "@/lib/mock-api";
 import {
   Dialog,
@@ -151,7 +151,7 @@ export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
             <option value="">{t("topbar_scope_statewide", locale)}</option>
             {districts.map((d) => (
               <option key={d.district_id} value={d.district_id}>
-                {d.name}
+                {districtName(d, locale)}
               </option>
             ))}
           </select>

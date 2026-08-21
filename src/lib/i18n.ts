@@ -95,11 +95,10 @@ export const translations = {
   kpi_criminal_nodes:   { en: "Cases Reviewed",     kn: "ಪರಿಶೀಲಿಸಿದ ಪ್ರಕರಣಗಳು" },
   kpi_hotspot_alerts:   { en: "Danger Area Alerts",  kn: "ಅಪಾಯದ ಪ್ರದೇಶ ಎಚ್ಚರಿಕೆ" },
   kpi_risk_volatility:  { en: "Risk Level",          kn: "ಅಪಾಯದ ಮಟ್ಟ" },
-  kpi_readiness:        { en: "Team Readiness",      kn: "ತಂಡದ ಸಿದ್ಧತೆ" },
+  kpi_readiness:        { en: "Arrest Rate",        kn: "ಬಂಧನ ಪ್ರಮಾಣ" },
 
   // ─── GeoMap ────────────────────────────────────────────────────────────────
   map_title:        { en: "Crime Map",                   kn: "ಅಪರಾಧ ನಕ್ಷೆ" },
-  map_subtitle:     { en: "Bengaluru City — Live Map",   kn: "ಬೆಂಗಳೂರು — ನೇರ ನಕ್ಷೆ" },
   map_live_suffix:  { en: "Live Map",                     kn: "ನೇರ ನಕ್ಷೆ" },
   map_subtitle_statewide: { en: "All Karnataka — Live Map", kn: "ಎಲ್ಲಾ ಕರ್ನಾಟಕ — ನೇರ ನಕ್ಷೆ" },
   footer_secure_channel: { en: "secure channel",          kn: "ಸುರಕ್ಷಿತ ಸಂಪರ್ಕ" },
@@ -180,7 +179,7 @@ export const translations = {
   sim_running:       { en: "Calculating…",           kn: "ಲೆಕ್ಕ ಹಾಕಲಾಗುತ್ತಿದೆ…" },
   sim_baseline:      { en: "Based on the last 30 days", kn: "ಕಳೆದ 30 ದಿನಗಳ ಆಧಾರದ ಮೇಲೆ" },
   sim_running_toast: { en: "Running scenario estimate…", kn: "ಸನ್ನಿವೇಶ ಅಂದಾಜು ನಡೆಯುತ್ತಿದೆ…" },
-  sim_comparing:     { en: "Comparing resource settings across Bengaluru sectors.", kn: "ಬೆಂಗಳೂರು ವಲಯಗಳಾದ್ಯಂತ ಸಂಪನ್ಮೂಲ ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ಹೋಲಿಸಲಾಗುತ್ತಿದೆ." },
+  sim_comparing:     { en: "Comparing resource settings across sectors", kn: "ವಲಯಗಳಾದ್ಯಂತ ಸಂಪನ್ಮೂಲ ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ಹೋಲಿಸಲಾಗುತ್ತಿದೆ" },
   sim_complete:      { en: "Simulation complete",     kn: "ಸಿಮ್ಯುಲೇಷನ್ ಪೂರ್ಣಗೊಂಡಿದೆ" },
   sim_dashboard_result: { en: "Scenario result",      kn: "ಸನ್ನಿವೇಶ ಫಲಿತಾಂಶ" },
   sim_dashboard_applied: { en: "Map risk indicators now reflect this scenario.", kn: "ನಕ್ಷೆಯ ಅಪಾಯ ಗುರುತುಗಳು ಈಗ ಈ ಸನ್ನಿವೇಶವನ್ನು ತೋರಿಸುತ್ತವೆ." },
@@ -190,7 +189,7 @@ export const translations = {
   sim_estimate_range:{ en: "Estimate range",          kn: "ಅಂದಾಜು ವ್ಯಾಪ್ತಿ" },
   sim_assumption:    { en: "Scenario estimate only; not a validated causal effect.", kn: "ಸನ್ನಿವೇಶದ ಅಂದಾಜು ಮಾತ್ರ; ದೃಢೀಕೃತ ಕಾರಣಿಕ ಪರಿಣಾಮವಲ್ಲ." },
   sim_patrol_density: { en: "Patrol Density",          kn: "ಗಸ್ತು ಸಾಂದ್ರತೆ" },
-  sim_patrol_hint:    { en: "Active units per km² · Bengaluru City", kn: "ಪ್ರತಿ ಕಿಮೀ² ಗೆ ಸಕ್ರಿಯ ಘಟಕಗಳು · ಬೆಂಗಳೂರು ನಗರ" },
+  sim_patrol_hint:    { en: "Active units per km²", kn: "ಪ್ರತಿ ಕಿಮೀ² ಗೆ ಸಕ್ರಿಯ ಘಟಕಗಳು" },
   sim_infra_health:   { en: "Infrastructure Health",   kn: "ಮೂಲಸೌಕರ್ಯ ಸ್ಥಿತಿ" },
   sim_infra_hint:     { en: "Critical asset integrity (lighting, CCTV)", kn: "ನಿರ್ಣಾಯಕ ಆಸ್ತಿ ಸಮಗ್ರತೆ (ಬೆಳಕು, CCTV)" },
   sim_response_units: { en: "Rapid Response Units",     kn: "ತ್ವರಿತ ಪ್ರತಿಕ್ರಿಯೆ ಘಟಕಗಳು" },
@@ -247,7 +246,7 @@ export const translations = {
 
   // ─── Reports ───────────────────────────────────────────────────────────────
   reports_title:     { en: "Case Reports",                    kn: "ಪ್ರಕರಣ ವರದಿಗಳು" },
-  reports_subtitle:  { en: "Karnataka State Police — Bengaluru", kn: "ಕರ್ನಾಟಕ ರಾಜ್ಯ ಪೊಲೀಸ್ — ಬೆಂಗಳೂರು" },
+  reports_subtitle:  { en: "Karnataka State Police", kn: "ಕರ್ನಾಟಕ ರಾಜ್ಯ ಪೊಲೀಸ್" },
   reports_workflow_hint: { en: "Review, assign, and track case workflow", kn: "ಪ್ರಕರಣ ಕಾರ್ಯಪ್ರವಾಹವನ್ನು ಪರಿಶೀಲಿಸಿ, ನಿಯೋಜಿಸಿ ಮತ್ತು ಟ್ರ್ಯಾಕ್ ಮಾಡಿ" },
   reports_refresh:   { en: "Refresh",                          kn: "ಪುನಃ ಲೋಡ್ ಮಾಡಿ" },
   reports_search:    { en: "Search by case, ID, or area…",    kn: "ಪ್ರಕರಣ, ID, ಅಥವಾ ಪ್ರದೇಶದ ಮೂಲಕ ಹುಡುಕಿ…" },
@@ -464,5 +463,10 @@ export type TranslationKey = keyof typeof translations;
 /** Convenience helper used inside components */
 export function t(key: TranslationKey, locale: Locale): string {
   return translations[key][locale];
+}
+
+/** District names come from the API, so they are localised here rather than by key. */
+export function districtName(district: { name: string; name_kn?: string }, locale: Locale): string {
+  return locale === "kn" ? district.name_kn || district.name : district.name;
 }
 

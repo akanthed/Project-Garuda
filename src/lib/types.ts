@@ -10,6 +10,7 @@ export interface GeoBounds {
 export interface DistrictInfo {
   district_id: number;
   name: string;
+  name_kn?: string;
   code: string;
   centroid: { lat: number; lng: number };
   bounds: GeoBounds;

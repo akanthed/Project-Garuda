@@ -16,13 +16,14 @@ from bisect import bisect_right
 
 
 class District:
-    __slots__ = ("district_id", "name", "code", "centroid", "bounds", "station_start", "station_end", "localities")
+    __slots__ = ("district_id", "name", "name_kn", "code", "centroid", "bounds", "station_start", "station_end", "localities")
 
     def __init__(self, district_id: int, name: str, code: str, centroid: tuple[float, float],
                  bounds: tuple[float, float, float, float], station_start: int, station_end: int,
-                 localities: list[str]):
+                 localities: list[str], name_kn: str = ""):
         self.district_id = district_id
         self.name = name
+        self.name_kn = name_kn or name
         self.code = code
         self.centroid = centroid          # (lat, lng)
         self.bounds = bounds              # (min_lat, max_lat, min_lng, max_lng)
@@ -40,39 +41,39 @@ DISTRICTS: list[District] = [
         "HSR Layout", "BTM Layout", "Bannerghatta Road", "Mysuru Road",
         "Indiranagar", "Rajajinagar", "Yeshwantpur", "Marathahalli",
         "Silk Board", "Basavanagudi", "RT Nagar",
-    ]),
+    ], name_kn="ಬೆಂಗಳೂರು ನಗರ"),
     District(2, "Mysuru", "MYS", (12.2958, 76.6394), (12.15, 12.45, 76.50, 76.80), 101, 108, [
         "Mysuru City", "Nazarbad", "Jayalakshmipuram", "Vijayanagar Mysuru",
         "Kuvempunagar", "Chamundi Hill Road", "Hebbal Mysuru", "Bogadi",
-    ]),
+    ], name_kn="ಮೈಸೂರು"),
     District(3, "Dakshina Kannada", "DK", (12.9141, 74.8560), (12.75, 13.05, 74.75, 75.05), 109, 116, [
         "Mangaluru City", "Kadri", "Bejai", "Surathkal",
         "Ullal", "Kankanady", "Bunder", "Panambur",
-    ]),
+    ], name_kn="ದಕ್ಷಿಣ ಕನ್ನಡ"),
     District(4, "Belagavi", "BGM", (15.8497, 74.4977), (15.70, 16.00, 74.35, 74.65), 117, 124, [
         "Belagavi City", "Tilakwadi", "Camp Belagavi", "Shahapur",
         "Vadgaon", "Angol", "Khasbag", "Nehru Nagar Belagavi",
-    ]),
+    ], name_kn="ಬೆಳಗಾವಿ"),
     District(5, "Kalaburagi", "GLB", (17.3297, 76.8343), (17.20, 17.50, 76.70, 77.00), 125, 132, [
         "Kalaburagi City", "Sedam Road", "Jewargi Colony", "Ashok Nagar Kalaburagi",
         "Station Bazaar", "Aiwan-E-Shahi", "Ramnagar Kalaburagi", "Brahmapur",
-    ]),
+    ], name_kn="ಕಲಬುರಗಿ"),
     District(6, "Ballari", "BLY", (15.1394, 76.9214), (15.00, 15.30, 76.80, 77.10), 133, 140, [
         "Ballari City", "Cowl Bazaar", "Gandhinagar Ballari", "Bruce Pet",
         "Hospet Road", "Kappagal Road", "Vidyanagar Ballari", "Sandur Road",
-    ]),
+    ], name_kn="ಬಳ್ಳಾರಿ"),
     District(7, "Tumakuru", "TMK", (13.3379, 77.1173), (13.20, 13.50, 77.00, 77.30), 141, 148, [
         "Tumakuru City", "Kunigal Road", "Batawadi", "Ashoknagar Tumakuru",
         "SS Puram", "Mandipet", "Amanikere", "Antharasanahalli",
-    ]),
+    ], name_kn="ತುಮಕೂರು"),
     District(8, "Dharwad", "DWD", (15.3647, 75.1240), (15.25, 15.50, 75.00, 75.30), 149, 156, [
         "Hubballi City", "Dharwad City", "Vidyanagar Hubballi", "Keshwapur",
         "Gokul Road", "Navanagar Hubballi", "Unkal", "Saptapur",
-    ]),
+    ], name_kn="ಧಾರವಾಡ"),
     District(9, "Udupi", "UDP", (13.3409, 74.7421), (13.20, 13.50, 74.65, 74.90), 157, 164, [
         "Udupi City", "Manipal", "Malpe", "Kaup",
         "Kalyanpur", "Brahmagiri", "Ambalpady", "Kunjibettu",
-    ]),
+    ], name_kn="ಉಡುಪಿ"),
 ]
 
 STATION_ID_MIN = DISTRICTS[0].station_start

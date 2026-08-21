@@ -11,7 +11,7 @@ import type { Hotspot, PatrolUnit, ForecastPoint, ForecastBacktest } from "@/lib
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useSimulator } from "@/contexts/SimulatorContext";
 import { useScope } from "@/contexts/ScopeContext";
-import { t, type TranslationKey } from "@/lib/i18n";
+import { t, districtName, type TranslationKey } from "@/lib/i18n";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import "maplibre-gl/dist/maplibre-gl.css";
 
@@ -281,7 +281,7 @@ export function GeoMap({ compact = false }: GeoMapProps) {
           </div>
           <div className="mt-0.5 text-sm font-medium">
             {activeDistrict
-              ? `${activeDistrict.name} — ${t("map_live_suffix", locale)}`
+              ? `${districtName(activeDistrict, locale)} — ${t("map_live_suffix", locale)}`
               : t("map_subtitle_statewide", locale)}
           </div>
         </div>

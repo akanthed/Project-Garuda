@@ -5,8 +5,9 @@ import { toast } from "sonner";
 import { fetchSimulatorVariables, runSimulation } from "@/lib/mock-api";
 import type { SimulatorVariable } from "@/lib/types";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useScope } from "@/contexts/ScopeContext";
 import { useSimulator } from "@/contexts/SimulatorContext";
-import { t, type TranslationKey } from "@/lib/i18n";
+import { t, districtName, type TranslationKey } from "@/lib/i18n";
 
 const VARIABLE_TRANSLATIONS: Record<string, { labelKey: TranslationKey; hintKey: TranslationKey }> = {
   "patrol-density": { labelKey: "sim_patrol_density", hintKey: "sim_patrol_hint" },
@@ -20,6 +21,7 @@ interface SimulatorProps {
 
 export function Simulator({ onComplete }: SimulatorProps) {
   const { locale } = useLanguage();
+  const { activeDistrict } = useScope();
   const { values: vals, setValue, setDefaults } = useSimulator();
   const [variables, setVariables] = useState<SimulatorVariable[]>([]);
   const [running, setRunning] = useState(false);
@@ -45,10 +47,15 @@ export function Simulator({ onComplete }: SimulatorProps) {
       )
     : 0;
 
+  // Levers are evaluated against whatever scope the top bar has selected.
+  const scopeLabel = activeDistrict
+    ? districtName(activeDistrict, locale)
+    : t("topbar_scope_statewide", locale);
+
   const handleRun = async () => {
     if (running || !variables.length) return;
     setRunning(true);
-    toast(t("sim_running_toast", locale), { description: t("sim_comparing", locale) });
+    toast(t("sim_running_toast", locale), { description: `${t("sim_comparing", locale)} · ${scopeLabel}` });
     try {
       const { data } = await runSimulation(vals);
       setLastResult({
@@ -68,21 +75,21 @@ export function Simulator({ onComplete }: SimulatorProps) {
 
   if (!variables.length) {
     return (
-      <div className="flex h-32 items-center justify-center rounded-xl border border-white/5 bg-card">
+      <div className="flex h-32 items-center justify-center rounded-xl border border-foreground/5 bg-card">
         <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary/20 border-t-primary" />
       </div>
     );
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-white/5 bg-card">
-      <div className="flex items-center justify-between border-b border-white/5 px-5 py-3">
+    <div className="overflow-hidden rounded-xl border border-foreground/5 bg-card">
+      <div className="flex items-center justify-between border-b border-foreground/5 px-5 py-3">
         <div className="flex items-center gap-2">
           <Cpu className="h-3.5 w-3.5 text-primary" />
           <div className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
             {t("sim_title", locale)}
           </div>
-          <span className="ml-2 rounded-full border border-white/10 px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
+          <span className="ml-2 rounded-full border border-foreground/10 px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
             scenario-model-v1
           </span>
         </div>
@@ -110,14 +117,18 @@ export function Simulator({ onComplete }: SimulatorProps) {
               onValueChange={([n]) => setValue(v.id, n)}
               max={100}
               step={1}
-              className="[&_[data-slot=slider-range]]:bg-primary [&_[data-slot=slider-track]]:h-[3px] [&_[data-slot=slider-track]]:bg-white/8 [&_[data-slot=slider-thumb]]:h-3 [&_[data-slot=slider-thumb]]:w-3 [&_[data-slot=slider-thumb]]:border-primary [&_[data-slot=slider-thumb]]:bg-background [&_[data-slot=slider-thumb]]:shadow-[0_0_0_4px_rgba(90,140,255,0.12)]"
+              className="[&_[data-slot=slider-range]]:bg-primary [&_[data-slot=slider-track]]:h-[3px] [&_[data-slot=slider-track]]:bg-foreground/8 [&_[data-slot=slider-thumb]]:h-3 [&_[data-slot=slider-thumb]]:w-3 [&_[data-slot=slider-thumb]]:border-primary [&_[data-slot=slider-thumb]]:bg-background [&_[data-slot=slider-thumb]]:shadow-[0_0_0_4px_rgba(90,140,255,0.12)]"
             />
-            <div className="font-mono text-[10px] text-muted-foreground">{translation ? t(translation.hintKey, locale) : v.hint}</div>
+            <div className="font-mono text-[10px] text-muted-foreground">
+              {translation
+                ? `${t(translation.hintKey, locale)}${v.id === "patrol-density" ? ` · ${scopeLabel}` : ""}`
+                : v.hint}
+            </div>
           </div>
           );
         })}
 
-        <div className="flex flex-col items-stretch justify-between rounded-lg border border-white/5 bg-background/40 p-4">
+        <div className="flex flex-col items-stretch justify-between rounded-lg border border-foreground/5 bg-background/40 p-4">
           <div>
             <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
               {t("sim_impact_label", locale)}
@@ -138,7 +149,7 @@ export function Simulator({ onComplete }: SimulatorProps) {
         </div>
       </div>
       {lastResult && (
-        <div className="border-t border-white/5 px-6 py-3">
+        <div className="border-t border-foreground/5 px-6 py-3">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[10px] text-muted-foreground">
             <span>{t("sim_estimate_range", locale)}: −{lastResult.confidenceRange?.[0] ?? Math.max(0, lastResult.impact - 12)}% {locale === "kn" ? "ರಿಂದ" : "to"} −{lastResult.confidenceRange?.[1] ?? Math.min(100, lastResult.impact + 12)}%</span>
             <span>{lastResult.modelVersion}</span>
