@@ -17,18 +17,46 @@ import type {
   CaseSeverity,
   CaseWorkflowResult,
   CaseWorkflowUpdate,
+  CommunityRow,
+  ConnectionPath,
+  DistrictsResponse,
+  ForecastBacktest,
   ForecastPoint,
   Hotspot,
   IncidentIntake,
   IncidentIntakeResult,
+  KingpinRow,
   KpiMetric,
   NetworkGraph,
   PatrolUnit,
+  PredictedLink,
+  RiskPrediction,
   SimulationResult,
   SimulatorVariable,
   StationAnomaly,
 } from "./types";
 import { getToken, logout } from "./auth";
+
+/** Scope filter shared by every endpoint that supports district/station drilldown. */
+export interface ScopeParams {
+  districtId?: number | null;
+  stationId?: number | null;
+}
+
+function scopeQuery(params?: ScopeParams): string {
+  if (!params) return "";
+  const qs = new URLSearchParams();
+  if (params.districtId != null) qs.set("district_id", String(params.districtId));
+  if (params.stationId != null) qs.set("station_id", String(params.stationId));
+  const s = qs.toString();
+  return s ? `&${s}` : "";
+}
+
+/** Builds a query string for endpoints with no other query params (leading `?`, omitted if empty). */
+function scopeQueryString(params?: ScopeParams): string {
+  const s = scopeQuery(params);
+  return s ? `?${s.slice(1)}` : "";
+}
 
 const API_BASE = import.meta.env.VITE_API_URL as string | undefined;
 const USE_REAL_API = !!API_BASE;
@@ -58,6 +86,33 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   }
   if (!res.ok) throw new Error(`API ${path} failed: ${res.status} ${res.statusText}`);
   return res.json() as Promise<T>;
+}
+
+// ─── GET /api/districts ────────────────────────────────────────────────────────
+// Single Bengaluru Urban district in mock mode; the real backend serves the
+// full statewide Karnataka set (see backend/karnataka_districts.py).
+
+const MOCK_DISTRICTS: DistrictsResponse = {
+  districts: [
+    {
+      district_id: 1,
+      name: "Bengaluru Urban",
+      code: "BLR",
+      centroid: { lat: 12.9716, lng: 77.5946 },
+      bounds: { min_lat: 12.80, max_lat: 13.10, min_lng: 77.40, max_lng: 77.75 },
+      station_range: [1, 100],
+    },
+  ],
+  statewide_bounds: { min_lat: 12.80, max_lat: 13.10, min_lng: 77.40, max_lng: 77.75 },
+};
+
+export async function fetchDistricts(): Promise<ApiResponse<DistrictsResponse>> {
+  if (USE_REAL_API) {
+    const data = await apiFetch<DistrictsResponse>("/api/districts");
+    return wrap(data);
+  }
+  await delay(150);
+  return wrap(MOCK_DISTRICTS);
 }
 
 // ─── GET /api/hotspots ────────────────────────────────────────────────────────
@@ -141,13 +196,20 @@ const HOTSPOTS: Hotspot[] = [
   },
 ];
 
-export async function fetchHotspots(): Promise<ApiResponse<Hotspot[]>> {
+export async function fetchHotspots(params?: ScopeParams): Promise<ApiResponse<Hotspot[]>> {
   if (USE_REAL_API) {
-    const data = await apiFetch<Hotspot[]>("/api/hotspots?limit=300");
+    const data = await apiFetch<Hotspot[]>(`/api/hotspots?limit=300${scopeQuery(params)}`);
     return wrap(data);
   }
   await delay(350);
   return wrap(HOTSPOTS);
+}
+
+// ─── GET /api/risk/{case_master_id} ─────────────────────────────────────
+
+export async function fetchRiskPrediction(caseMasterId: number): Promise<RiskPrediction> {
+  if (!USE_REAL_API) throw new Error("Risk scoring requires the live API");
+  return apiFetch<RiskPrediction>(`/api/risk/${caseMasterId}`);
 }
 
 // ─── GET /api/network ─────────────────────────────────────────────────────────
@@ -181,13 +243,81 @@ const NETWORK: NetworkGraph = {
   ],
 };
 
-export async function fetchNetwork(): Promise<ApiResponse<NetworkGraph>> {
+export async function fetchNetwork(params?: ScopeParams): Promise<ApiResponse<NetworkGraph>> {
   if (USE_REAL_API) {
-    const data = await apiFetch<NetworkGraph>("/api/network?cluster_size=15");
+    const data = await apiFetch<NetworkGraph>(`/api/network?cluster_size=15${scopeQuery(params)}`);
     return wrap(data);
   }
   await delay(400);
   return wrap(NETWORK);
+}
+
+// ─── GET /api/network/kingpins, /communities, /path, /predict-links (Phase 3) ───
+// Mock fallbacks are intentionally thin (real depth needs a real graph) — the
+// real backend precomputes centrality/communities over the co-offender graph.
+
+const MOCK_KINGPINS: KingpinRow[] = [
+  { id: "C-9081", label: "K. Ramachandra", degree_centrality: 0.42, betweenness_centrality: 0.31, eigenvector_centrality: 0.55, kingpin_score: 0.41, case_count: 6, co_offender_count: 4, district_count: 2, community_id: 0 },
+  { id: "C-8801", label: "K. Reddy", degree_centrality: 0.28, betweenness_centrality: 0.18, eigenvector_centrality: 0.33, kingpin_score: 0.25, case_count: 4, co_offender_count: 3, district_count: 1, community_id: 0 },
+];
+
+export async function fetchKingpins(params?: ScopeParams & { limit?: number }): Promise<ApiResponse<KingpinRow[]>> {
+  if (USE_REAL_API) {
+    const qs = new URLSearchParams();
+    if (params?.limit) qs.set("limit", String(params.limit));
+    const data = await apiFetch<KingpinRow[]>(`/api/network/kingpins?${qs.toString()}${scopeQuery(params)}`);
+    return wrap(data);
+  }
+  await delay(300);
+  return wrap(MOCK_KINGPINS);
+}
+
+const MOCK_COMMUNITIES: CommunityRow[] = [
+  {
+    community_id: 0, size: 5,
+    top_members: [{ id: "C-9081", label: "K. Ramachandra" }, { id: "C-8801", label: "K. Reddy" }],
+    dominant_crime_type: "Vehicle Theft", district_ids: [1], case_count: 6, cohesion: 0.6,
+    active_from: "2025-01-04", active_to: "2026-06-10", likely_synthetic_artifact: false,
+  },
+];
+
+export async function fetchCommunities(params?: { limit?: number; minSize?: number; maxSize?: number }): Promise<ApiResponse<CommunityRow[]>> {
+  if (USE_REAL_API) {
+    const qs = new URLSearchParams();
+    if (params?.limit) qs.set("limit", String(params.limit));
+    if (params?.minSize) qs.set("min_size", String(params.minSize));
+    if (params?.maxSize) qs.set("max_size", String(params.maxSize));
+    const data = await apiFetch<CommunityRow[]>(`/api/network/communities?${qs.toString()}`);
+    return wrap(data);
+  }
+  await delay(300);
+  return wrap(MOCK_COMMUNITIES);
+}
+
+export async function fetchConnectionPath(source: string, target: string): Promise<ApiResponse<ConnectionPath>> {
+  if (USE_REAL_API) {
+    const qs = new URLSearchParams({ source, target });
+    const data = await apiFetch<ConnectionPath>(`/api/network/path?${qs.toString()}`);
+    return wrap(data);
+  }
+  await delay(400);
+  const nodes = NETWORK.nodes.filter((n) => n.id === source || n.id === target);
+  if (nodes.length < 2) return wrap({ connected: false, path: [], hops: [], path_length: null });
+  return wrap({
+    connected: true,
+    path: nodes.map((n) => ({ id: n.id, label: n.label })),
+    hops: [{ from: { id: source, label: source }, to: { id: target, label: target }, shared_case_count: 1, shared_cases: [{ case_master_id: 1, date: "2026-01-04", station: "KR Market PS" }] }],
+    path_length: 1,
+  });
+}
+
+export async function fetchPredictedLinks(limit = 20): Promise<ApiResponse<PredictedLink[]>> {
+  if (USE_REAL_API) {
+    const data = await apiFetch<PredictedLink[]>(`/api/network/predict-links?limit=${limit}`);
+    return wrap(data);
+  }
+  await delay(300);
+  return wrap([]);
 }
 
 // ─── GET /api/kpi ─────────────────────────────────────────────────────────────
@@ -227,8 +357,8 @@ const KPI_METRICS: KpiMetric[] = [
   },
   {
     id: "resource-readiness",
-    label: "Resource Deployment Readiness",
-    value: "92%",
+    label: "Case Arrest Rate",
+    value: "82.1%",
     delta: "1.8%",
     trend: "up",
     positive: true,
@@ -237,9 +367,9 @@ const KPI_METRICS: KpiMetric[] = [
   },
 ];
 
-export async function fetchKpiMetrics(): Promise<ApiResponse<KpiMetric[]>> {
+export async function fetchKpiMetrics(params?: ScopeParams): Promise<ApiResponse<KpiMetric[]>> {
   if (USE_REAL_API) {
-    const data = await apiFetch<KpiMetric[]>("/api/kpis");
+    const data = await apiFetch<KpiMetric[]>(`/api/kpis${scopeQueryString(params)}`);
     return wrap(data);
   }
   await delay(200);
@@ -252,7 +382,7 @@ const SIMULATOR_VARIABLES: SimulatorVariable[] = [
   {
     id: "patrol-density",
     label: "Patrol Density",
-    hint: "Active units per km² · Bengaluru City",
+    hint: "Active units per km²",
     weight: 0.4,
     defaultValue: 62,
   },
@@ -430,9 +560,9 @@ const CASE_REPORTS: Omit<CaseReport, "case_master_id">[] = [
   },
 ];
 
-export async function fetchCaseReports(): Promise<ApiResponse<CaseReportsPage>> {
+export async function fetchCaseReports(params?: ScopeParams): Promise<ApiResponse<CaseReportsPage>> {
   if (USE_REAL_API) {
-    const data = await apiFetch<CaseReportsPage | CaseReport[]>("/api/reports?limit=20");
+    const data = await apiFetch<CaseReportsPage | CaseReport[]>(`/api/reports?limit=20${scopeQuery(params)}`);
     if (Array.isArray(data)) {
       return wrap({
         items: data.map((report, index) => ({ ...report, case_master_id: report.case_master_id ?? index + 1 })),
@@ -569,9 +699,9 @@ export async function fetchPatrols(): Promise<ApiResponse<PatrolUnit[]>> {
 
 // ─── GET /api/hotspots/forecast ───────────────────────────────────────────────
 
-export async function fetchForecast(): Promise<ApiResponse<ForecastPoint[]>> {
+export async function fetchForecast(params?: ScopeParams): Promise<ApiResponse<ForecastPoint[]>> {
   if (USE_REAL_API) {
-    const data = await apiFetch<ForecastPoint[]>("/api/hotspots/forecast");
+    const data = await apiFetch<ForecastPoint[]>(`/api/hotspots/forecast${scopeQueryString(params)}`);
     return wrap(data);
   }
   await delay(300);
@@ -590,11 +720,35 @@ export async function fetchForecast(): Promise<ApiResponse<ForecastPoint[]>> {
   );
 }
 
+// ─── GET /api/hotspots/forecast/backtest (Phase 4 model validation) ──────────
+
+const MOCK_BACKTEST: ForecastBacktest = {
+  models: [
+    { model: "linear_trend", mae: 2.99, mape_percent: 29.4, pai: 1.31, pei: 0.79 },
+    { model: "ewma", mae: 3.10, mape_percent: 30.1, pai: 1.33, pei: 0.80 },
+    { model: "seasonal_naive", mae: 4.04, mape_percent: 38.0, pai: 1.35, pei: 0.82 },
+    { model: "naive", mae: 4.11, mape_percent: 38.1, pai: 1.32, pei: 0.80 },
+  ],
+  test_months: 6, station_count: 9, k_stations: 2, k_fraction: 0.2,
+  best_model_by_mae: "linear_trend", deployed_model: "linear_trend",
+  methodology: "Rolling-origin backtest against naive, seasonal-naive, and EWMA baselines.",
+  feedback_loop_caution: "Predicted hotspots can influence patrol allocation, which can change where future crime is recorded. Treat predictions as one input for human review, not automated dispatch.",
+};
+
+export async function fetchForecastBacktest(testMonths = 6): Promise<ApiResponse<ForecastBacktest>> {
+  if (USE_REAL_API) {
+    const data = await apiFetch<ForecastBacktest>(`/api/hotspots/forecast/backtest?test_months=${testMonths}`);
+    return wrap(data);
+  }
+  await delay(300);
+  return wrap(MOCK_BACKTEST);
+}
+
 // ─── GET /api/anomalies ────────────────────────────────────────────────────────
 
-export async function fetchAnomalies(): Promise<ApiResponse<StationAnomaly[]>> {
+export async function fetchAnomalies(params?: ScopeParams): Promise<ApiResponse<StationAnomaly[]>> {
   if (USE_REAL_API) {
-    const data = await apiFetch<StationAnomaly[]>("/api/anomalies");
+    const data = await apiFetch<StationAnomaly[]>(`/api/anomalies${scopeQueryString(params)}`);
     return wrap(data);
   }
   await delay(250);

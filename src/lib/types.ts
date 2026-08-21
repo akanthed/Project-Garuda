@@ -1,6 +1,62 @@
 // ─── Geospatial ──────────────────────────────────────────────────────────────
 
+export interface GeoBounds {
+  min_lat: number;
+  max_lat: number;
+  min_lng: number;
+  max_lng: number;
+}
+
+export interface DistrictInfo {
+  district_id: number;
+  name: string;
+  name_kn?: string;
+  code: string;
+  centroid: { lat: number; lng: number };
+  bounds: GeoBounds;
+  station_range: [number, number];
+}
+
+export interface DistrictsResponse {
+  districts: DistrictInfo[];
+  statewide_bounds: GeoBounds;
+}
+
+export interface DistrictSummary {
+  district_id: number;
+  name: string;
+  code: string;
+  total_cases: number;
+  high_risk_cases: number;
+  arrest_rate_percent: number;
+  active_anomalies: number;
+  top_crime_categories: { crime_type: string; count: number }[];
+  station_count: number;
+  bounds: GeoBounds;
+  data_provenance: string;
+}
+
 export type RiskLevel = "high" | "med" | "low";
+
+export interface RiskPrediction {
+  case_master_id: number;
+  model_id: string;
+  model_name: string;
+  source: "zia_automl" | "local_fallback";
+  risk_class: "low" | "medium" | "high";
+  scores: Record<string, number>;
+  features: {
+    gravity_level: number;
+    repeat_accused_count: number;
+    accused_count: number;
+    arrest_count: number;
+    arrest_rate_percent: number;
+    station_case_volume: number;
+    crime_type_volume: number;
+    days_since_latest: number;
+  };
+  advisory: string;
+}
 
 export interface Hotspot {
   id: string;
@@ -45,6 +101,30 @@ export interface ForecastPoint {
   trend_pct: number;
   horizon_days: number;
   model: string;
+  confidence_interval?: [number, number];
+  training_window_months?: number;
+}
+
+// ─── Forecast model backtest (Phase 4) ────────────────────────────────────────
+
+export interface ForecastModelScore {
+  model: string;
+  mae: number;
+  mape_percent: number | null;
+  pai: number | null;
+  pei: number | null;
+}
+
+export interface ForecastBacktest {
+  models: ForecastModelScore[];
+  test_months: number;
+  station_count: number;
+  k_stations: number;
+  k_fraction: number;
+  best_model_by_mae: string | null;
+  deployed_model: string;
+  methodology: string;
+  feedback_loop_caution: string;
 }
 
 // ─── Anomaly detection ──────────────────────────────────────────────────────────
@@ -58,13 +138,59 @@ export interface StationAnomaly {
   severity: "critical" | "high";
 }
 
-// ─── Ask Garuda (NL search) ────────────────────────────────────────────────────
+// ─── Ask Garuda (agentic NL search, Phase 5) ──────────────────────────────────
+
+export type AgentAction =
+  | "search_cases" | "show_hotspots" | "investigate_network"
+  | "compare_districts" | "summarize_trends" | "find_connection"
+  | "rank_offenders" | "explain_correlations";
 
 export interface AskMatchedCase {
   id: string;
   date: string;
   station: string;
   gravity: number;
+}
+
+export interface AgentTraceStep {
+  step: "interpret" | "execute" | "observe" | "answer";
+  tool?: string;
+  detail?: string;
+  parameters?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface DistrictComparisonRow {
+  district_id: number;
+  name: string;
+  total_cases: number;
+  high_risk_cases: number;
+  arrest_rate_percent: number;
+  active_anomalies: number;
+}
+
+export interface TrendSummary {
+  trend_pct: number | null;
+  direction: "rising" | "falling" | "stable";
+  active_anomalies: StationAnomaly[];
+}
+
+export interface ConnectionResult {
+  connected: boolean;
+  path: { id: string; label: string }[];
+}
+
+export interface OffenderRankingRow {
+  id: string;
+  label: string;
+  kingpin_score: number;
+  case_count: number;
+}
+
+export interface CorrelationExplanation {
+  station_id: number;
+  station_name: string;
+  narrative: string;
 }
 
 export interface AskResponse {
@@ -75,10 +201,16 @@ export interface AskResponse {
   language: "en" | "kn";
   confidence: number;
   tool_calls: Array<{
-    tool: "search_cases" | "show_hotspots" | "investigate_network";
-    status: "completed";
+    tool: AgentAction;
+    status: "completed" | "unresolved";
     result_count: number;
   }>;
+  trace?: AgentTraceStep[];
+  district_comparison?: DistrictComparisonRow[];
+  trend_summary?: TrendSummary;
+  connection_result?: ConnectionResult;
+  offender_ranking?: OffenderRankingRow[];
+  correlation_explanation?: CorrelationExplanation;
 }
 
 // ─── Criminal Network ─────────────────────────────────────────────────────────
@@ -92,6 +224,9 @@ export interface NetworkNode {
   /** Connection weight — drives node radius */
   weight: number;
   risk?: RiskLevel;
+  /** Present only for Suspect nodes when served by the real backend (Phase 3) */
+  centrality?: NodeCentrality | null;
+  community_id?: number | null;
 }
 
 export interface NetworkEdge {
@@ -103,6 +238,67 @@ export interface NetworkEdge {
 export interface NetworkGraph {
   nodes: NetworkNode[];
   edges: NetworkEdge[];
+}
+
+// ─── Deep network analysis (Phase 3) ──────────────────────────────────────────
+
+export interface NodeCentrality {
+  degree: number;
+  betweenness: number;
+  eigenvector: number;
+}
+
+export interface KingpinRow {
+  id: string;
+  label: string;
+  degree_centrality: number;
+  betweenness_centrality: number;
+  eigenvector_centrality: number;
+  kingpin_score: number;
+  case_count: number;
+  co_offender_count: number;
+  district_count: number;
+  community_id: number | null;
+}
+
+export interface NetworkPersonRef {
+  id: string;
+  label: string;
+}
+
+export interface CommunityRow {
+  community_id: number;
+  size: number;
+  top_members: NetworkPersonRef[];
+  dominant_crime_type: string | null;
+  district_ids: number[];
+  case_count: number;
+  cohesion: number;
+  active_from: string | null;
+  active_to: string | null;
+  likely_synthetic_artifact: boolean;
+}
+
+export interface ConnectionHop {
+  from: NetworkPersonRef;
+  to: NetworkPersonRef;
+  shared_case_count: number;
+  shared_cases: { case_master_id: number; date: string; station: string }[];
+}
+
+export interface ConnectionPath {
+  connected: boolean;
+  path: NetworkPersonRef[];
+  hops: ConnectionHop[];
+  path_length: number | null;
+}
+
+export interface PredictedLink {
+  source: NetworkPersonRef;
+  target: NetworkPersonRef;
+  adamic_adar_score: number;
+  label: "predicted_lead";
+  advisory: string;
 }
 
 // ─── KPI Metrics ─────────────────────────────────────────────────────────────

@@ -27,7 +27,7 @@ export function Sidebar({ active, onChange }: SidebarProps) {
   return (
     <aside
       className={cn(
-        "relative flex h-screen flex-col justify-between border-r border-white/5 bg-sidebar py-4 transition-[width] duration-200",
+        "relative flex h-screen flex-col justify-between border-r border-foreground/5 bg-sidebar py-4 transition-[width] duration-200",
         collapsed ? "w-14 items-center" : "w-48 items-stretch"
       )}
     >
@@ -47,9 +47,11 @@ export function Sidebar({ active, onChange }: SidebarProps) {
           )}
           <button
             onClick={() => setCollapsed((v) => !v)}
+            aria-label={t(collapsed ? "settings_expand_sidebar" : "settings_collapse_sidebar", locale)}
+            aria-expanded={!collapsed}
             title={t(collapsed ? "settings_expand_sidebar" : "settings_collapse_sidebar", locale)}
             className={cn(
-              "flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground",
+              "flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground",
               collapsed && "mt-0"
             )}
           >
@@ -67,12 +69,14 @@ export function Sidebar({ active, onChange }: SidebarProps) {
             return (
               <button
                 key={key}
+                aria-label={label}
+                aria-current={isActive ? "page" : undefined}
                 title={collapsed ? label : undefined}
                 onClick={() => onChange(key)}
                 className={cn(
-                  "group relative flex h-9 items-center rounded-md text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground",
+                  "group relative flex h-9 items-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground",
                   collapsed ? "w-9 justify-center" : "w-full gap-3 px-2.5",
-                  isActive && "bg-white/5 text-foreground"
+                  isActive && "bg-foreground/5 text-foreground"
                 )}
               >
                 {/* Active indicator */}

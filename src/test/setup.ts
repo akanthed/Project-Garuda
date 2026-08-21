@@ -1,5 +1,7 @@
-import { expect, afterEach, vi } from 'vitest';
+import { expect, afterEach, afterAll, beforeAll, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
+import '@testing-library/jest-dom/vitest';
+import * as React from 'react';
 
 // Cleanup after each test
 afterEach(() => {
@@ -42,21 +44,21 @@ vi.mock('maplibre-gl', () => ({
   GeolocateControl: vi.fn(),
 }));
 
-// Mock react-map-gl
-vi.mock('react-map-gl', () => {
-  const React = require('react');
+// Mock react-map-gl (the app imports the maplibre entrypoint; v8 has no root export)
+vi.mock('react-map-gl/maplibre', () => {
   return {
     Map: React.forwardRef(({ children }: any) => React.createElement('div', { 'data-testid': 'map-container' }, children)),
+    Marker: ({ children }: any) => React.createElement('div', { 'data-testid': 'map-marker' }, children),
     Source: React.forwardRef(({ children }: any) => React.createElement('div', { 'data-testid': 'map-source' }, children)),
     Layer: () => React.createElement('div', { 'data-testid': 'map-layer' }),
     Popup: ({ children }: any) => React.createElement('div', { 'data-testid': 'map-popup' }, children),
     NavigationControl: () => React.createElement('div', { 'data-testid': 'nav-control' }),
+    useControl: vi.fn(),
   };
 });
 
 // Mock react-force-graph
 vi.mock('react-force-graph-2d', () => {
-  const React = require('react');
   return {
     default: vi.fn().mockImplementation(({ nodeLabel, linkLabel }: any) =>
       React.createElement(
@@ -70,7 +72,6 @@ vi.mock('react-force-graph-2d', () => {
 
 // Mock deck.gl components
 vi.mock('@deck.gl/react', () => {
-  const React = require('react');
   return {
     DeckGL: ({ children, layers }: any) =>
       React.createElement(

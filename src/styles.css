@@ -147,7 +147,7 @@
 @utility glass-panel {
   background: color-mix(in oklab, var(--card) 60%, transparent);
   backdrop-filter: blur(14px) saturate(140%);
-  border: 1px solid color-mix(in oklab, white 6%, transparent);
+  border: 1px solid color-mix(in oklab, var(--foreground) 6%, transparent);
 }
 
 @utility text-glow-danger {
@@ -166,7 +166,7 @@
 
 @utility grid-noise {
   background-image:
-    linear-gradient(color-mix(in oklab, white 3%, transparent) 1px, transparent 1px),
-    linear-gradient(90deg, color-mix(in oklab, white 3%, transparent) 1px, transparent 1px);
+    linear-gradient(color-mix(in oklab, var(--foreground) 3%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in oklab, var(--foreground) 3%, transparent) 1px, transparent 1px);
   background-size: 32px 32px;
 }

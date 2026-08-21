@@ -3,11 +3,12 @@
 import { useState } from "react";
 import { Settings, Shield, Bell, Monitor, Globe2, Key, ChevronRight, Check, Sun, Moon } from "lucide-react";
 import { toast } from "sonner";
+import { useNavigate } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { t, type TranslationKey } from "@/lib/i18n";
-import { getSession } from "@/lib/auth";
+import { getSession, logout } from "@/lib/auth";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -51,11 +52,11 @@ function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void 
   return (
     <button
       onClick={() => onChange(!on)}
-      className={cn("relative h-5 w-9 rounded-full p-0.5 transition-colors", on ? "bg-primary/50" : "bg-white/10")}
+      className={cn("relative h-5 w-9 rounded-full p-0.5 transition-colors", on ? "bg-primary/50" : "bg-foreground/10")}
       aria-checked={on}
       role="switch"
     >
-      <div className={cn("h-4 w-4 rounded-full transition-transform", on ? "translate-x-4 bg-primary" : "translate-x-0 bg-white/40")} />
+      <div className={cn("h-4 w-4 rounded-full transition-transform", on ? "translate-x-4 bg-primary" : "translate-x-0 bg-foreground/40")} />
     </button>
   );
 }
@@ -75,11 +76,11 @@ function ToggleRow({ setting, value, onChange }: { setting: ToggleSetting; value
 
 function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-white/5 bg-card">
-      <div className="border-b border-white/5 px-5 py-3">
+    <div className="rounded-xl border border-foreground/5 bg-card">
+      <div className="border-b border-foreground/5 px-5 py-3">
         <div className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">{title}</div>
       </div>
-      <div className="divide-y divide-white/[0.03] px-5">{children}</div>
+      <div className="divide-y divide-foreground/[0.03] px-5">{children}</div>
     </div>
   );
 }
@@ -111,7 +112,7 @@ function ProfileSection() {
             <input
               readOnly
               value={value}
-              className="w-full rounded-md border border-white/5 bg-background/50 px-3 py-2 font-mono text-sm text-foreground outline-none"
+              className="w-full rounded-md border border-foreground/5 bg-background/50 px-3 py-2 font-mono text-sm text-foreground outline-none"
             />
           </div>
         ))}
@@ -149,7 +150,7 @@ function ThemeRow() {
         <div className="text-sm">{t("settings_theme_label", locale)}</div>
         <div className="mt-0.5 text-[11px] text-muted-foreground">{t("settings_theme_desc", locale)}</div>
       </div>
-      <div className="flex items-center gap-1 rounded-md border border-white/5 bg-background/40 p-0.5">
+      <div className="flex items-center gap-1 rounded-md border border-foreground/5 bg-background/40 p-0.5">
         <button
           onClick={() => setTheme("dark")}
           className={cn(
@@ -228,6 +229,7 @@ function IntegrationsSection() {
 
 function SecuritySection() {
   const { locale } = useLanguage();
+  const navigate = useNavigate();
   const sessionDetails: { labelKey: TranslationKey; value: string }[] = [
     { labelKey: "settings_session_token", value: "Active" },
     { labelKey: "settings_ip_address", value: "Browser session" },
@@ -245,7 +247,11 @@ function SecuritySection() {
         ))}
       </SectionCard>
       <button
-        onClick={() => toast(t("settings_session_ended", locale), { description: t("settings_redirecting", locale) })}
+        onClick={() => {
+          logout();
+          toast(t("settings_session_ended", locale), { description: t("settings_redirecting", locale) });
+          navigate({ to: "/login" });
+        }}
         className="rounded-md border border-rose-500/20 bg-rose-500/10 px-4 py-2.5 text-sm text-rose-400 transition hover:bg-rose-500/20"
       >
         {t("settings_end_session", locale)}
@@ -294,8 +300,8 @@ export function SettingsView() {
               className={cn(
                 "flex w-full items-center justify-between rounded-md px-3 py-2 text-sm transition-colors",
                 active === id
-                  ? "bg-white/5 text-foreground"
-                  : "text-muted-foreground hover:bg-white/[0.03] hover:text-foreground"
+                  ? "bg-foreground/5 text-foreground"
+                  : "text-muted-foreground hover:bg-foreground/[0.03] hover:text-foreground"
               )}
             >
               <div className="flex items-center gap-2.5">
@@ -307,9 +313,9 @@ export function SettingsView() {
           ))}
         </nav>
 
-        <div className="mt-6 rounded-lg border border-white/5 bg-card p-3">
+        <div className="mt-6 rounded-lg border border-foreground/5 bg-card p-3">
           <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">{t("settings_version", locale)}</div>
-          <div className="mt-1 font-mono text-xs">Garuda BLR v4.2.1</div>
+          <div className="mt-1 font-mono text-xs">Garuda v4.2.1</div>
           <div className="font-mono text-[10px] text-muted-foreground">build 0a4f9f · ap-south</div>
         </div>
       </div>

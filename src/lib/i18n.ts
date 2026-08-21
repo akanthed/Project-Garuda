@@ -22,8 +22,22 @@ export const translations = {
   nav_reports:    { en: "Reports",      kn: "ವರದಿಗಳು" },
   nav_settings:   { en: "Settings",     kn: "ಸೆಟ್ಟಿಂಗ್‌ಗಳು" },
 
+  // ─── Restricted-access blocks ──────────────────────────────────────────────
+  rbac_locked_network:   { en: "Criminal Link Analysis", kn: "ಅಪರಾಧ ಸಂಪರ್ಕ ವಿಶ್ಲೇಷಣೆ" },
+  rbac_locked_simulator: { en: "Command Simulator",      kn: "ಕಮಾಂಡ್ ಯೋಜಕ" },
+  rbac_requires_asi: {
+    en: "Available to Assistant Sub-Inspector rank and above",
+    kn: "ಸಹಾಯಕ ಉಪ-ನಿರೀಕ್ಷಕ ಮತ್ತು ಮೇಲ್ಪಟ್ಟ ಶ್ರೇಣಿಗೆ ಲಭ್ಯ",
+  },
+  rbac_requires_si: {
+    en: "Available to Sub-Inspector rank and above",
+    kn: "ಉಪ-ನಿರೀಕ್ಷಕ ಮತ್ತು ಮೇಲ್ಪಟ್ಟ ಶ್ರೇಣಿಗೆ ಲಭ್ಯ",
+  },
+
   // ─── TopBar ────────────────────────────────────────────────────────────────
-  topbar_intel:      { en: "Bengaluru City",        kn: "ಬೆಂಗಳೂರು ನಗರ" },
+  topbar_intel:      { en: "Karnataka Police Intelligence", kn: "ಕರ್ನಾಟಕ ಪೊಲೀಸ್ ಗುಪ್ತಚರ" },
+  topbar_scope_label:     { en: "District scope",       kn: "ಜಿಲ್ಲಾ ವ್ಯಾಪ್ತಿ" },
+  topbar_scope_statewide: { en: "All Karnataka",         kn: "ಎಲ್ಲಾ ಕರ್ನಾಟಕ" },
   topbar_overview:   { en: "Overview",               kn: "ಅವಲೋಕನ" },
   topbar_threatcon:  { en: "Alert Level: High",      kn: "ಎಚ್ಚರಿಕೆ ಮಟ್ಟ: ಹೆಚ್ಚು" },
   topbar_search:     { en: "Search cases or places…", kn: "ಪ್ರಕರಣ ಅಥವಾ ಸ್ಥಳ ಹುಡುಕಿ…" },
@@ -45,10 +59,29 @@ export const translations = {
   ask_tool_search_cases: { en: "Searched case records", kn: "ಪ್ರಕರಣ ದಾಖಲೆಗಳನ್ನು ಹುಡುಕಲಾಗಿದೆ" },
   ask_tool_show_hotspots: { en: "Analyzed hotspot evidence", kn: "ಹಾಟ್‌ಸ್ಪಾಟ್ ಸಾಕ್ಷ್ಯವನ್ನು ವಿಶ್ಲೇಷಿಸಲಾಗಿದೆ" },
   ask_tool_investigate_network: { en: "Investigated connected records", kn: "ಸಂಪರ್ಕಿತ ದಾಖಲೆಗಳನ್ನು ಪರಿಶೀಲಿಸಲಾಗಿದೆ" },
+  ask_tool_compare_districts: { en: "Compared districts", kn: "ಜಿಲ್ಲೆಗಳನ್ನು ಹೋಲಿಸಲಾಗಿದೆ" },
+  ask_tool_summarize_trends: { en: "Summarized trends", kn: "ಪ್ರವೃತ್ತಿಗಳ ಸಾರಾಂಶ" },
+  ask_tool_find_connection: { en: "Traced suspect connection", kn: "ಶಂಕಿತರ ಸಂಪರ್ಕ ಪತ್ತೆ" },
+  ask_tool_rank_offenders: { en: "Ranked network kingpins", kn: "ಜಾಲದ ಪ್ರಮುಖರನ್ನು ಶ್ರೇಣೀಕರಿಸಲಾಗಿದೆ" },
+  ask_tool_explain_correlations: { en: "Explained risk correlation", kn: "ಅಪಾಯದ ಸಂಬಂಧವನ್ನು ವಿವರಿಸಲಾಗಿದೆ" },
   ask_result_count: { en: "records", kn: "ದಾಖಲೆಗಳು" },
   ask_sample_hotspots: { en: "High-risk theft areas this month", kn: "ಈ ತಿಂಗಳ ಹೆಚ್ಚಿನ ಅಪಾಯದ ಕಳ್ಳತನ ಪ್ರದೇಶಗಳು" },
   ask_sample_network: { en: "Find repeat accused links", kn: "ಪುನರಾವರ್ತಿತ ಆರೋಪಿಗಳ ಸಂಪರ್ಕ ಹುಡುಕಿ" },
+  ask_sample_compare: { en: "Compare Mysuru and Bengaluru Urban", kn: "Mysuru ಮತ್ತು Bengaluru Urban ಹೋಲಿಸಿ" },
+  ask_sample_kingpins: { en: "Who are the top offenders", kn: "ಪ್ರಮುಖ ಅಪರಾಧಿಗಳು ಯಾರು" },
   ask_grounded_notice: { en: "AI plans the request. Garuda validates and runs approved tools.", kn: "AI ವಿನಂತಿಯನ್ನು ಯೋಜಿಸುತ್ತದೆ. ಗರುಡ ಪರಿಶೀಲಿಸಿ ಅನುಮೋದಿತ ಸಾಧನಗಳನ್ನು ಚಲಾಯಿಸುತ್ತದೆ." },
+  ask_trace_toggle: { en: "Show reasoning", kn: "ತಾರ್ಕಿಕತೆ ತೋರಿಸಿ" },
+  ask_trace_hide: { en: "Hide reasoning", kn: "ತಾರ್ಕಿಕತೆ ಮರೆಮಾಡಿ" },
+  ask_trace_interpret: { en: "Interpret", kn: "ವ್ಯಾಖ್ಯಾನ" },
+  ask_trace_execute: { en: "Execute", kn: "ಕಾರ್ಯಗತಗೊಳಿಸಿ" },
+  ask_trace_observe: { en: "Observe", kn: "ಗಮನಿಸಿ" },
+  ask_trace_answer: { en: "Answer", kn: "ಉತ್ತರ" },
+  ask_district: { en: "District", kn: "ಜಿಲ್ಲೆ" },
+  ask_cases: { en: "Cases", kn: "ಪ್ರಕರಣಗಳು" },
+  ask_arrest_rate: { en: "Arrest rate", kn: "ಬಂಧನ ದರ" },
+  ask_kingpin_score: { en: "Score", kn: "ಅಂಕ" },
+  ask_connected: { en: "Connected", kn: "ಸಂಪರ್ಕಿತ" },
+  ask_not_connected: { en: "Not connected", kn: "ಸಂಪರ್ಕವಿಲ್ಲ" },
   topbar_ask_failed: { en: "Ask Garuda failed",      kn: "ಗರುಡ ಹುಡುಕಾಟ ವಿಫಲವಾಗಿದೆ" },
   topbar_ask_failed_desc: { en: "Could not reach the backend.", kn: "ಬ್ಯಾಕೆಂಡ್ ಸಂಪರ್ಕಿಸಲಾಗಲಿಲ್ಲ." },
   topbar_export_title: { en: "Generate Intelligence Brief (PDF)", kn: "ಬುದ್ಧಿವಂತಿಕೆ ವರದಿ (PDF) ರಚಿಸಿ" },
@@ -62,11 +95,13 @@ export const translations = {
   kpi_criminal_nodes:   { en: "Cases Reviewed",     kn: "ಪರಿಶೀಲಿಸಿದ ಪ್ರಕರಣಗಳು" },
   kpi_hotspot_alerts:   { en: "Danger Area Alerts",  kn: "ಅಪಾಯದ ಪ್ರದೇಶ ಎಚ್ಚರಿಕೆ" },
   kpi_risk_volatility:  { en: "Risk Level",          kn: "ಅಪಾಯದ ಮಟ್ಟ" },
-  kpi_readiness:        { en: "Team Readiness",      kn: "ತಂಡದ ಸಿದ್ಧತೆ" },
+  kpi_readiness:        { en: "Arrest Rate",        kn: "ಬಂಧನ ಪ್ರಮಾಣ" },
 
   // ─── GeoMap ────────────────────────────────────────────────────────────────
   map_title:        { en: "Crime Map",                   kn: "ಅಪರಾಧ ನಕ್ಷೆ" },
-  map_subtitle:     { en: "Bengaluru City — Live Map",   kn: "ಬೆಂಗಳೂರು — ನೇರ ನಕ್ಷೆ" },
+  map_live_suffix:  { en: "Live Map",                     kn: "ನೇರ ನಕ್ಷೆ" },
+  map_subtitle_statewide: { en: "All Karnataka — Live Map", kn: "ಎಲ್ಲಾ ಕರ್ನಾಟಕ — ನೇರ ನಕ್ಷೆ" },
+  footer_secure_channel: { en: "secure channel",          kn: "ಸುರಕ್ಷಿತ ಸಂಪರ್ಕ" },
   map_layers:       { en: "Map Layers",                   kn: "ನಕ್ಷೆ ಪದರಗಳು" },
   map_threat_layer: { en: "Danger Areas",                 kn: "ಅಪಾಯದ ಪ್ರದೇಶಗಳು" },
   map_patrol_layer: { en: "Patrol Teams",                 kn: "ಗಸ್ತು ತಂಡಗಳು" },
@@ -89,7 +124,7 @@ export const translations = {
 
   // ─── LinkGraph ─────────────────────────────────────────────────────────────
   graph_title:      { en: "Suspect Connections",        kn: "ಶಂಕಿತರ ಸಂಪರ್ಕ" },
-  graph_subtitle:   { en: "Bengaluru Suspect Network",  kn: "ಬೆಂಗಳೂರು ಶಂಕಿತರ ಜಾಲ" },
+  graph_subtitle:   { en: "Karnataka Suspect Network",  kn: "ಕರ್ನಾಟಕ ಶಂಕಿತರ ಜಾಲ" },
   graph_type:       { en: "Type",                       kn: "ಪ್ರಕಾರ" },
   graph_risk:       { en: "Risk",                        kn: "ಅಪಾಯ" },
   graph_connections:{ en: "Connections",                 kn: "ಸಂಪರ್ಕಗಳು" },
@@ -111,6 +146,31 @@ export const translations = {
   graph_help_move:  { en: "Drag nodes to arrange the view. Click an empty area to clear the selected node.", kn: "ನೋಟವನ್ನು ಜೋಡಿಸಲು ನೋಡ್‌ಗಳನ್ನು ಎಳೆಯಿರಿ. ಆಯ್ಕೆ ತೆರವುಗೊಳಿಸಲು ಖಾಲಿ ಜಾಗದಲ್ಲಿ ಕ್ಲಿಕ್ ಮಾಡಿ." },
   graph_help_caution: { en: "Use this as an investigative lead and verify against the original case record.", kn: "ಇದನ್ನು ತನಿಖಾ ಸುಳಿವಾಗಿ ಬಳಸಿ ಮತ್ತು ಮೂಲ ಪ್ರಕರಣ ದಾಖಲೆಯೊಂದಿಗೆ ಪರಿಶೀಲಿಸಿ." },
 
+  // ─── Deep network analysis (Phase 3) ────────────────────────────────────────
+  graph_tab_inspect:      { en: "Inspector",              kn: "ಪರಿಶೋಧಕ" },
+  graph_tab_kingpins:     { en: "Kingpins",                kn: "ಪ್ರಮುಖರು" },
+  graph_tab_communities:  { en: "Syndicates",              kn: "ಜತ್ತೆಗಳು" },
+  graph_tab_connect:      { en: "Find Connection",         kn: "ಸಂಪರ್ಕ ಹುಡುಕಿ" },
+  graph_tab_predicted:    { en: "Predicted Leads",         kn: "ಮುನ್ಸೂಚಿತ ಸುಳಿವುಗಳು" },
+  graph_degree:           { en: "Degree",                  kn: "ಡಿಗ್ರಿ" },
+  graph_betweenness:      { en: "Betweenness",             kn: "ಮಧ್ಯಸ್ಥಿತಿ" },
+  graph_eigenvector:      { en: "Eigenvector",             kn: "ಐಗನ್‌ವೆಕ್ಟರ್" },
+  graph_kingpin_score:    { en: "Kingpin score",           kn: "ಪ್ರಮುಖತೆ ಅಂಕ" },
+  graph_community:        { en: "Syndicate",               kn: "ಜತ್ತೆ" },
+  graph_case_count:       { en: "Cases",                   kn: "ಪ್ರಕರಣಗಳು" },
+  graph_district_spread:  { en: "Districts",               kn: "ಜಿಲ್ಲೆಗಳು" },
+  graph_cohesion:         { en: "Cohesion",                kn: "ಸಂಯೋಜಕತೆ" },
+  graph_active_period:    { en: "Active period",           kn: "ಸಕ್ರಿಯ ಅವಧಿ" },
+  graph_dominant_crime:   { en: "Dominant crime type",     kn: "ಪ್ರಮುಖ ಅಪರಾಧ ಪ್ರಕಾರ" },
+  graph_synthetic_flag:   { en: "Large cluster — likely a synthetic-data artifact, not a real syndicate", kn: "ದೊಡ್ಡ ಗುಂಪು — ಇದು ಕೃತಕ ದತ್ತಾಂಶದ ಪರಿಣಾಮವಿರಬಹುದು, ನಿಜವಾದ ಜತ್ತೆಯಲ್ಲ" },
+  graph_find_connection_action: { en: "Find connection",   kn: "ಸಂಪರ್ಕ ಹುಡುಕಿ" },
+  graph_source_suspect:   { en: "First suspect",           kn: "ಮೊದಲ ಶಂಕಿತ" },
+  graph_target_suspect:   { en: "Second suspect",          kn: "ಎರಡನೇ ಶಂಕಿತ" },
+  graph_no_path:          { en: "No recorded connection found between these two suspects.", kn: "ಈ ಇಬ್ಬರು ಶಂಕಿತರ ನಡುವೆ ಯಾವುದೇ ಸಂಪರ್ಕ ದಾಖಲಾಗಿಲ್ಲ." },
+  graph_shared_cases:     { en: "Shared cases",            kn: "ಹಂಚಿಕೆಯ ಪ್ರಕರಣಗಳು" },
+  graph_color_by_community: { en: "Color by syndicate",    kn: "ಜತ್ತೆಯ ಪ್ರಕಾರ ಬಣ್ಣ" },
+  graph_predicted_lead_pill: { en: "Predicted lead",       kn: "ಮುನ್ಸೂಚಿತ ಸುಳಿವು" },
+
   // ─── Simulator ─────────────────────────────────────────────────────────────
   sim_title:         { en: "What-If Planner",       kn: "ಏನಾದರೆ ಯೋಜಕ" },
   sim_impact_label:  { en: "Expected Result",        kn: "ನಿರೀಕ್ಷಿತ ಫಲಿತಾಂಶ" },
@@ -119,7 +179,7 @@ export const translations = {
   sim_running:       { en: "Calculating…",           kn: "ಲೆಕ್ಕ ಹಾಕಲಾಗುತ್ತಿದೆ…" },
   sim_baseline:      { en: "Based on the last 30 days", kn: "ಕಳೆದ 30 ದಿನಗಳ ಆಧಾರದ ಮೇಲೆ" },
   sim_running_toast: { en: "Running scenario estimate…", kn: "ಸನ್ನಿವೇಶ ಅಂದಾಜು ನಡೆಯುತ್ತಿದೆ…" },
-  sim_comparing:     { en: "Comparing resource settings across Bengaluru sectors.", kn: "ಬೆಂಗಳೂರು ವಲಯಗಳಾದ್ಯಂತ ಸಂಪನ್ಮೂಲ ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ಹೋಲಿಸಲಾಗುತ್ತಿದೆ." },
+  sim_comparing:     { en: "Comparing resource settings across sectors", kn: "ವಲಯಗಳಾದ್ಯಂತ ಸಂಪನ್ಮೂಲ ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ಹೋಲಿಸಲಾಗುತ್ತಿದೆ" },
   sim_complete:      { en: "Simulation complete",     kn: "ಸಿಮ್ಯುಲೇಷನ್ ಪೂರ್ಣಗೊಂಡಿದೆ" },
   sim_dashboard_result: { en: "Scenario result",      kn: "ಸನ್ನಿವೇಶ ಫಲಿತಾಂಶ" },
   sim_dashboard_applied: { en: "Map risk indicators now reflect this scenario.", kn: "ನಕ್ಷೆಯ ಅಪಾಯ ಗುರುತುಗಳು ಈಗ ಈ ಸನ್ನಿವೇಶವನ್ನು ತೋರಿಸುತ್ತವೆ." },
@@ -129,7 +189,7 @@ export const translations = {
   sim_estimate_range:{ en: "Estimate range",          kn: "ಅಂದಾಜು ವ್ಯಾಪ್ತಿ" },
   sim_assumption:    { en: "Scenario estimate only; not a validated causal effect.", kn: "ಸನ್ನಿವೇಶದ ಅಂದಾಜು ಮಾತ್ರ; ದೃಢೀಕೃತ ಕಾರಣಿಕ ಪರಿಣಾಮವಲ್ಲ." },
   sim_patrol_density: { en: "Patrol Density",          kn: "ಗಸ್ತು ಸಾಂದ್ರತೆ" },
-  sim_patrol_hint:    { en: "Active units per km² · Bengaluru City", kn: "ಪ್ರತಿ ಕಿಮೀ² ಗೆ ಸಕ್ರಿಯ ಘಟಕಗಳು · ಬೆಂಗಳೂರು ನಗರ" },
+  sim_patrol_hint:    { en: "Active units per km²", kn: "ಪ್ರತಿ ಕಿಮೀ² ಗೆ ಸಕ್ರಿಯ ಘಟಕಗಳು" },
   sim_infra_health:   { en: "Infrastructure Health",   kn: "ಮೂಲಸೌಕರ್ಯ ಸ್ಥಿತಿ" },
   sim_infra_hint:     { en: "Critical asset integrity (lighting, CCTV)", kn: "ನಿರ್ಣಾಯಕ ಆಸ್ತಿ ಸಮಗ್ರತೆ (ಬೆಳಕು, CCTV)" },
   sim_response_units: { en: "Rapid Response Units",     kn: "ತ್ವರಿತ ಪ್ರತಿಕ್ರಿಯೆ ಘಟಕಗಳು" },
@@ -186,7 +246,7 @@ export const translations = {
 
   // ─── Reports ───────────────────────────────────────────────────────────────
   reports_title:     { en: "Case Reports",                    kn: "ಪ್ರಕರಣ ವರದಿಗಳು" },
-  reports_subtitle:  { en: "Karnataka State Police — Bengaluru", kn: "ಕರ್ನಾಟಕ ರಾಜ್ಯ ಪೊಲೀಸ್ — ಬೆಂಗಳೂರು" },
+  reports_subtitle:  { en: "Karnataka State Police", kn: "ಕರ್ನಾಟಕ ರಾಜ್ಯ ಪೊಲೀಸ್" },
   reports_workflow_hint: { en: "Review, assign, and track case workflow", kn: "ಪ್ರಕರಣ ಕಾರ್ಯಪ್ರವಾಹವನ್ನು ಪರಿಶೀಲಿಸಿ, ನಿಯೋಜಿಸಿ ಮತ್ತು ಟ್ರ್ಯಾಕ್ ಮಾಡಿ" },
   reports_refresh:   { en: "Refresh",                          kn: "ಪುನಃ ಲೋಡ್ ಮಾಡಿ" },
   reports_search:    { en: "Search by case, ID, or area…",    kn: "ಪ್ರಕರಣ, ID, ಅಥವಾ ಪ್ರದೇಶದ ಮೂಲಕ ಹುಡುಕಿ…" },
@@ -381,6 +441,17 @@ export const translations = {
   map_layer_historical: { en: "Historical",         kn: "ಹಿಂದಿನ ದತ್ತಾಂಶ" },
   map_layer_predicted:  { en: "Predicted (30d)",    kn: "ಮುನ್ಸೂಚನೆ (30 ದಿನ)" },
 
+  // ─── Forecast model validation (Phase 4) ────────────────────────────────────
+  map_model_validation_open: { en: "View model validation", kn: "ಮಾದರಿ ಪರಿಶೀಲನೆ ನೋಡಿ" },
+  map_model_validation_title: { en: "Forecast model validation", kn: "ಮುನ್ಸೂಚನೆ ಮಾದರಿ ಪರಿಶೀಲನೆ" },
+  map_model_deployed: { en: "Deployed", kn: "ಬಳಕೆಯಲ್ಲಿದೆ" },
+  map_model_mae:      { en: "MAE",  kn: "MAE" },
+  map_model_mape:     { en: "MAPE", kn: "MAPE" },
+  map_model_pai:      { en: "PAI",  kn: "PAI" },
+  map_model_pei:      { en: "PEI",  kn: "PEI" },
+  map_model_test_months: { en: "held-out months", kn: "ಪರೀಕ್ಷಾ ತಿಂಗಳುಗಳು" },
+  map_model_feedback_loop_title: { en: "Feedback-loop risk", kn: "ಪ್ರತಿಕ್ರಿಯಾ ಲೂಪ್ ಅಪಾಯ" },
+
   // ─── Ask Garuda (NL search) ────────────────────────────────────────────────
   ask_placeholder:  { en: "Ask about cases, hotspots, or links…", kn: "ಪ್ರಕರಣಗಳು, ಹಾಟ್‌ಸ್ಪಾಟ್‌ಗಳು ಅಥವಾ ಸಂಪರ್ಕಗಳ ಬಗ್ಗೆ ಕೇಳಿ…" },
   ask_thinking:     { en: "Searching case records…", kn: "ಪ್ರಕರಣ ದಾಖಲೆ ಹುಡುಕಲಾಗುತ್ತಿದೆ…" },
@@ -392,5 +463,10 @@ export type TranslationKey = keyof typeof translations;
 /** Convenience helper used inside components */
 export function t(key: TranslationKey, locale: Locale): string {
   return translations[key][locale];
+}
+
+/** District names come from the API, so they are localised here rather than by key. */
+export function districtName(district: { name: string; name_kn?: string }, locale: Locale): string {
+  return locale === "kn" ? district.name_kn || district.name : district.name;
 }
 

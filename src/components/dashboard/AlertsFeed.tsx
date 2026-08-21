@@ -5,6 +5,7 @@ import { AlertTriangle, ArrowUpRight, ShieldAlert, Info, ClipboardCheck } from "
 import { fetchAnomalies } from "@/lib/mock-api";
 import type { StationAnomaly } from "@/lib/types";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useScope } from "@/contexts/ScopeContext";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -17,19 +18,21 @@ interface AlertsFeedProps {
 
 export function AlertsFeed({ onOpenView, onOpenBrief }: AlertsFeedProps) {
   const { locale } = useLanguage();
+  const { districtId } = useScope();
   const [anomalies, setAnomalies] = useState<StationAnomaly[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchAnomalies().then(({ data }) => {
+    setLoading(true);
+    fetchAnomalies({ districtId }).then(({ data }) => {
       setAnomalies(data);
       setLoading(false);
     });
-  }, []);
+  }, [districtId]);
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-xl border border-white/5 bg-card">
-      <div className="flex items-center justify-between border-b border-white/5 px-5 py-3">
+    <div className="flex h-full flex-col overflow-hidden rounded-xl border border-foreground/5 bg-card">
+      <div className="flex items-center justify-between border-b border-foreground/5 px-5 py-3">
         <div>
           <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
             <ShieldAlert className="h-3.5 w-3.5 text-[var(--danger)]" />
@@ -37,7 +40,7 @@ export function AlertsFeed({ onOpenView, onOpenBrief }: AlertsFeedProps) {
           </div>
           <div className="mt-0.5 text-sm font-medium">{t("alerts_subtitle", locale)}</div>
         </div>
-        <span className="rounded-full border border-white/10 px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
+        <span className="rounded-full border border-foreground/10 px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
           z-score
         </span>
       </div>
@@ -45,7 +48,7 @@ export function AlertsFeed({ onOpenView, onOpenBrief }: AlertsFeedProps) {
       <div className="flex-1 space-y-1.5 overflow-y-auto p-3">
         {loading ? (
           Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-14 animate-pulse rounded-lg border border-white/5 bg-white/[0.02]" />
+            <div key={i} className="h-14 animate-pulse rounded-lg border border-foreground/5 bg-foreground/[0.02]" />
           ))
         ) : anomalies.length === 0 ? (
           <div className="flex h-full items-center justify-center py-8 text-center text-xs text-muted-foreground">
@@ -55,7 +58,7 @@ export function AlertsFeed({ onOpenView, onOpenBrief }: AlertsFeedProps) {
           anomalies.slice(0, 5).map((a) => (
             <div
               key={a.station_id}
-              className="flex items-center gap-2 rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2.5 transition hover:border-[var(--danger)]/30 hover:bg-white/[0.04]"
+              className="flex items-center gap-2 rounded-lg border border-foreground/5 bg-foreground/[0.02] px-3 py-2.5 transition hover:border-[var(--danger)]/30 hover:bg-foreground/[0.04]"
             >
               <button
                 onClick={() => onOpenBrief?.(a)}
@@ -104,15 +107,15 @@ export function AlertsFeed({ onOpenView, onOpenBrief }: AlertsFeedProps) {
                     type="button"
                     title={t("alerts_anomaly_help", locale)}
                     aria-label={t("alerts_anomaly_help", locale)}
-                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition hover:bg-white/5 hover:text-foreground"
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition hover:bg-foreground/5 hover:text-foreground"
                   >
                     <Info className="h-3.5 w-3.5" />
                   </button>
                 </PopoverTrigger>
-                <PopoverContent align="end" className="w-80 border-white/10 bg-background/95 p-4 text-xs backdrop-blur-sm">
+                <PopoverContent align="end" className="w-80 border-foreground/10 bg-background/95 p-4 text-xs backdrop-blur-sm">
                   <div className="font-medium text-foreground">{t("alerts_anomaly_help", locale)}</div>
                   <p className="mt-2 leading-relaxed text-muted-foreground">{t("alerts_anomaly_explainer", locale)}</p>
-                  <p className="mt-2 border-t border-white/5 pt-2 text-muted-foreground">{t("alerts_anomaly_action", locale)}</p>
+                  <p className="mt-2 border-t border-foreground/5 pt-2 text-muted-foreground">{t("alerts_anomaly_action", locale)}</p>
                   <div className="mt-3 font-mono text-[10px] text-muted-foreground">
                     {t("alerts_diagnostic", locale)}: z={a.z_score}
                   </div>
@@ -126,7 +129,7 @@ export function AlertsFeed({ onOpenView, onOpenBrief }: AlertsFeedProps) {
       {onOpenView && (
         <button
           onClick={() => onOpenView("network")}
-          className="border-t border-white/5 px-5 py-2.5 text-left text-[11px] text-muted-foreground transition hover:text-primary"
+          className="border-t border-foreground/5 px-5 py-2.5 text-left text-[11px] text-muted-foreground transition hover:text-primary"
         >
           {t("overview_open_network", locale)}
         </button>

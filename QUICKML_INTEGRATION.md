@@ -67,25 +67,89 @@ Zoho documents Zia AutoML as unavailable in the IN data center. If `zia_automl_t
 
 ## Console Setup
 
-1. Open Catalyst QuickML in the same IN data-center organization as Garuda.
-2. Open **Generative AI > LLM Serving > Models**.
-3. Select **Qwen 2.5 - 14B Instruct**.
-4. Open **Model Details > API Details**.
-5. Copy the endpoint URL, endpoint key, model name, exact sample request, and exact sample response.
-6. Create an OAuth client with scope `QuickML.deployment.READ` and obtain an access token.
-7. Set these AppSail environment variables in the Catalyst Console:
+**Verified live 2026-08-21 against this project's actual Console** (models offered can change over time —
+`Qwen 2.5 - 14B Instruct` from the original plan is no longer listed; `GLM-4.7-Flash` and
+`Qwen 3.6 - 35B Vision Language` are the two current options). `GLM-4.7-Flash` was chosen: it's
+explicitly documented as optimized for "agent workflows" and is the lighter/cheaper of the two,
+which fits a simple JSON-intent-classification task better than a 35B vision-language model.
+
+1. Open Catalyst QuickML in the same IN data-center organization as Garuda (`#/quickml` → **LLM Serving**).
+2. Select the model card (currently `GLM-4.7-Flash`).
+3. Open **Model Details** for the endpoint URL, OAuth scope, and headers; open **Sample Request and
+   Response** for the exact request/response body shape — the two tabs are separate, don't assume
+   Model Details alone has everything.
+4. **Preferred: set up Catalyst Connections instead of a static token** (does this automatically,
+   see below) — avoids the manual OAuth token exchange and the "token expires before judging" risk
+   entirely. If Connections isn't available, fall back to steps 5-7 below (a static access token).
+
+### Preferred: Catalyst Connections (auto-refreshed, no manual token management)
+
+Console → Cloud Scale → Connections → Create Connection → **Default Services** tab → search
+"Catalyst by Zoho" (this exact pre-built connector covers all internal Catalyst OAuth scopes,
+including `QuickML.deployment.READ` — no need for the "Custom Services" tab or a manually-created
+OAuth client). Give it a name and a Connection Link Name (e.g. `garudaquickml`), check
+`QuickML.deployment.READ` under scopes, click **Create and Connect**, then click **Connect** on the
+resulting connection page. No client ID/secret step is needed — Catalyst manages the underlying
+first-party OAuth client for its own services. Status should read **Connected**.
+
+Then set only these two AppSail environment variables (no `QUICKML_ACCESS_TOKEN`/`QUICKML_ORG_ID`
+needed for this path):
 
 ```text
-QUICKML_LLM_ENDPOINT=<API Details endpoint URL>
-QUICKML_ENDPOINT_KEY=<API Details endpoint key>
-QUICKML_ACCESS_TOKEN=<OAuth access token>
-QUICKML_ORG_ID=<Catalyst organization ID>
-QUICKML_MODEL=<model name from API Details>
+QUICKML_LLM_ENDPOINT=https://api.catalyst.zoho.in/quickml/v1/project/<project_id>/glm/chat
+QUICKML_MODEL=<model field from the Sample Request, e.g. crm-di-glm47b_30b_it>
+QUICKML_CONNECTION_LINK_NAME=garudaquickml   # optional, this is the default
 ```
 
-Do not commit these values. OAuth access tokens expire; use the console's recommended refresh-token flow for production. For the hackathon demo, refresh the token shortly before judging.
+At request time, `backend/main.py`'s `_quickml_connection_headers(capp)` calls
+`capp.connections().get_connection_credentials(QUICKML_CONNECTION_LINK_NAME)`, which returns
+`{"connections": {"headers": {...}, "parameters": {...}}}` — a ready-to-use `Authorization` header
+with a live, Catalyst-refreshed token. This requires `capp` (a real per-request Catalyst app
+instance, per the standing per-request-initialize pattern in this repo — see repo memory), so it
+only activates when actually running on Catalyst AppSail; local/non-Catalyst dev falls through to
+the static-token path below.
 
-The public documentation describes the fields but renders the exact request/response sample inside the authenticated Model Details panel. Compare that sample with `_quickml_plan_sync()` in `backend/main.py`. If the console uses a field other than `prompt`, update only the request body and `_extract_quickml_text()` response adapter.
+### Fallback: static access token (manual refresh required)
+
+Only needed if Connections isn't set up. Create an OAuth client with scope
+`QuickML.deployment.READ` and obtain an access token, then set these AppSail environment variables:
+
+```text
+QUICKML_LLM_ENDPOINT=https://api.catalyst.zoho.in/quickml/v1/project/<project_id>/glm/chat
+QUICKML_ACCESS_TOKEN=<OAuth access token>
+QUICKML_ORG_ID=<Catalyst organization ID, e.g. from CATALYST-ORG header shown in Model Details>
+QUICKML_MODEL=<model field from the Sample Request, e.g. crm-di-glm47b_30b_it>
+```
+
+`QUICKML_ENDPOINT_KEY` is **not required** for this model — the live Model Details panel only lists
+`CATALYST-ORG` and `Authorization: Zoho-oauthtoken <token>` as headers, no separate endpoint key. The
+code still supports it as an optional header (only sent if the env var is set) in case a future model
+requires one — don't assume it's needed by default.
+
+Do not commit these values. **This token expires in ~1 hour with no auto-refresh** — this is exactly
+why Connections (above) is the preferred path; only use this fallback if Connections is unavailable,
+and refresh the token shortly before judging if you do.
+
+**Request/response contract is an OpenAI-style chat completion, not a flat `prompt` field** — confirmed
+directly from the Console's "Sample Request and Response" tab:
+
+```json
+{
+  "model": "crm-di-glm47b_30b_it",
+  "messages": [
+    {"role": "system", "content": "..."},
+    {"role": "user", "content": "..."}
+  ],
+  "max_tokens": 300,
+  "temperature": 0.1,
+  "stream": false
+}
+```
+
+Response: standard `choices[0].message.content` chat-completion shape. `_quickml_plan_sync()` in
+`backend/main.py` sends this exact request shape; `_extract_quickml_text()` already recursively finds
+`content` inside `choices[0].message` without any change needed — it was written generically enough to
+handle this response shape by coincidence, but that was verified, not assumed.
 
 ## Verification
 
@@ -101,10 +165,20 @@ Only claim active QuickML generative AI after step 5 succeeds in the deployed ap
 
 ## Safety Boundary
 
-QuickML may choose one of three actions:
+QuickML may choose one of eight allowlisted actions:
 
 - `search_cases`
 - `show_hotspots`
 - `investigate_network`
+- `compare_districts`
+- `summarize_trends`
+- `find_connection`
+- `rank_offenders`
+- `explain_correlations`
 
-Pydantic rejects other actions, malformed time windows, invalid languages, and confidence outside 0-1. The model never receives credentials and cannot issue ZCQL. The backend applies filters to loaded records and labels every response with its source.
+Pydantic rejects other actions, malformed time windows, invalid languages, invalid `district_ids`
+(silently dropped by a `field_validator` rather than trusted), and confidence outside 0-1. The model
+never receives credentials and cannot issue ZCQL. The backend applies filters to loaded records and
+labels every response with its source. Every `/api/ask` call also returns a `trace` array (interpret →
+execute → observe → answer), so the plan the model chose and the tool that actually ran are both
+inspectable, not just the final answer.

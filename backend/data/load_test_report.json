@@ -1,0 +1,205 @@
+{
+  "target": "http://localhost:8099",
+  "generated_at": "2026-08-20T23:43:16",
+  "endpoints_tested": [
+    "/health",
+    "/api/kpis",
+    "/api/hotspots",
+    "/api/districts",
+    "/api/anomalies",
+    "/api/network/kingpins",
+    "/api/network/communities?max_size=30"
+  ],
+  "cold_start": {
+    "cold_start_seconds": 6.84,
+    "timed_out": false
+  },
+  "levels": [
+    {
+      "concurrency": 10,
+      "total_requests": 350,
+      "wall_seconds": 10.21,
+      "throughput_rps": 34.27,
+      "error_rate_percent": 0.0,
+      "p50_ms": 128.7,
+      "p95_ms": 886.3,
+      "p99_ms": 913.1,
+      "max_ms": 918.4,
+      "server_memory_rss": {
+        "min_mb": 232.3,
+        "max_mb": 245.6,
+        "avg_mb": 242.4,
+        "samples": 47
+      },
+      "per_endpoint": {
+        "/health": {
+          "count": 50,
+          "errors": 0,
+          "p50_ms": 183.4,
+          "p95_ms": 594.8
+        },
+        "/api/kpis": {
+          "count": 50,
+          "errors": 0,
+          "p50_ms": 39.2,
+          "p95_ms": 237.5
+        },
+        "/api/hotspots": {
+          "count": 50,
+          "errors": 0,
+          "p50_ms": 48.7,
+          "p95_ms": 93.9
+        },
+        "/api/districts": {
+          "count": 50,
+          "errors": 0,
+          "p50_ms": 38.4,
+          "p95_ms": 140.3
+        },
+        "/api/anomalies": {
+          "count": 50,
+          "errors": 0,
+          "p50_ms": 142.0,
+          "p95_ms": 802.1
+        },
+        "/api/network/kingpins": {
+          "count": 50,
+          "errors": 0,
+          "p50_ms": 750.0,
+          "p95_ms": 896.6
+        },
+        "/api/network/communities?max_size=30": {
+          "count": 50,
+          "errors": 0,
+          "p50_ms": 749.3,
+          "p95_ms": 913.1
+        }
+      },
+      "sample_errors": []
+    },
+    {
+      "concurrency": 50,
+      "total_requests": 1750,
+      "wall_seconds": 51.1,
+      "throughput_rps": 34.24,
+      "error_rate_percent": 0.0,
+      "p50_ms": 1380.9,
+      "p95_ms": 1994.7,
+      "p99_ms": 2156.4,
+      "max_ms": 2486.6,
+      "server_memory_rss": {
+        "min_mb": 242.6,
+        "max_mb": 258.0,
+        "avg_mb": 249.2,
+        "samples": 232
+      },
+      "per_endpoint": {
+        "/api/hotspots": {
+          "count": 250,
+          "errors": 0,
+          "p50_ms": 1055.8,
+          "p95_ms": 1241.2
+        },
+        "/health": {
+          "count": 250,
+          "errors": 0,
+          "p50_ms": 1575.2,
+          "p95_ms": 1923.7
+        },
+        "/api/districts": {
+          "count": 250,
+          "errors": 0,
+          "p50_ms": 1055.8,
+          "p95_ms": 1244.6
+        },
+        "/api/kpis": {
+          "count": 250,
+          "errors": 0,
+          "p50_ms": 1180.8,
+          "p95_ms": 1402.7
+        },
+        "/api/anomalies": {
+          "count": 250,
+          "errors": 0,
+          "p50_ms": 1405.8,
+          "p95_ms": 1733.8
+        },
+        "/api/network/kingpins": {
+          "count": 250,
+          "errors": 0,
+          "p50_ms": 1833.4,
+          "p95_ms": 2087.5
+        },
+        "/api/network/communities?max_size=30": {
+          "count": 250,
+          "errors": 0,
+          "p50_ms": 1926.8,
+          "p95_ms": 2131.5
+        }
+      },
+      "sample_errors": []
+    },
+    {
+      "concurrency": 100,
+      "total_requests": 3500,
+      "wall_seconds": 101.58,
+      "throughput_rps": 34.46,
+      "error_rate_percent": 0.0,
+      "p50_ms": 2933.5,
+      "p95_ms": 3275.6,
+      "p99_ms": 3351.6,
+      "max_ms": 3378.3,
+      "server_memory_rss": {
+        "min_mb": 241.2,
+        "max_mb": 273.6,
+        "avg_mb": 250.2,
+        "samples": 461
+      },
+      "per_endpoint": {
+        "/health": {
+          "count": 500,
+          "errors": 0,
+          "p50_ms": 2973.9,
+          "p95_ms": 3301.6
+        },
+        "/api/kpis": {
+          "count": 500,
+          "errors": 0,
+          "p50_ms": 2978.6,
+          "p95_ms": 3305.1
+        },
+        "/api/hotspots": {
+          "count": 500,
+          "errors": 0,
+          "p50_ms": 2989.6,
+          "p95_ms": 3322.9
+        },
+        "/api/districts": {
+          "count": 500,
+          "errors": 0,
+          "p50_ms": 2657.8,
+          "p95_ms": 3016.0
+        },
+        "/api/anomalies": {
+          "count": 500,
+          "errors": 0,
+          "p50_ms": 2579.8,
+          "p95_ms": 2929.6
+        },
+        "/api/network/kingpins": {
+          "count": 500,
+          "errors": 0,
+          "p50_ms": 2885.7,
+          "p95_ms": 3241.7
+        },
+        "/api/network/communities?max_size=30": {
+          "count": 500,
+          "errors": 0,
+          "p50_ms": 2985.2,
+          "p95_ms": 3320.6
+        }
+      },
+      "sample_errors": []
+    }
+  ]
+}

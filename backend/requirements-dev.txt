@@ -1,2 +1,5 @@
 -r requirements.txt
 faker>=25.0.0
+psutil>=6.0.0
+requests>=2.30.0
+

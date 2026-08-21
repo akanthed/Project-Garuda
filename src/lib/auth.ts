@@ -29,6 +29,15 @@ const API_BASE = import.meta.env.VITE_API_URL as string | undefined;
 const SESSION_KEY = "ksp_session";
 const TOKEN_KEY = "ksp_token";
 
+if (import.meta.env.PROD && !API_BASE) {
+  // eslint-disable-next-line no-console
+  console.error(
+    "VITE_API_URL is not set in this production build — officer credentials cannot be " +
+    "verified server-side. The local demo-credential registry is dev-only and is not " +
+    "included in this bundle, so login will fail closed rather than fall back to it."
+  );
+}
+
 // ─── Clearance → permission map (used only by the local dev fallback) ────────
 
 function permissionsFor(clearance: ClearanceLevel): Pick<Officer, "canExport" | "canSimulate" | "canViewNetwork"> {
@@ -41,10 +50,13 @@ function permissionsFor(clearance: ClearanceLevel): Pick<Officer, "canExport" | 
 }
 
 // ─── Local dev-only fallback registry ─────────────────────────────────────────
-// Only used when no backend is configured (VITE_API_URL unset). Never used in
-// a deployed build, since VITE_API_URL is required for a real Catalyst deploy.
+// Only used when no backend is configured (VITE_API_URL unset) AND the app was
+// built in dev mode. Gated behind `import.meta.env.DEV` (a compile-time constant
+// Vite/Rollup replaces with `false` in production builds), so this whole block —
+// including the plaintext demo passwords — is dead-code-eliminated from any
+// production bundle, not just conditionally skipped at runtime.
 
-const DEV_FALLBACK_REGISTRY: Record<string, { password: string; profile: Omit<Officer, "canExport" | "canSimulate" | "canViewNetwork"> }> = {
+const DEV_FALLBACK_REGISTRY: Record<string, { password: string; profile: Omit<Officer, "canExport" | "canSimulate" | "canViewNetwork"> }> = import.meta.env.DEV ? {
   "KSP-BLR-7741": {
     password: "sentinel2026",
     profile: {
@@ -77,7 +89,7 @@ const DEV_FALLBACK_REGISTRY: Record<string, { password: string; profile: Omit<Of
       clearance: "CLR-7", node: "KSP-HQ",
     },
   },
-};
+} : {};
 
 export async function login(badge: string, password: string): Promise<Officer | null> {
   if (API_BASE) {
@@ -97,7 +109,9 @@ export async function login(badge: string, password: string): Promise<Officer | 
     }
   }
 
-  // Local dev fallback (no backend configured)
+  // Local dev fallback (no backend configured) — dead-code-eliminated from
+  // production bundles (see DEV_FALLBACK_REGISTRY above), so this always
+  // fails closed (returns null) in a real deployed build.
   const entry = DEV_FALLBACK_REGISTRY[badge.toUpperCase()];
   if (!entry || entry.password !== password) return null;
   const officer: Officer = { ...entry.profile, ...permissionsFor(entry.profile.clearance) };
