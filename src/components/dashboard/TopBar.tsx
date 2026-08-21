@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
 import { Bot, LogOut, FileDown, Loader2, ArrowRight, Moon, Sun, Send, Sparkles, ShieldCheck, X } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "@tanstack/react-router";
@@ -8,6 +8,14 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useScope } from "@/contexts/ScopeContext";
 import { t, type TranslationKey } from "@/lib/i18n";
 import { exportBrief, askGaruda } from "@/lib/mock-api";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import type { AskResponse, KpiMetric } from "@/lib/types";
 import type { ViewKey } from "@/components/dashboard/Sidebar";
 
@@ -54,6 +62,12 @@ export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
   const [chatOpen, setChatOpen] = useState(false);
   const [conversation, setConversation] = useState<ChatMessage[]>([]);
   const [expandedTraces, setExpandedTraces] = useState<Set<string>>(new Set());
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+  }, [conversation, asking]);
 
   const toggleTrace = (id: string) => {
     setExpandedTraces((prev) => {
@@ -67,6 +81,23 @@ export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
     logout();
     toast(t("settings_session_ended", locale), { description: t("settings_redirecting", locale) });
     navigate({ to: "/login" });
+  };
+
+  const handleAsk = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const question = q.trim();
+    if (!question || asking) return;
+    setAsking(true);
+    setConversation((messages) => [...messages, { id: crypto.randomUUID(), role: "user", text: question }]);
+    setQ("");
+    try {
+      const { data } = await askGaruda(question);
+      setConversation((messages) => [...messages, { id: crypto.randomUUID(), role: "assistant", text: data.answer, result: data }]);
+    } catch {
+      toast.error(t("topbar_ask_failed", locale), { description: t("topbar_ask_failed_desc", locale) });
+    } finally {
+      setAsking(false);
+    }
   };
 
   const handleExport = async () => {
@@ -104,7 +135,7 @@ export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
   };
 
   return (
-    <header className="flex min-w-0 items-center justify-between border-b border-white/5 px-3 py-3 sm:px-6">
+    <header className="flex min-w-0 items-center justify-between border-b border-foreground/5 px-3 py-3 sm:px-6">
       <div className="flex min-w-0 items-center gap-3">
         <div className="text-[11px] font-mono uppercase tracking-[0.2em] text-muted-foreground">
           {t("topbar_intel", locale)}
@@ -128,58 +159,47 @@ export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
-        <div className="relative">
-          <button
-            onClick={() => setChatOpen((open) => !open)}
-            aria-expanded={chatOpen}
-            title={t("topbar_ask_label", locale)}
-            className="flex h-8 items-center gap-1.5 rounded-md border border-primary/20 bg-primary/[0.04] px-2.5 text-primary transition hover:border-primary/50 hover:bg-primary/10"
-          >
-            {asking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Bot className="h-3.5 w-3.5" />}
-            <span className="hidden text-xs font-medium sm:inline">{t("topbar_ask_label", locale)}</span>
-          </button>
+        <button
+          onClick={() => setChatOpen(true)}
+          aria-haspopup="dialog"
+          aria-expanded={chatOpen}
+          title={t("topbar_ask_label", locale)}
+          className="flex h-8 items-center gap-1.5 rounded-md border border-primary/20 bg-primary/[0.04] px-2.5 text-primary transition hover:border-primary/50 hover:bg-primary/10"
+        >
+          {asking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Bot className="h-3.5 w-3.5" />}
+          <span className="hidden text-xs font-medium sm:inline">{t("topbar_ask_label", locale)}</span>
+        </button>
 
-          {chatOpen && (
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault();
-                const question = q.trim();
-                if (!question || asking) return;
-                setAsking(true);
-                setConversation((messages) => [...messages, { id: crypto.randomUUID(), role: "user", text: question }]);
-                setQ("");
-                try {
-                  const { data } = await askGaruda(question);
-                  setConversation((messages) => [...messages, { id: crypto.randomUUID(), role: "assistant", text: data.answer, result: data }]);
-                } catch {
-                  toast.error(t("topbar_ask_failed", locale), { description: t("topbar_ask_failed_desc", locale) });
-                } finally {
-                  setAsking(false);
-                }
-              }}
-              role="dialog"
-              aria-label={t("topbar_ask_label", locale)}
-              className="absolute right-0 top-[calc(100%+8px)] z-20 flex w-[min(31rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-lg border border-primary/20 bg-popover shadow-2xl"
-            >
-              <div className="border-b border-border bg-primary/[0.04] px-4 py-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex min-w-0 items-center gap-2.5">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-primary/20 bg-primary/10 text-primary"><Sparkles className="h-4 w-4" /></span>
-                    <div className="min-w-0">
-                      <div className="text-sm font-semibold text-foreground">{t("topbar_ask_label", locale)}</div>
-                      <div className="mt-0.5 flex items-center gap-1 text-[10px] text-muted-foreground"><ShieldCheck className="h-3 w-3 text-emerald-500" /> {t("ask_grounded_notice", locale)}</div>
-                    </div>
+        <Dialog open={chatOpen} onOpenChange={setChatOpen}>
+          <DialogContent
+            onOpenAutoFocus={(e) => {
+              e.preventDefault();
+              inputRef.current?.focus();
+            }}
+            className="flex max-h-[85vh] w-[min(42rem,calc(100vw-2rem))] max-w-none flex-col gap-0 overflow-hidden border-primary/20 p-0 [&>button]:hidden"
+          >
+            <DialogHeader className="shrink-0 space-y-0 border-b border-border bg-primary/[0.04] px-4 py-3 text-left">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-primary/20 bg-primary/10 text-primary"><Sparkles className="h-4 w-4" /></span>
+                  <div className="min-w-0">
+                    <DialogTitle className="text-sm font-semibold text-foreground">{t("topbar_ask_label", locale)}</DialogTitle>
+                    <DialogDescription className="mt-0.5 flex items-center gap-1 text-[10px] text-muted-foreground"><ShieldCheck className="h-3 w-3 text-emerald-500" /> {t("ask_grounded_notice", locale)}</DialogDescription>
                   </div>
-                  <button type="button" onClick={() => setChatOpen(false)} title={t("ask_close", locale)} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground"><X className="h-4 w-4" /></button>
                 </div>
+                <DialogClose title={t("ask_close", locale)} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground">
+                  <X className="h-4 w-4" />
+                  <span className="sr-only">{t("ask_close", locale)}</span>
+                </DialogClose>
               </div>
-              <div className="max-h-[25rem] space-y-3 overflow-y-auto p-3 sm:p-4">
+            </DialogHeader>
+              <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto p-3 sm:p-4">
                 {conversation.length === 0 && (
                   <div className="space-y-3 py-2">
                     <p className="max-w-sm text-xs leading-5 text-muted-foreground">{t("ask_greeting", locale)}</p>
                     <div className="grid gap-2 sm:grid-cols-2">
                       {(["ask_sample_hotspots", "ask_sample_network", "ask_sample_compare", "ask_sample_kingpins"] as const).map((key) => (
-                        <button key={key} type="button" onClick={() => setQ(t(key, locale))} className="min-h-14 rounded-md border border-border bg-background/60 px-3 py-2 text-left text-xs leading-4 text-foreground transition hover:border-primary/40 hover:bg-primary/[0.05]">
+                        <button key={key} type="button" onClick={() => { setQ(t(key, locale)); inputRef.current?.focus(); }} className="min-h-14 rounded-md border border-border bg-background/60 px-3 py-2 text-left text-xs leading-4 text-foreground transition hover:border-primary/40 hover:bg-primary/[0.05]">
                           {t(key, locale)}
                         </button>
                       ))}
@@ -296,20 +316,19 @@ export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
                 ))}
                 {asking && <div className="mr-24 flex items-center gap-2 rounded-md border border-border bg-muted/60 px-3 py-3 text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin text-primary" /> {t("ask_thinking", locale)}</div>}
               </div>
-              <div className="flex items-center gap-2 border-t border-border bg-background/40 p-2.5">
-                <input value={q} onChange={(e) => setQ(e.target.value)} className="min-w-0 flex-1 bg-transparent px-2 py-1.5 text-sm text-foreground outline-none placeholder:text-muted-foreground" placeholder={t("ask_placeholder", locale)} />
+              <form onSubmit={handleAsk} className="flex shrink-0 items-center gap-2 border-t border-border bg-background/40 p-2.5">
+                <input ref={inputRef} value={q} onChange={(e) => setQ(e.target.value)} className="min-w-0 flex-1 bg-transparent px-2 py-1.5 text-sm text-foreground outline-none placeholder:text-muted-foreground" placeholder={t("ask_placeholder", locale)} />
                 <button type="submit" disabled={!q.trim() || asking} title={t("ask_send", locale)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50"><Send className="h-3.5 w-3.5" /></button>
-              </div>
-            </form>
-          )}
-        </div>
+              </form>
+          </DialogContent>
+        </Dialog>
 
         {/* PDF Export — triggers SmartBrowz on backend */}
         <button
           onClick={handleExport}
           disabled={exporting}
           title={t("topbar_export_title", locale)}
-          className="flex items-center gap-1.5 rounded-md border border-white/5 bg-white/[0.02] px-2.5 py-1.5 text-xs text-muted-foreground transition hover:border-emerald-500/30 hover:text-emerald-400 disabled:opacity-50"
+          className="flex items-center gap-1.5 rounded-md border border-foreground/5 bg-foreground/[0.02] px-2.5 py-1.5 text-xs text-muted-foreground transition hover:border-emerald-500/30 hover:text-emerald-400 disabled:opacity-50"
         >
           {exporting ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -323,7 +342,7 @@ export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
         <button
           onClick={toggle}
           title={t(locale === "en" ? "topbar_language_en" : "topbar_language_kn", locale)}
-          className="flex items-center gap-1.5 rounded-md border border-white/5 bg-white/[0.02] px-2.5 py-1.5 transition hover:border-primary/30 hover:bg-primary/5"
+          className="flex items-center gap-1.5 rounded-md border border-foreground/5 bg-foreground/[0.02] px-2.5 py-1.5 transition hover:border-primary/30 hover:bg-primary/5"
         >
           <span className="font-mono text-[11px] text-primary">
             {locale === "en" ? "ಕನ್ನಡ" : "EN"}
@@ -333,7 +352,7 @@ export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
         <button
           onClick={toggleTheme}
           title={t(theme === "dark" ? "topbar_theme_dark" : "topbar_theme_light", locale)}
-          className="flex h-8 w-8 items-center justify-center rounded-md border border-white/5 text-muted-foreground transition hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
+          className="flex h-8 w-8 items-center justify-center rounded-md border border-foreground/5 text-muted-foreground transition hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
         >
           {theme === "dark" ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
         </button>
@@ -342,7 +361,7 @@ export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
         <button
           onClick={handleLogout}
           title={t("topbar_logout_tt", locale)}
-          className="flex h-8 w-8 items-center justify-center rounded-md border border-white/5 text-muted-foreground transition hover:border-[var(--danger)]/30 hover:text-[var(--danger)]"
+          className="flex h-8 w-8 items-center justify-center rounded-md border border-foreground/5 text-muted-foreground transition hover:border-[var(--danger)]/30 hover:text-[var(--danger)]"
         >
           <LogOut className="h-3.5 w-3.5" />
         </button>
