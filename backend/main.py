@@ -1376,39 +1376,46 @@ def _parse_plan_json(text: str) -> AgentPlan:
     return AgentPlan.model_validate(json.loads(candidate))
 
 def _quickml_plan_sync(query: str) -> AgentPlan:
-    if not all((QUICKML_ENDPOINT, QUICKML_ENDPOINT_KEY, QUICKML_ACCESS_TOKEN, QUICKML_ORG_ID)):
+    if not all((QUICKML_ENDPOINT, QUICKML_ACCESS_TOKEN, QUICKML_ORG_ID, QUICKML_MODEL)):
         raise RuntimeError("QuickML LLM configuration is incomplete")
 
-    prompt = f"""You are the intent planner for Project Garuda, a Karnataka police decision-support prototype.
-Interpret the English or Kannada request below. Return JSON only, with no markdown or explanation.
+    system_prompt = """You are the intent planner for Project Garuda, a Karnataka police decision-support prototype.
+Interpret the English or Kannada request. Return JSON only, with no markdown or explanation.
 Schema:
-{{"action":"search_cases|show_hotspots|investigate_network|compare_districts|summarize_trends|find_connection|rank_offenders|explain_correlations",
+{"action":"search_cases|show_hotspots|investigate_network|compare_districts|summarize_trends|find_connection|rank_offenders|explain_correlations",
   "crime_type":string|null,"area":string|null,"district_ids":number[]|null,
   "suspect_a":string|null,"suspect_b":string|null,
-  "time_window":"today|this_week|last_month|last_30_days|this_year|all","language":"en|kn","confidence":number}}
+  "time_window":"today|this_week|last_month|last_30_days|this_year|all","language":"en|kn","confidence":number}
 Tool guide: search_cases/show_hotspots/investigate_network filter the case list; compare_districts needs 2+ district_ids;
 summarize_trends reports rising/falling activity; find_connection needs suspect_a and suspect_b (person names);
 rank_offenders ranks suspects by network centrality; explain_correlations explains why an area looks risky.
 Never invent a crime type, area, district, or suspect name that isn't in the request. Use null when absent.
-This plan is advisory and will be validated before any tool runs.
-Request: {query}"""
+This plan is advisory and will be validated before any tool runs."""
+    # Request/response shape confirmed empirically against the live Console's
+    # "Sample Request and Response" panel for the deployed LLM Serving model
+    # (an OpenAI-style chat-completion contract, NOT the flat "prompt" field
+    # an earlier version of this integration assumed) — see QUICKML_INTEGRATION.md.
     body = {
-        "prompt": prompt,
-        "temperature": 0.1,
-        "top_p": 0.2,
+        "model": QUICKML_MODEL,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": query},
+        ],
         "max_tokens": 300,
+        "temperature": 0.1,
+        "stream": False,
     }
-    if QUICKML_MODEL:
-        body["model"] = QUICKML_MODEL
+    headers = {
+        "Authorization": f"Zoho-oauthtoken {QUICKML_ACCESS_TOKEN}",
+        "CATALYST-ORG": QUICKML_ORG_ID,
+        "Content-Type": "application/json",
+    }
+    if QUICKML_ENDPOINT_KEY:
+        headers["X-QUICKML-ENDPOINT-KEY"] = QUICKML_ENDPOINT_KEY
     request = urllib.request.Request(
         QUICKML_ENDPOINT,
         data=json.dumps(body).encode("utf-8"),
-        headers={
-            "Authorization": f"Zoho-oauthtoken {QUICKML_ACCESS_TOKEN}",
-            "CATALYST-ORG": QUICKML_ORG_ID,
-            "X-QUICKML-ENDPOINT-KEY": QUICKML_ENDPOINT_KEY,
-            "Content-Type": "application/json",
-        },
+        headers=headers,
         method="POST",
     )
     try:

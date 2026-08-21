@@ -114,3 +114,5 @@ backend/vendor/*
 .env.production
 
 backend/data/backup_*/
+
+Export_*.zip
