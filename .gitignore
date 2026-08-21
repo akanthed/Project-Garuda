@@ -62,6 +62,7 @@ src/routes/routeTree.gen.ts # TanStack Router auto-generated route tree
 # ─── AI/IDE Configuration (user-specific) ───────────────────────────────────────
 .lovable/                  # Lovable AI IDE config
 .claude/                   # Claude config (may have API keys)
+.impeccable/               # Impeccable review-tool cache/critiques
 .vscode/*
 !.vscode/extensions.json
 !.vscode/agents/           # Keep agent instructions (no secrets)
