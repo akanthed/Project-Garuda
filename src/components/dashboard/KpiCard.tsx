@@ -48,7 +48,7 @@ export function KpiCard({ label, value, delta, trend, positive = true, icon: Ico
   const good = (trend === "up" && positive) || (trend === "down" && !positive);
   const TrendIcon = trend === "up" ? ArrowUpRight : ArrowDownRight;
   return (
-    <div className="group relative overflow-hidden rounded-xl border border-white/5 bg-card p-5 transition-colors hover:border-white/10">
+    <div className="group relative overflow-hidden rounded-xl border border-foreground/5 bg-card p-5 transition-colors hover:border-foreground/10">
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
           <Icon className="h-3.5 w-3.5" strokeWidth={1.75} />

@@ -109,19 +109,19 @@ function NetworkHelp() {
           type="button"
           title={t("graph_help_open", locale)}
           aria-label={t("graph_help_open", locale)}
-          className="flex h-7 w-7 items-center justify-center rounded-md border border-white/10 text-muted-foreground transition hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
+          className="flex h-7 w-7 items-center justify-center rounded-md border border-foreground/10 text-muted-foreground transition hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
         >
           <Info className="h-3.5 w-3.5" />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 border-white/10 bg-background/95 p-4 backdrop-blur-sm">
+      <PopoverContent align="end" className="w-80 border-foreground/10 bg-background/95 p-4 backdrop-blur-sm">
         <div className="text-sm font-medium">{t("graph_help_title", locale)}</div>
         <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{t("graph_help_intro", locale)}</p>
         <div className="mt-3 space-y-2.5 text-xs leading-relaxed text-muted-foreground">
           <p>{t("graph_help_nodes", locale)}</p>
           <p>{t("graph_help_risk", locale)}</p>
           <p>{t("graph_help_links", locale)}</p>
-          <div className="flex gap-2 border-t border-white/5 pt-2.5">
+          <div className="flex gap-2 border-t border-foreground/5 pt-2.5">
             <Move className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
             <p>{t("graph_help_move", locale)}</p>
           </div>
@@ -151,7 +151,7 @@ function NodeDetail({ node, links, allNodes, onClose }: NodeDetailProps) {
   const Icon = IconMap[node.type] ?? User;
 
   return (
-    <div className="absolute right-3 top-3 z-10 w-60 rounded-lg border border-white/10 bg-background/95 p-4 shadow-xl backdrop-blur-sm">
+    <div className="absolute right-3 top-3 z-10 w-60 rounded-lg border border-foreground/10 bg-background/95 p-4 shadow-xl backdrop-blur-sm">
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-2">
           <div
@@ -191,7 +191,7 @@ function NodeDetail({ node, links, allNodes, onClose }: NodeDetailProps) {
       </div>
 
       {node.centrality && (
-        <div className="mt-3 space-y-1.5 border-t border-white/5 pt-3">
+        <div className="mt-3 space-y-1.5 border-t border-foreground/5 pt-3">
           <div className="mb-1 text-[10px] uppercase tracking-widest text-muted-foreground">
             {t("graph_kingpin_score", locale)}
           </div>
@@ -220,7 +220,7 @@ function NodeDetail({ node, links, allNodes, onClose }: NodeDetailProps) {
       )}
 
       {connections.length > 0 && (
-        <div className="mt-3 border-t border-white/5 pt-3">
+        <div className="mt-3 border-t border-foreground/5 pt-3">
           <div className="mb-1.5 text-[10px] uppercase tracking-widest text-muted-foreground">
             {t("graph_links", locale)}
           </div>
@@ -261,7 +261,7 @@ type Locale = ReturnType<typeof useLanguage>["locale"];
 
 function AnalysisPanelShell({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   return (
-    <div className="absolute right-3 top-3 z-10 max-h-[calc(100%-1.5rem)] w-72 overflow-y-auto rounded-lg border border-white/10 bg-background/95 p-4 shadow-xl backdrop-blur-sm">
+    <div className="absolute right-3 top-3 z-10 max-h-[calc(100%-1.5rem)] w-72 overflow-y-auto rounded-lg border border-foreground/10 bg-background/95 p-4 shadow-xl backdrop-blur-sm">
       <div className="flex items-center justify-between">
         <div className="text-xs font-medium">{title}</div>
         <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
@@ -283,7 +283,7 @@ function KingpinsPanel({ kingpins, onSelect, onClose, locale }: {
         <button
           key={k.id}
           onClick={() => onSelect(k)}
-          className="block w-full rounded-md border border-white/5 px-2.5 py-2 text-left transition hover:border-primary/30 hover:bg-primary/[0.05]"
+          className="block w-full rounded-md border border-foreground/5 px-2.5 py-2 text-left transition hover:border-primary/30 hover:bg-primary/[0.05]"
         >
           <div className="flex items-center justify-between gap-2 text-[11px] font-medium">
             <span className="truncate">{k.label}</span>
@@ -306,7 +306,7 @@ function CommunitiesPanel({ communities, onClose, locale }: {
     <AnalysisPanelShell title={t("graph_tab_communities", locale)} onClose={onClose}>
       {communities.length === 0 && <p className="text-[11px] text-muted-foreground">{t("common_loading", locale)}</p>}
       {communities.map((c) => (
-        <div key={c.community_id} className="rounded-md border border-white/5 px-2.5 py-2">
+        <div key={c.community_id} className="rounded-md border border-foreground/5 px-2.5 py-2">
           <div className="flex items-center justify-between text-[11px] font-medium">
             <span className="flex items-center gap-1.5">
               <span className="h-2 w-2 rounded-full" style={{ background: communityColor(c.community_id) }} />
@@ -338,13 +338,13 @@ function ConnectPanel({ source, target, onSourceChange, onTargetChange, onSubmit
         value={source}
         onChange={(e) => onSourceChange(e.target.value)}
         placeholder={t("graph_source_suspect", locale)}
-        className="w-full rounded-md border border-white/10 bg-background/50 px-2.5 py-1.5 font-mono text-[11px] outline-none focus:border-primary/50"
+        className="w-full rounded-md border border-foreground/10 bg-background/50 px-2.5 py-1.5 font-mono text-[11px] outline-none focus:border-primary/50"
       />
       <input
         value={target}
         onChange={(e) => onTargetChange(e.target.value)}
         placeholder={t("graph_target_suspect", locale)}
-        className="w-full rounded-md border border-white/10 bg-background/50 px-2.5 py-1.5 font-mono text-[11px] outline-none focus:border-primary/50"
+        className="w-full rounded-md border border-foreground/10 bg-background/50 px-2.5 py-1.5 font-mono text-[11px] outline-none focus:border-primary/50"
       />
       <button
         onClick={onSubmit}
@@ -357,7 +357,7 @@ function ConnectPanel({ source, target, onSourceChange, onTargetChange, onSubmit
         <p className="text-[11px] text-muted-foreground">{t("graph_no_path", locale)}</p>
       )}
       {result?.connected && (
-        <div className="space-y-2 border-t border-white/5 pt-2">
+        <div className="space-y-2 border-t border-foreground/5 pt-2">
           {result.hops.map((h, i) => (
             <div key={i} className="text-[11px]">
               <div className="flex items-center justify-between gap-1 font-medium">
@@ -383,7 +383,7 @@ function PredictedPanel({ links, onClose, locale }: { links: PredictedLink[]; on
     <AnalysisPanelShell title={t("graph_tab_predicted", locale)} onClose={onClose}>
       {links.length === 0 && <p className="text-[11px] text-muted-foreground">{t("common_loading", locale)}</p>}
       {links.map((l, i) => (
-        <div key={i} className="rounded-md border border-white/5 px-2.5 py-2 text-[11px]">
+        <div key={i} className="rounded-md border border-foreground/5 px-2.5 py-2 text-[11px]">
           <div className="flex items-center justify-between gap-2 font-medium">
             <span className="truncate">{l.source.label}</span>
             <span className="shrink-0 rounded-full bg-cyan-400/10 px-1.5 py-0.5 font-mono text-[9px] uppercase text-cyan-300">
@@ -612,9 +612,9 @@ export function LinkGraph({ compact = false }: LinkGraphProps) {
   ];
 
   return (
-    <div className="relative flex flex-col overflow-hidden rounded-xl border border-white/5 bg-card">
+    <div className="relative flex flex-col overflow-hidden rounded-xl border border-foreground/5 bg-card">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-white/5 px-5 py-3">
+      <div className="flex items-center justify-between border-b border-foreground/5 px-5 py-3">
         <div>
           <div className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
             {t("graph_title", locale)}
@@ -623,7 +623,7 @@ export function LinkGraph({ compact = false }: LinkGraphProps) {
         </div>
         <div className="flex items-center gap-3">
           {selected && (
-            <div className="flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 font-mono text-[10px] text-primary">
+            <div className="flex items-center gap-1 rounded-full border border-foreground/10 bg-foreground/[0.03] px-2 py-0.5 font-mono text-[10px] text-primary">
               <AlertTriangle className="h-2.5 w-2.5" />
               {t("graph_type", locale)}: {nodeTypeLabel(selected.type, locale)}
             </div>
@@ -637,7 +637,7 @@ export function LinkGraph({ compact = false }: LinkGraphProps) {
 
       {/* Deep network analysis toolbar */}
       {!compact && !loading && (
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/5 bg-white/[0.01] px-5 py-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-foreground/5 bg-foreground/[0.01] px-5 py-2">
           <div className="flex flex-wrap gap-1.5">
             {TABS.map(([tab, key]) => (
               <button

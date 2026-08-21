@@ -41,8 +41,8 @@ export function ActionBrief({ anomaly, open, onOpenChange, onRecordDecision }: A
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="flex w-full flex-col gap-0 overflow-y-auto border-white/10 bg-background p-0 sm:max-w-xl">
-        <SheetHeader className="border-b border-white/5 px-5 py-5 pr-12">
+      <SheetContent side="right" className="flex w-full flex-col gap-0 overflow-y-auto border-foreground/10 bg-background p-0 sm:max-w-xl">
+        <SheetHeader className="border-b border-foreground/5 px-5 py-5 pr-12">
           <div className="flex items-center gap-2 text-primary">
             <ClipboardCheck className="h-4 w-4" />
             <span className="font-mono text-[10px] uppercase tracking-[0.16em]">{t("action_brief_subtitle", locale)}</span>
@@ -69,7 +69,7 @@ export function ActionBrief({ anomaly, open, onOpenChange, onRecordDecision }: A
 
           <section>
             <h3 className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">{t("action_brief_evidence", locale)}</h3>
-            <dl className="mt-2 grid grid-cols-2 gap-2 rounded-lg border border-white/5 bg-card p-3 text-xs">
+            <dl className="mt-2 grid grid-cols-2 gap-2 rounded-lg border border-foreground/5 bg-card p-3 text-xs">
               <div><dt className="text-muted-foreground">{t("action_brief_station", locale)}</dt><dd className="mt-1 font-medium">{anomaly.station_name}</dd></div>
               <div><dt className="text-muted-foreground">{t("alerts_diagnostic", locale)}</dt><dd className="mt-1 font-mono">z={anomaly.z_score}</dd></div>
               <div><dt className="text-muted-foreground">{t("action_brief_current", locale)}</dt><dd className="mt-1 font-mono">{anomaly.current_count}</dd></div>
@@ -81,7 +81,7 @@ export function ActionBrief({ anomaly, open, onOpenChange, onRecordDecision }: A
             <h3 className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">{t("action_brief_actions", locale)}</h3>
             <div className="mt-2 space-y-2">
               {actionItems.map(({ icon: Icon, text }, index) => (
-                <div key={text} className="flex gap-3 rounded-lg border border-white/5 bg-card p-3">
+                <div key={text} className="flex gap-3 rounded-lg border border-foreground/5 bg-card p-3">
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 font-mono text-[10px] text-primary">{index + 1}</span>
                   <div className="flex gap-2 text-xs leading-relaxed text-muted-foreground"><Icon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />{text}</div>
                 </div>
@@ -108,13 +108,13 @@ export function ActionBrief({ anomaly, open, onOpenChange, onRecordDecision }: A
                 ["modify", "action_brief_modify"],
                 ["escalate", "action_brief_escalate"],
               ] as const).map(([value, labelKey]) => (
-                <button key={value} type="button" onClick={() => setDecision(value)} className={cn("rounded-md border px-2 py-2 text-xs transition", decision === value ? "border-primary/50 bg-primary/15 text-primary" : "border-white/10 text-muted-foreground hover:text-foreground")}>
+                <button key={value} type="button" onClick={() => setDecision(value)} className={cn("rounded-md border px-2 py-2 text-xs transition", decision === value ? "border-primary/50 bg-primary/15 text-primary" : "border-foreground/10 text-muted-foreground hover:text-foreground")}>
                   {t(labelKey, locale)}
                 </button>
               ))}
             </div>
             <label className="mt-3 block text-[11px] text-muted-foreground">{t("action_brief_note", locale)}
-              <textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder={t("action_brief_note_hint", locale)} className="mt-1.5 min-h-20 w-full resize-y rounded-md border border-white/10 bg-card px-3 py-2 text-xs leading-relaxed text-foreground outline-none placeholder:text-muted-foreground/60 focus:border-primary/50" />
+              <textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder={t("action_brief_note_hint", locale)} className="mt-1.5 min-h-20 w-full resize-y rounded-md border border-foreground/10 bg-card px-3 py-2 text-xs leading-relaxed text-foreground outline-none placeholder:text-muted-foreground/60 focus:border-primary/50" />
             </label>
           </section>
 
