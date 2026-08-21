@@ -529,15 +529,28 @@ def build_graph() -> None:
     log.info(f"Graph: {G.number_of_nodes()} nodes, {G.number_of_edges()} edges")
     DB.network_analytics_ready = False
 
-def _require_network_analytics_ready() -> None:
+def _require_network_analytics_ready(request: Request) -> None:
     """Deep network analytics (centrality/communities) now compute in the
     background after startup instead of blocking every endpoint — including
     ones that don't need them (KPIs, hotspots, reports) — behind a ~7-15s
-    precompute. Endpoints that DO need them fail fast with a clear, honest
-    503 instead of silently returning empty/wrong results while it's still
-    running."""
-    if not DB.network_analytics_ready:
-        raise HTTPException(503, "Network analytics are still being computed; please retry in a few seconds.")
+    precompute. If a Catalyst Cache copy from a previous process exists,
+    hydrate from it instantly instead of waiting on the in-process
+    background computation (real gain on every restart/redeploy after the
+    first). Endpoints that DO need them and have neither fail fast with a
+    clear, honest 503 instead of silently returning empty/wrong results."""
+    if DB.network_analytics_ready:
+        _maybe_write_network_analytics_cache(request)
+        return
+    capp = _try_catalyst_app(request)
+    cached = _read_network_analytics_cache(capp)
+    if cached is not None:
+        try:
+            _hydrate_network_analytics(cached)
+            log.info("Network analytics hydrated from Catalyst Cache — skipped in-process recompute")
+            return
+        except Exception:
+            log.debug("Failed to hydrate network analytics from cache", exc_info=True)
+    raise HTTPException(503, "Network analytics are still being computed; please retry in a few seconds.")
 
 async def _refresh_network_analytics_background() -> None:
     """Fire-and-forget: runs the slow centrality/community-detection pass off
@@ -548,6 +561,77 @@ async def _refresh_network_analytics_background() -> None:
         DB.network_analytics_ready = True
     except Exception:
         log.exception("Background network analytics computation failed")
+
+# ─── Network analytics persistence via Catalyst Cache ────────────────────────
+# Survives AppSail restarts/redeploys within its TTL, unlike the in-process
+# DB.* fields, so the network tab doesn't have to wait through a full
+# centrality/community recompute on every restart — only the very first one
+# (or after the cache expires). No new Console setup needed — reuses the
+# Cache service already wired up for cache_get/cache_set above.
+# NOTE: cache_get()/cache_set() above silently fall back to the local dict
+# on Catalyst because cache_set() calls a `put_value()` method that does not
+# exist on this SDK version's Segment class (confirmed by inspecting
+# backend/vendor/zcatalyst_sdk/cache/_segment.py — only get_value/get/put/
+# update/delete exist). That bug is left as-is for the general short-TTL
+# (30-300s) cache — real Catalyst Cache only supports whole-hour expiry, so
+# "fixing" it there would silently turn a 30s KPI cache into an hour-stale
+# one. This network-analytics use case is a genuinely good fit for
+# hour-granularity, so it uses the correct methods directly instead.
+_NETWORK_ANALYTICS_CACHE_KEY = "garuda_network_analytics_v1"
+_NETWORK_ANALYTICS_CACHE_TTL_HOURS = int(os.environ.get("NETWORK_ANALYTICS_CACHE_TTL_HOURS", "6"))
+_network_analytics_cache_written_this_process = False
+
+def _serialize_network_analytics() -> dict:
+    return {
+        "centrality": DB.centrality,
+        "communities": [list(c) for c in DB.communities],
+        "co_graph_edges": [
+            [u, v, d.get("weight", 1), d.get("shared_cases", [])]
+            for u, v, d in DB.co_graph.edges(data=True)
+        ],
+    }
+
+def _hydrate_network_analytics(blob: dict) -> None:
+    DB.centrality = blob.get("centrality", {})
+    DB.communities = [set(c) for c in blob.get("communities", [])]
+    DB.community_of = {n: idx for idx, members in enumerate(DB.communities) for n in members}
+    co = nx.Graph()
+    co.add_nodes_from(DB.centrality.keys())
+    for u, v, weight, shared_cases in blob.get("co_graph_edges", []):
+        co.add_edge(u, v, weight=weight, shared_cases=shared_cases)
+    DB.co_graph = co
+    DB.network_analytics_ready = True
+
+def _read_network_analytics_cache(capp) -> Optional[dict]:
+    if capp is None:
+        return None
+    try:
+        raw = capp.cache().segment().get_value(_NETWORK_ANALYTICS_CACHE_KEY)
+        return json.loads(raw) if raw else None
+    except Exception:
+        return None
+
+def _maybe_write_network_analytics_cache(request: Request) -> None:
+    """Writes once per process (not once per request) — the analytics don't
+    change again until the next build_graph(), so repeated writes would be
+    wasted calls."""
+    global _network_analytics_cache_written_this_process
+    if _network_analytics_cache_written_this_process:
+        return
+    capp = _try_catalyst_app(request)
+    if capp is None:
+        return
+    try:
+        payload = json.dumps(_serialize_network_analytics())
+        segment = capp.cache().segment()
+        try:
+            segment.update(_NETWORK_ANALYTICS_CACHE_KEY, payload, _NETWORK_ANALYTICS_CACHE_TTL_HOURS)
+        except Exception:
+            segment.put(_NETWORK_ANALYTICS_CACHE_KEY, payload, _NETWORK_ANALYTICS_CACHE_TTL_HOURS)
+        _network_analytics_cache_written_this_process = True
+        log.info("Network analytics written to Catalyst Cache for faster future restarts")
+    except Exception:
+        log.debug("Failed to write network analytics to Catalyst Cache", exc_info=True)
 
 def _build_co_offender_graph(bipartite: nx.Graph) -> nx.Graph:
     """Suspect-suspect projection: two suspects are linked if named as
@@ -2142,7 +2226,7 @@ async def get_kingpins(
     require_permission(request, "canViewNetwork")
     if not ensure_data_loaded(request):
         raise HTTPException(503, "Data not loaded")
-    _require_network_analytics_ready()
+    _require_network_analytics_ready(request)
     if DB.co_graph.number_of_nodes() == 0:
         return []
 
@@ -2198,7 +2282,7 @@ async def get_communities(
     require_permission(request, "canViewNetwork")
     if not ensure_data_loaded(request):
         raise HTTPException(503, "Data not loaded")
-    _require_network_analytics_ready()
+    _require_network_analytics_ready(request)
     case_station = _case_station_map()
     out = []
     for idx, members in enumerate(DB.communities):
@@ -2249,7 +2333,7 @@ async def get_connection_path(request: Request, source: str = Query(...), target
     require_permission(request, "canViewNetwork")
     if not ensure_data_loaded(request):
         raise HTTPException(503, "Data not loaded")
-    _require_network_analytics_ready()
+    _require_network_analytics_ready(request)
     if source not in DB.co_graph or target not in DB.co_graph:
         raise HTTPException(404, "Unknown suspect id(s) — use ids returned by /api/network or /api/network/kingpins")
 
@@ -2301,7 +2385,7 @@ async def predict_links(request: Request, limit: int = Query(20, ge=1, le=100)):
     require_permission(request, "canViewNetwork")
     if not ensure_data_loaded(request):
         raise HTTPException(503, "Data not loaded")
-    _require_network_analytics_ready()
+    _require_network_analytics_ready(request)
     if DB.co_graph.number_of_nodes() < 3:
         return []
 
