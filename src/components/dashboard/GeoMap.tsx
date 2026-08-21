@@ -120,7 +120,7 @@ function HotspotPopupContent({
   const color = RISK_COLOR[hotspot.risk];
   const etaMin = nearestPatrol ? Math.max(1, Math.round((nearestPatrol.km / 30) * 60)) : null;
   return (
-    <div className="min-w-[260px] rounded-lg border border-white/10 bg-background/95 p-4 backdrop-blur-sm">
+    <div className="min-w-[260px] rounded-lg border border-foreground/10 bg-background/95 p-4 backdrop-blur-sm">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
           <AlertTriangle className="h-3.5 w-3.5 shrink-0" style={{ color }} />
@@ -141,7 +141,7 @@ function HotspotPopupContent({
         <div key="intensity" className="flex items-center justify-between text-[11px]">
           <span className="text-muted-foreground">{t("map_intensity", locale)}</span>
           <div className="flex items-center gap-2">
-            <div className="h-1.5 w-20 overflow-hidden rounded-full bg-white/10">
+            <div className="h-1.5 w-20 overflow-hidden rounded-full bg-foreground/10">
               <div className="h-full rounded-full" style={{ width: `${hotspot.intensity * 100}%`, background: color }} />
             </div>
             <span className="font-mono text-[10px]">{Math.round(hotspot.intensity * 100)}%</span>
@@ -181,7 +181,7 @@ function HotspotPopupContent({
         </div>
       )}
 
-      <div className="mt-3 border-t border-white/5 pt-2">
+      <div className="mt-3 border-t border-foreground/5 pt-2">
         <p className="text-[10px] uppercase tracking-widest text-muted-foreground">{t("map_causal", locale)}</p>
         <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground/80">{hotspot.causal_driver}</p>
       </div>
@@ -272,9 +272,9 @@ export function GeoMap({ compact = false }: GeoMapProps) {
   }, [selected, patrols]);
 
   return (
-    <div className="relative col-span-2 overflow-hidden rounded-xl border border-white/5 bg-card">
+    <div className={`relative col-span-2 overflow-hidden rounded-xl border border-foreground/5 bg-card ${compact ? "flex flex-1 flex-col" : ""}`}>
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-white/5 px-5 py-3">
+      <div className="flex items-center justify-between border-b border-foreground/5 px-5 py-3">
         <div>
           <div className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
             {t("map_title", locale)}
@@ -283,7 +283,7 @@ export function GeoMap({ compact = false }: GeoMapProps) {
         </div>
         <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
           {!compact && (
-            <span className="hidden rounded-full border border-white/10 px-2 py-0.5 font-mono text-[9px] lg:inline">
+            <span className="hidden rounded-full border border-foreground/10 px-2 py-0.5 font-mono text-[9px] lg:inline">
               {t("map_data_source", locale)}
             </span>
           )}
@@ -301,7 +301,7 @@ export function GeoMap({ compact = false }: GeoMapProps) {
       {/* MapLibre canvas */}
       <div
         className={`relative transition-[height] duration-300 ${
-          compact ? "h-[220px]" : expanded ? "h-[640px]" : "h-[460px]"
+          compact ? "min-h-[220px] flex-1" : expanded ? "h-[640px]" : "h-[460px]"
         }`}
       >
         <Map
@@ -412,7 +412,7 @@ export function GeoMap({ compact = false }: GeoMapProps) {
 
             {/* Historical / Predicted toggle */}
             <div className="mb-2 flex items-center gap-1.5">
-              <div className="flex flex-1 items-center gap-1 rounded-md bg-white/5 p-0.5 text-[10px]">
+              <div className="flex flex-1 items-center gap-1 rounded-md bg-foreground/5 p-0.5 text-[10px]">
                 <button
                   onClick={() => setPredictedMode(false)}
                   className={`flex-1 rounded px-2 py-1 transition ${!predictedMode ? "bg-primary/20 text-primary" : "text-muted-foreground"}`}
@@ -433,12 +433,12 @@ export function GeoMap({ compact = false }: GeoMapProps) {
                     <button
                       title={t("map_model_validation_open", locale)}
                       aria-label={t("map_model_validation_open", locale)}
-                      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-white/10 text-muted-foreground transition hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
+                      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-foreground/10 text-muted-foreground transition hover:border-primary/40 hover:bg-primary/10 hover:text-primary"
                     >
                       <ShieldCheck className="h-3 w-3" />
                     </button>
                   </PopoverTrigger>
-                  <PopoverContent align="end" className="w-80 border-white/10 bg-background/95 p-4 backdrop-blur-sm">
+                  <PopoverContent align="end" className="w-80 border-foreground/10 bg-background/95 p-4 backdrop-blur-sm">
                     <div className="text-sm font-medium">{t("map_model_validation_title", locale)}</div>
                     {!backtest ? (
                       <div className="mt-2 text-[11px] text-muted-foreground">{t("common_loading", locale)}</div>
@@ -485,26 +485,26 @@ export function GeoMap({ compact = false }: GeoMapProps) {
                 <button
                   key={row.id}
                   onClick={() => toggle(row.id)}
-                  className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-[11px] text-muted-foreground transition hover:bg-white/5 hover:text-foreground"
+                  className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-[11px] text-muted-foreground transition hover:bg-foreground/5 hover:text-foreground"
                 >
                   <div className="flex items-center gap-2">
                     <row.icon className="h-3 w-3" />
                     {t(row.labelKey, locale)}
                   </div>
-                  <div className={`h-3 w-6 rounded-full p-0.5 transition-colors ${row.on ? "bg-primary/40" : "bg-white/10"}`}>
-                    <div className={`h-2 w-2 rounded-full transition-transform ${row.on ? "translate-x-3 bg-primary" : "translate-x-0 bg-white/40"}`} />
+                  <div className={`h-3 w-6 rounded-full p-0.5 transition-colors ${row.on ? "bg-primary/40" : "bg-foreground/10"}`}>
+                    <div className={`h-2 w-2 rounded-full transition-transform ${row.on ? "translate-x-3 bg-primary" : "translate-x-0 bg-foreground/40"}`} />
                   </div>
                 </button>
               ))}
             </div>
-            <div className="mt-3 border-t border-white/5 pt-2 font-mono text-[10px] text-muted-foreground">
+            <div className="mt-3 border-t border-foreground/5 pt-2 font-mono text-[10px] text-muted-foreground">
               LAT 12.9716° · LON 77.5946°
             </div>
           </div>
         )}
 
         {!selected && !compact && (
-          <div className="pointer-events-none absolute bottom-4 right-4 z-10 font-mono text-[10px] text-white/30">
+          <div className="pointer-events-none absolute bottom-4 right-4 z-10 font-mono text-[10px] text-foreground/30">
             {t("map_click_hint", locale)}
           </div>
         )}

@@ -92,7 +92,7 @@ function OperationsTimeline({ events }: { events: OperationEvent[] }) {
 
 function MapPlaceholder({ compact = false }: { compact?: boolean }) {
   return (
-    <div className={`col-span-2 flex ${compact ? "h-[220px]" : "h-[460px]"} items-center justify-center rounded-xl border border-foreground/5 bg-card`}>
+    <div className={`col-span-2 flex ${compact ? "min-h-[220px] flex-1" : "h-[460px]"} items-center justify-center rounded-xl border border-foreground/5 bg-card`}>
       <div className="flex flex-col items-center gap-3">
         <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary/20 border-t-primary" />
         <span className="font-mono text-[11px] text-muted-foreground">Loading map…</span>
@@ -244,7 +244,7 @@ function Dashboard() {
                 )}
 
                 <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-                  <div className="space-y-2 lg:col-span-2">
+                  <div className="flex flex-col gap-2 lg:col-span-2">
                     <Suspense fallback={<MapPlaceholder compact />}>
                       <GeoMap compact />
                     </Suspense>
