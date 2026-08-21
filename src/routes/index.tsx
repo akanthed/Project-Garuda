@@ -50,8 +50,8 @@ function OperationsTimeline({ events }: { events: OperationEvent[] }) {
   const { locale } = useLanguage();
 
   return (
-    <section className="rounded-xl border border-white/5 bg-card">
-      <div className="flex items-start justify-between gap-4 border-b border-white/5 px-5 py-3.5">
+    <section className="rounded-xl border border-foreground/5 bg-card">
+      <div className="flex items-start justify-between gap-4 border-b border-foreground/5 px-5 py-3.5">
         <div>
           <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
             <Clock3 className="h-3.5 w-3.5 text-primary" />
@@ -59,7 +59,7 @@ function OperationsTimeline({ events }: { events: OperationEvent[] }) {
           </div>
           <div className="mt-0.5 text-sm font-medium">{t("operations_timeline_subtitle", locale)}</div>
         </div>
-        <span className="rounded-full border border-white/10 px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
+        <span className="rounded-full border border-foreground/10 px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
           {t("operations_timeline_prototype", locale)}
         </span>
       </div>
@@ -92,7 +92,7 @@ function OperationsTimeline({ events }: { events: OperationEvent[] }) {
 
 function MapPlaceholder({ compact = false }: { compact?: boolean }) {
   return (
-    <div className={`col-span-2 flex ${compact ? "h-[220px]" : "h-[460px]"} items-center justify-center rounded-xl border border-white/5 bg-card`}>
+    <div className={`col-span-2 flex ${compact ? "h-[220px]" : "h-[460px]"} items-center justify-center rounded-xl border border-foreground/5 bg-card`}>
       <div className="flex flex-col items-center gap-3">
         <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary/20 border-t-primary" />
         <span className="font-mono text-[11px] text-muted-foreground">Loading map…</span>
@@ -103,7 +103,7 @@ function MapPlaceholder({ compact = false }: { compact?: boolean }) {
 
 function GraphPlaceholder() {
   return (
-    <div className="flex h-[460px] items-center justify-center rounded-xl border border-white/5 bg-card">
+    <div className="flex h-[460px] items-center justify-center rounded-xl border border-foreground/5 bg-card">
       <div className="flex flex-col items-center gap-3">
         <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary/20 border-t-primary" />
         <span className="font-mono text-[11px] text-muted-foreground">Loading network…</span>
@@ -122,16 +122,17 @@ export const Route = createFileRoute("/")({
   component: Dashboard,
 });
 
-function RbacBlock({ label, minRole }: { label: string; minRole: string }) {
+function RbacBlock({ labelKey, minRoleKey }: { labelKey: TranslationKey; minRoleKey: TranslationKey }) {
+  const { locale } = useLanguage();
   return (
-    <div className="flex h-[460px] flex-col items-center justify-center gap-3 rounded-xl border border-white/5 bg-card">
+    <div className="flex h-[460px] flex-col items-center justify-center gap-3 rounded-xl border border-foreground/5 bg-card">
       <div className="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--danger)]/30 bg-[var(--danger)]/10">
         <ShieldCheck className="h-5 w-5 text-[var(--danger)]" />
       </div>
       <div className="text-center">
-        <div className="text-sm font-medium">{label}</div>
-        <div className="mt-1 font-mono text-[11px] text-muted-foreground">
-          Requires {minRole} clearance
+        <div className="text-sm font-medium">{t(labelKey, locale)}</div>
+        <div className="mt-1 text-[11px] text-muted-foreground">
+          {t(minRoleKey, locale)}
         </div>
       </div>
     </div>
@@ -140,7 +141,7 @@ function RbacBlock({ label, minRole }: { label: string; minRole: string }) {
 
 function Placeholder({ title, subtitle }: { title: string; subtitle: string }) {
   return (
-    <div className="flex h-[70vh] items-center justify-center rounded-xl border border-white/5 bg-card">
+    <div className="flex h-[70vh] items-center justify-center rounded-xl border border-foreground/5 bg-card">
       <div className="text-center">
         <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
           Module
@@ -210,7 +211,7 @@ function Dashboard() {
                 <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
                   {kpisLoading ? (
                     Array.from({ length: 4 }).map((_, i) => (
-                      <div key={i} className="h-[122px] animate-pulse rounded-xl border border-white/5 bg-card" />
+                      <div key={i} className="h-[122px] animate-pulse rounded-xl border border-foreground/5 bg-card" />
                     ))
                   ) : (
                     kpis.map((k) => {
@@ -257,12 +258,12 @@ function Dashboard() {
                   {officer.canViewNetwork ? (
                     <AlertsFeed onOpenView={setView} onOpenBrief={openBrief} />
                   ) : (
-                    <RbacBlock label="Criminal Link Analysis" minRole="ASI (CLR-3)" />
+                    <RbacBlock labelKey="rbac_locked_network" minRoleKey="rbac_requires_asi" />
                   )}
                 </section>
 
                 {officer.canSimulate ? (
-                  <section className="flex items-center justify-between rounded-xl border border-white/5 bg-card px-5 py-4">
+                  <section className="flex items-center justify-between rounded-xl border border-foreground/5 bg-card px-5 py-4">
                     <div>
                       <div className="text-sm font-medium">{t("sim_title", locale)}</div>
                       <div className="mt-0.5 text-xs text-muted-foreground">{t("overview_simulator_desc", locale)}</div>
@@ -275,7 +276,7 @@ function Dashboard() {
                     </button>
                   </section>
                 ) : (
-                  <RbacBlock label="Command Simulator" minRole="SI (CLR-4)" />
+                  <RbacBlock labelKey="rbac_locked_simulator" minRoleKey="rbac_requires_si" />
                 )}
 
                 <OperationsTimeline events={operationEvents} />
@@ -297,7 +298,7 @@ function Dashboard() {
                     <LinkGraph />
                   </Suspense>
                 ) : (
-                  <RbacBlock label="Criminal Link Analysis" minRole="ASI (CLR-3)" />
+                  <RbacBlock labelKey="rbac_locked_network" minRoleKey="rbac_requires_asi" />
                 )}
               </section>
             )}
@@ -306,7 +307,7 @@ function Dashboard() {
               officer.canSimulate ? <Simulator onComplete={(impact) => {
                 setSimulationImpact(impact);
                 setView("dashboard");
-              }} /> : <RbacBlock label="Command Simulator" minRole="SI (CLR-4)" />
+              }} /> : <RbacBlock labelKey="rbac_locked_simulator" minRoleKey="rbac_requires_si" />
             )}
 
             {view === "reports" && <ReportsView />}

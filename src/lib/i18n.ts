@@ -22,6 +22,18 @@ export const translations = {
   nav_reports:    { en: "Reports",      kn: "ವರದಿಗಳು" },
   nav_settings:   { en: "Settings",     kn: "ಸೆಟ್ಟಿಂಗ್‌ಗಳು" },
 
+  // ─── Restricted-access blocks ──────────────────────────────────────────────
+  rbac_locked_network:   { en: "Criminal Link Analysis", kn: "ಅಪರಾಧ ಸಂಪರ್ಕ ವಿಶ್ಲೇಷಣೆ" },
+  rbac_locked_simulator: { en: "Command Simulator",      kn: "ಕಮಾಂಡ್ ಯೋಜಕ" },
+  rbac_requires_asi: {
+    en: "Available to Assistant Sub-Inspector rank and above",
+    kn: "ಸಹಾಯಕ ಉಪ-ನಿರೀಕ್ಷಕ ಮತ್ತು ಮೇಲ್ಪಟ್ಟ ಶ್ರೇಣಿಗೆ ಲಭ್ಯ",
+  },
+  rbac_requires_si: {
+    en: "Available to Sub-Inspector rank and above",
+    kn: "ಉಪ-ನಿರೀಕ್ಷಕ ಮತ್ತು ಮೇಲ್ಪಟ್ಟ ಶ್ರೇಣಿಗೆ ಲಭ್ಯ",
+  },
+
   // ─── TopBar ────────────────────────────────────────────────────────────────
   topbar_intel:      { en: "Karnataka Police Intelligence", kn: "ಕರ್ನಾಟಕ ಪೊಲೀಸ್ ಗುಪ್ತಚರ" },
   topbar_scope_label:     { en: "District scope",       kn: "ಜಿಲ್ಲಾ ವ್ಯಾಪ್ತಿ" },

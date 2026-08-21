@@ -25,7 +25,7 @@ const STATUS_STYLES: Record<CaseStatus, string> = {
   open: "bg-rose-500/10 text-rose-400",
   investigating: "bg-amber-500/10 text-amber-400",
   resolved: "bg-emerald-500/10 text-emerald-400",
-  closed: "bg-white/5 text-muted-foreground",
+  closed: "bg-foreground/5 text-muted-foreground",
 };
 
 const SEVERITY_KEYS: Record<CaseSeverity, TranslationKey> = {
@@ -109,14 +109,15 @@ function CaseDetailDrawer({ report, onClose, onWorkflowUpdated }: { report: Case
       onWorkflowUpdated(updated);
       toast.success(t("reports_workflow_saved", locale), { description: data.warning ?? data.updated_by });
     } catch (error) {
-      toast.error(t("reports_workflow_failed", locale), { description: error instanceof Error ? error.message : t("reports_review_details", locale) });
+      console.error("workflow action failed", error);
+      toast.error(t("reports_workflow_failed", locale), { description: t("reports_review_details", locale) });
     } finally {
       setSavingWorkflow(false);
     }
   };
 
   return (
-    <div className="rounded-xl border border-white/10 bg-card p-5">
+    <div className="rounded-xl border border-foreground/10 bg-card p-5">
       <div className="flex items-start justify-between">
         <div>
           <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">{report.id}</div>
@@ -131,14 +132,14 @@ function CaseDetailDrawer({ report, onClose, onWorkflowUpdated }: { report: Case
           <button
             onClick={handleTranslate}
             disabled={translating}
-            className="flex items-center gap-1.5 rounded-md border border-white/5 px-3 py-1.5 text-xs text-muted-foreground transition hover:border-primary/30 hover:text-primary disabled:opacity-60"
+            className="flex items-center gap-1.5 rounded-md border border-foreground/5 px-3 py-1.5 text-xs text-muted-foreground transition hover:border-primary/30 hover:text-primary disabled:opacity-60"
           >
             {translating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Languages className="h-3.5 w-3.5" />}
             {translated ? "EN" : "ಕನ್ನಡ"}
           </button>
           <button
             onClick={onClose}
-            className="rounded-md border border-white/5 px-3 py-1.5 text-xs text-muted-foreground transition hover:border-white/15 hover:text-foreground"
+            className="rounded-md border border-foreground/5 px-3 py-1.5 text-xs text-muted-foreground transition hover:border-foreground/15 hover:text-foreground"
           >
             {t("common_close", locale)}
           </button>
@@ -168,18 +169,18 @@ function CaseDetailDrawer({ report, onClose, onWorkflowUpdated }: { report: Case
       </div>
 
       {/* Risk Assessment */}
-      <div className="mt-4 border-t border-white/5 pt-4">
+      <div className="mt-4 border-t border-foreground/5 pt-4">
         <RiskAssessment caseMasterId={report.case_master_id} />
       </div>
 
-      <div className="mt-4 grid gap-3 border-t border-white/5 pt-4 md:grid-cols-[1fr_180px_auto]">
+      <div className="mt-4 grid gap-3 border-t border-foreground/5 pt-4 md:grid-cols-[1fr_180px_auto]">
         <input
           value={assignedOfficer}
           onChange={(event) => setAssignedOfficer(event.target.value)}
           placeholder={t("reports_assign_officer", locale)}
-          className="rounded-md border border-white/10 bg-background/50 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50"
+          className="rounded-md border border-foreground/10 bg-background/50 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50"
         />
-        <select value={status} onChange={(event) => setStatus(event.target.value as CaseStatus)} className="rounded-md border border-white/10 bg-background/50 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50">
+        <select value={status} onChange={(event) => setStatus(event.target.value as CaseStatus)} className="rounded-md border border-foreground/10 bg-background/50 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50">
           {(["open", "investigating", "resolved", "closed"] as CaseStatus[]).map((value) => <option key={value} value={value}>{t(STATUS_KEYS[value], locale)}</option>)}
         </select>
         <button onClick={handleWorkflowUpdate} disabled={!assignedOfficer.trim() || savingWorkflow} className="rounded-md bg-primary/15 px-4 py-2 text-xs font-medium text-primary transition hover:bg-primary/25 disabled:opacity-50">
@@ -194,7 +195,7 @@ function CaseDetailDrawer({ report, onClose, onWorkflowUpdated }: { report: Case
 
 function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
   return (
-    <div className="rounded-xl border border-white/5 bg-card p-4">
+    <div className="rounded-xl border border-foreground/5 bg-card p-4">
       <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">{label}</div>
       <div className="mt-1 font-mono text-2xl font-medium tabular-nums">{value}</div>
       {sub && <div className="mt-0.5 font-mono text-[10px] text-muted-foreground">{sub}</div>}
@@ -247,7 +248,8 @@ function IncidentIntakeForm({ onClose, onSubmitted }: { onClose: () => void; onS
       onSubmitted();
       onClose();
     } catch (error) {
-      toast.error(t("reports_intake_failed", locale), { description: error instanceof Error ? error.message : t("reports_review_details", locale) });
+      console.error("incident intake failed", error);
+      toast.error(t("reports_intake_failed", locale), { description: t("reports_review_details", locale) });
     } finally {
       setSubmitting(false);
     }
@@ -264,18 +266,18 @@ function IncidentIntakeForm({ onClose, onSubmitted }: { onClose: () => void; onS
       </div>
 
       <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <label className="text-xs text-muted-foreground">{t("reports_fir_number", locale)}<input required value={intake.crime_no} onChange={(event) => update("crime_no", event.target.value)} placeholder="KSP/2026/0001" className="mt-1.5 w-full rounded-md border border-white/10 bg-background/50 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50" /></label>
-        <label className="text-xs text-muted-foreground">{t("reports_registration_date", locale)}<input required type="date" value={intake.registered_date} onChange={(event) => update("registered_date", event.target.value)} className="mt-1.5 w-full rounded-md border border-white/10 bg-background/50 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50" /></label>
-        <label className="text-xs text-muted-foreground">{t("reports_station_id", locale)}<input required min="1" max="1100" type="number" value={intake.police_station_id} onChange={(event) => update("police_station_id", Number(event.target.value))} className="mt-1.5 w-full rounded-md border border-white/10 bg-background/50 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50" /></label>
-        <label className="text-xs text-muted-foreground">{t("reports_gravity", locale)}<select value={intake.gravity_offence_id} onChange={(event) => update("gravity_offence_id", Number(event.target.value))} className="mt-1.5 w-full rounded-md border border-white/10 bg-background/50 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50">{[1, 2, 3, 4, 5].map((value) => <option key={value} value={value}>{t("reports_gravity_value", locale)} {value}</option>)}</select></label>
-        <label className="text-xs text-muted-foreground md:col-span-2">{t("reports_category", locale)}<select value={intake.crime_major_head_id} onChange={(event) => update("crime_major_head_id", Number(event.target.value))} className="mt-1.5 w-full rounded-md border border-white/10 bg-background/50 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50">{CRIME_HEADS.map(([id, en, kn]) => <option key={id} value={id}>{locale === "kn" ? kn : en}</option>)}</select></label>
-        <label className="text-xs text-muted-foreground">{t("reports_latitude", locale)}<input required step="0.000001" type="number" value={intake.latitude} onChange={(event) => update("latitude", Number(event.target.value))} className="mt-1.5 w-full rounded-md border border-white/10 bg-background/50 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50" /></label>
-        <label className="text-xs text-muted-foreground">{t("reports_longitude", locale)}<input required step="0.000001" type="number" value={intake.longitude} onChange={(event) => update("longitude", Number(event.target.value))} className="mt-1.5 w-full rounded-md border border-white/10 bg-background/50 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50" /></label>
+        <label className="text-xs text-muted-foreground">{t("reports_fir_number", locale)}<input required value={intake.crime_no} onChange={(event) => update("crime_no", event.target.value)} placeholder="KSP/2026/0001" className="mt-1.5 w-full rounded-md border border-foreground/10 bg-background/50 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50" /></label>
+        <label className="text-xs text-muted-foreground">{t("reports_registration_date", locale)}<input required type="date" value={intake.registered_date} onChange={(event) => update("registered_date", event.target.value)} className="mt-1.5 w-full rounded-md border border-foreground/10 bg-background/50 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50" /></label>
+        <label className="text-xs text-muted-foreground">{t("reports_station_id", locale)}<input required min="1" max="1100" type="number" value={intake.police_station_id} onChange={(event) => update("police_station_id", Number(event.target.value))} className="mt-1.5 w-full rounded-md border border-foreground/10 bg-background/50 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50" /></label>
+        <label className="text-xs text-muted-foreground">{t("reports_gravity", locale)}<select value={intake.gravity_offence_id} onChange={(event) => update("gravity_offence_id", Number(event.target.value))} className="mt-1.5 w-full rounded-md border border-foreground/10 bg-background/50 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50">{[1, 2, 3, 4, 5].map((value) => <option key={value} value={value}>{t("reports_gravity_value", locale)} {value}</option>)}</select></label>
+        <label className="text-xs text-muted-foreground md:col-span-2">{t("reports_category", locale)}<select value={intake.crime_major_head_id} onChange={(event) => update("crime_major_head_id", Number(event.target.value))} className="mt-1.5 w-full rounded-md border border-foreground/10 bg-background/50 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50">{CRIME_HEADS.map(([id, en, kn]) => <option key={id} value={id}>{locale === "kn" ? kn : en}</option>)}</select></label>
+        <label className="text-xs text-muted-foreground">{t("reports_latitude", locale)}<input required step="0.000001" type="number" value={intake.latitude} onChange={(event) => update("latitude", Number(event.target.value))} className="mt-1.5 w-full rounded-md border border-foreground/10 bg-background/50 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50" /></label>
+        <label className="text-xs text-muted-foreground">{t("reports_longitude", locale)}<input required step="0.000001" type="number" value={intake.longitude} onChange={(event) => update("longitude", Number(event.target.value))} className="mt-1.5 w-full rounded-md border border-foreground/10 bg-background/50 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50" /></label>
       </div>
 
       <div className="mt-4 grid gap-4 md:grid-cols-2">
-        <label className="text-xs text-muted-foreground">{t("reports_narrative", locale)}<textarea required minLength={10} value={intake.brief_facts} onChange={(event) => update("brief_facts", event.target.value)} placeholder={t("reports_narrative_hint", locale)} className="mt-1.5 min-h-24 w-full resize-y rounded-md border border-white/10 bg-background/50 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50" /></label>
-        <label className="text-xs text-muted-foreground">{t("reports_accused", locale)} <span className="text-white/30">{t("reports_optional", locale)}</span><textarea value={accusedInput} onChange={(event) => setAccusedInput(event.target.value)} placeholder={t("reports_accused_hint", locale)} className="mt-1.5 min-h-24 w-full resize-y rounded-md border border-white/10 bg-background/50 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50" /></label>
+        <label className="text-xs text-muted-foreground">{t("reports_narrative", locale)}<textarea required minLength={10} value={intake.brief_facts} onChange={(event) => update("brief_facts", event.target.value)} placeholder={t("reports_narrative_hint", locale)} className="mt-1.5 min-h-24 w-full resize-y rounded-md border border-foreground/10 bg-background/50 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50" /></label>
+        <label className="text-xs text-muted-foreground">{t("reports_accused", locale)} <span className="text-foreground/30">{t("reports_optional", locale)}</span><textarea value={accusedInput} onChange={(event) => setAccusedInput(event.target.value)} placeholder={t("reports_accused_hint", locale)} className="mt-1.5 min-h-24 w-full resize-y rounded-md border border-foreground/10 bg-background/50 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50" /></label>
       </div>
 
       <div className="mt-5 flex items-center justify-end gap-3">
@@ -345,7 +347,7 @@ export function ReportsView() {
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => setIntakeOpen((open) => !open)} className="flex items-center gap-2 rounded-md bg-primary/15 px-3 py-1.5 text-xs text-primary transition hover:bg-primary/25"><Plus className="h-3.5 w-3.5" />{t("reports_add_incident", locale)}</button>
-          <button onClick={refresh} disabled={refreshing} className="flex items-center gap-2 rounded-md border border-white/5 bg-white/[0.02] px-3 py-1.5 text-xs text-muted-foreground transition hover:border-white/15 hover:text-foreground disabled:opacity-50"><RefreshCw className={cn("h-3 w-3", refreshing && "animate-spin")} />{t("reports_refresh", locale)}</button>
+          <button onClick={refresh} disabled={refreshing} className="flex items-center gap-2 rounded-md border border-foreground/5 bg-foreground/[0.02] px-3 py-1.5 text-xs text-muted-foreground transition hover:border-foreground/15 hover:text-foreground disabled:opacity-50"><RefreshCw className={cn("h-3 w-3", refreshing && "animate-spin")} />{t("reports_refresh", locale)}</button>
         </div>
       </div>
 
@@ -361,7 +363,7 @@ export function ReportsView() {
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex flex-1 items-center gap-2 rounded-md border border-white/5 bg-white/[0.02] px-3 py-2 text-xs focus-within:border-white/15">
+        <div className="flex flex-1 items-center gap-2 rounded-md border border-foreground/5 bg-foreground/[0.02] px-3 py-2 text-xs focus-within:border-foreground/15">
           <Search className="h-3.5 w-3.5 text-muted-foreground" />
           <input
             value={search}
@@ -376,7 +378,7 @@ export function ReportsView() {
           <select
             value={filterSeverity}
             onChange={(e) => setFilterSeverity(e.target.value as CaseSeverity | "all")}
-            className="appearance-none rounded-md border border-white/5 bg-card pl-8 pr-7 py-2 font-mono text-xs text-foreground outline-none"
+            className="appearance-none rounded-md border border-foreground/5 bg-card pl-8 pr-7 py-2 font-mono text-xs text-foreground outline-none"
           >
             <option value="all">{t("reports_all_severities", locale)}</option>
             {SEVERITY_ORDER.map((s) => <option key={s} value={s}>{t(SEVERITY_KEYS[s], locale)}</option>)}
@@ -388,7 +390,7 @@ export function ReportsView() {
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value as CaseStatus | "all")}
-            className="appearance-none rounded-md border border-white/5 bg-card px-3 pr-7 py-2 font-mono text-xs text-foreground outline-none"
+            className="appearance-none rounded-md border border-foreground/5 bg-card px-3 pr-7 py-2 font-mono text-xs text-foreground outline-none"
           >
             <option value="all">{t("reports_all_statuses", locale)}</option>
             {(["open", "investigating", "resolved", "closed"] as CaseStatus[]).map((s) => (
@@ -413,7 +415,7 @@ export function ReportsView() {
       )}
 
       {/* Table */}
-      <div className="overflow-hidden rounded-xl border border-white/5 bg-card">
+      <div className="overflow-hidden rounded-xl border border-foreground/5 bg-card">
         {loading ? (
           <div className="flex h-48 items-center justify-center gap-3">
             <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary/20 border-t-primary" />
@@ -422,7 +424,7 @@ export function ReportsView() {
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-white/5 text-left">
+              <tr className="border-b border-foreground/5 text-left">
                 {[
                   t("reports_col_case", locale),
                   t("reports_col_title", locale),
@@ -451,8 +453,8 @@ export function ReportsView() {
                   <tr
                     key={r.id}
                     className={cn(
-                      "cursor-pointer border-b border-white/[0.03] transition-colors hover:bg-white/[0.02]",
-                      selected?.id === r.id && "bg-white/[0.04]"
+                      "cursor-pointer border-b border-foreground/[0.03] transition-colors hover:bg-foreground/[0.02]",
+                      selected?.id === r.id && "bg-foreground/[0.04]"
                     )}
                     onClick={() => setSelected(selected?.id === r.id ? null : r)}
                   >
@@ -484,7 +486,7 @@ export function ReportsView() {
           </table>
         )}
         {!loading && filtered.length > 0 && (
-          <div className="flex items-center justify-between border-t border-white/5 px-4 py-2.5 font-mono text-[10px] text-muted-foreground">
+          <div className="flex items-center justify-between border-t border-foreground/5 px-4 py-2.5 font-mono text-[10px] text-muted-foreground">
             <span>{t("reports_showing", locale)} {filtered.length} {t("reports_of", locale)} {totalReports}</span>
             <span>KSP · {new Date().toLocaleDateString("en-IN")}</span>
           </div>
