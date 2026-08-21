@@ -515,14 +515,28 @@ def build_graph() -> None:
     accused = accused[accused["NormalizedIdentity"].isin(repeat_identities)]
 
     G = nx.Graph()
+    # FIR risk mirrors the case's own gravity, so graph nodes agree with the
+    # >= 4 "high gravity" threshold used by /api/kpis and /api/hotspots.
+    gravity_by_case: dict[int, int] = {}
+    if not DB.cases.empty:
+        gravity_by_case = dict(zip(
+            DB.cases["CaseMasterID"].astype(int),
+            DB.cases["GravityOffenceID"].astype(int),
+        ))
+
+    def _band(level: int) -> str:
+        return "high" if level >= 4 else ("med" if level == 3 else "low")
+
     for row in accused.itertuples(index=False):
         identity = str(row.NormalizedIdentity)
         acc_id = f"A-{hashlib.sha1(identity.encode()).hexdigest()[:12]}"
-        fir_id = f"FIR-{int(row.CaseMasterID)}"
+        case_id = int(row.CaseMasterID)
+        fir_id = f"FIR-{case_id}"
         degree = int(identity_counts[identity])
         G.add_node(acc_id, label=str(row.AccusedName), type="Suspect",
-                   weight=min(12, degree), risk="high" if degree >= 4 else "med")
-        G.add_node(fir_id, label=fir_id, type="FIR", weight=1)
+                   weight=min(12, degree), risk=_band(degree))
+        G.add_node(fir_id, label=fir_id, type="FIR", weight=1,
+                   risk=_band(gravity_by_case.get(case_id, 0)))
         G.add_edge(acc_id, fir_id, relation="Accused In")
 
     DB.graph = G

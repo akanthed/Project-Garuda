@@ -30,6 +30,7 @@ import type {
   NetworkGraph,
   PatrolUnit,
   PredictedLink,
+  RiskPrediction,
   SimulationResult,
   SimulatorVariable,
   StationAnomaly,
@@ -202,6 +203,13 @@ export async function fetchHotspots(params?: ScopeParams): Promise<ApiResponse<H
   }
   await delay(350);
   return wrap(HOTSPOTS);
+}
+
+// ─── GET /api/risk/{case_master_id} ─────────────────────────────────────
+
+export async function fetchRiskPrediction(caseMasterId: number): Promise<RiskPrediction> {
+  if (!USE_REAL_API) throw new Error("Risk scoring requires the live API");
+  return apiFetch<RiskPrediction>(`/api/risk/${caseMasterId}`);
 }
 
 // ─── GET /api/network ─────────────────────────────────────────────────────────

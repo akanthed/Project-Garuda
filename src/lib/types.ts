@@ -38,6 +38,26 @@ export interface DistrictSummary {
 
 export type RiskLevel = "high" | "med" | "low";
 
+export interface RiskPrediction {
+  case_master_id: number;
+  model_id: string;
+  model_name: string;
+  source: "zia_automl" | "local_fallback";
+  risk_class: "low" | "medium" | "high";
+  scores: Record<string, number>;
+  features: {
+    gravity_level: number;
+    repeat_accused_count: number;
+    accused_count: number;
+    arrest_count: number;
+    arrest_rate_percent: number;
+    station_case_volume: number;
+    crime_type_volume: number;
+    days_since_latest: number;
+  };
+  advisory: string;
+}
+
 export interface Hotspot {
   id: string;
   lat: number;

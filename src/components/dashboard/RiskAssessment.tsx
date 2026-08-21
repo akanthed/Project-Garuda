@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { t } from "@/lib/i18n";
+import { fetchRiskPrediction } from "@/lib/mock-api";
+import type { RiskPrediction } from "@/lib/types";
 import {
   AlertCircle,
   Zap,
@@ -10,101 +12,75 @@ import {
   AlertTriangle,
 } from "lucide-react";
 
-interface RiskPrediction {
-  case_master_id: number;
-  model_id: string;
-  model_name: string;
-  source: "zia_automl" | "local_fallback";
-  risk_class: "low" | "medium" | "high";
-  scores: Record<string, number>;
-  features: {
-    gravity_level: number;
-    repeat_accused_count: number;
-    accused_count: number;
-    arrest_count: number;
-    arrest_rate_percent: number;
-    station_case_volume: number;
-    crime_type_volume: number;
-    days_since_latest: number;
-  };
-  advisory: string;
-}
-
 interface RiskAssessmentProps {
   caseMasterId: number;
-  apiUrl?: string;
 }
 
 const getRiskColor = (level: "low" | "medium" | "high") => {
   switch (level) {
     case "low":
-      return "bg-green-50 border-green-200 text-green-900";
+      return "bg-emerald-500/[0.06] border-emerald-500/20 text-emerald-400";
     case "medium":
-      return "bg-yellow-50 border-yellow-200 text-yellow-900";
+      return "bg-amber-500/[0.06] border-amber-500/20 text-amber-400";
     case "high":
-      return "bg-red-50 border-red-200 text-red-900";
+      return "bg-[var(--danger)]/[0.06] border-[var(--danger)]/20 text-[var(--danger)]";
   }
 };
 
 const getRiskBadgeColor = (level: "low" | "medium" | "high") => {
   switch (level) {
     case "low":
-      return "bg-green-100 text-green-800";
+      return "bg-emerald-500/10 text-emerald-400";
     case "medium":
-      return "bg-yellow-100 text-yellow-800";
+      return "bg-amber-500/10 text-amber-400";
     case "high":
-      return "bg-red-100 text-red-800";
+      return "bg-[var(--danger)]/10 text-[var(--danger)]";
   }
 };
 
 const getRiskIcon = (level: "low" | "medium" | "high") => {
   switch (level) {
     case "low":
-      return <CheckCircle2 className="w-5 h-5 text-green-600" />;
+      return <CheckCircle2 className="w-5 h-5 text-emerald-400" />;
     case "medium":
-      return <AlertTriangle className="w-5 h-5 text-yellow-600" />;
+      return <AlertTriangle className="w-5 h-5 text-amber-400" />;
     case "high":
-      return <AlertCircle className="w-5 h-5 text-red-600" />;
+      return <AlertCircle className="w-5 h-5 text-[var(--danger)]" />;
   }
 };
 
-export function RiskAssessment({
-  caseMasterId,
-  apiUrl = "/api",
-}: RiskAssessmentProps) {
+export function RiskAssessment({ caseMasterId }: RiskAssessmentProps) {
   const { locale } = useLanguage();
   const [prediction, setPrediction] = useState<RiskPrediction | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchRiskPrediction = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const response = await fetch(`${apiUrl}/risk/${caseMasterId}`);
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-        const data = (await response.json()) as RiskPrediction;
-        setPrediction(data);
-      } catch (err) {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    fetchRiskPrediction(caseMasterId)
+      .then((data) => {
+        if (!cancelled) setPrediction(data);
+      })
+      .catch((err) => {
         console.error("Risk prediction fetch failed:", err);
-        setError(err instanceof Error ? err.message : "Failed to fetch");
-      } finally {
-        setLoading(false);
-      }
+        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to fetch");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
     };
-
-    fetchRiskPrediction();
-  }, [caseMasterId, apiUrl]);
+  }, [caseMasterId]);
 
   if (loading) {
     return (
-      <div className="p-4 rounded-lg border border-gray-200 bg-gray-50">
+      <div className="rounded-lg border border-border bg-muted/40 p-4">
         <div className="flex items-center gap-2">
-          <div className="w-4 h-4 rounded-full bg-gray-300 animate-pulse" />
-          <span className="text-sm text-gray-600">
+          <div className="h-4 w-4 animate-pulse rounded-full bg-muted-foreground/30" />
+          <span className="text-sm text-muted-foreground">
             {t("risk_loading", locale)}
           </span>
         </div>
@@ -114,8 +90,8 @@ export function RiskAssessment({
 
   if (error || !prediction) {
     return (
-      <div className="p-4 rounded-lg border border-gray-200 bg-gray-50">
-        <span className="text-sm text-gray-600">
+      <div className="rounded-lg border border-border bg-muted/40 p-4">
+        <span className="text-sm text-muted-foreground">
           {t("risk_unavailable", locale)}
         </span>
       </div>
@@ -137,7 +113,7 @@ export function RiskAssessment({
             <h3 className="font-semibold text-sm">
               {t("risk_assessment_title", locale)}
             </h3>
-            <p className="text-xs opacity-75">
+            <p className="text-xs text-muted-foreground">
               {t("risk_model_name", locale)}: {prediction.model_name}
             </p>
           </div>
@@ -150,19 +126,19 @@ export function RiskAssessment({
       </div>
 
       {/* Confidence Score */}
-      <div className="mb-3 p-2 bg-white bg-opacity-50 rounded">
+      <div className="mb-3 p-2 bg-background/40 rounded">
         <div className="flex items-center justify-between mb-1">
           <span className="text-xs font-medium">{t("risk_confidence", locale)}</span>
           <span className="text-sm font-bold">{confidencePercent}%</span>
         </div>
-        <div className="w-full bg-gray-200 rounded-full h-2">
+        <div className="h-2 w-full rounded-full bg-muted">
           <div
             className={`h-2 rounded-full transition-all ${
               prediction.risk_class === "high"
-                ? "bg-red-500"
+                ? "bg-[var(--danger)]"
                 : prediction.risk_class === "medium"
-                  ? "bg-yellow-500"
-                  : "bg-green-500"
+                  ? "bg-amber-500"
+                  : "bg-emerald-500"
             }`}
             style={{ width: `${confidencePercent}%` }}
           />
@@ -172,7 +148,7 @@ export function RiskAssessment({
       {/* Prediction Breakdown */}
       <div className="mb-3 grid grid-cols-3 gap-2 text-xs">
         {Object.entries(prediction.scores).map(([label, score]) => (
-          <div key={label} className="bg-white bg-opacity-50 p-2 rounded text-center">
+          <div key={label} className="bg-background/40 p-2 rounded text-center">
             <div className="font-medium capitalize">{label}</div>
             <div className="text-sm font-bold">{Math.round(score as number)}%</div>
           </div>
@@ -198,7 +174,7 @@ export function RiskAssessment({
       </div>
 
       {/* Feature Signals */}
-      <div className="mb-3 p-2 bg-white bg-opacity-50 rounded">
+      <div className="mb-3 p-2 bg-background/40 rounded">
         <h4 className="text-xs font-semibold mb-2 flex items-center gap-1">
           <TrendingUp className="w-3 h-3" />
           {t("risk_contributing_factors", locale)}
@@ -228,7 +204,7 @@ export function RiskAssessment({
       </div>
 
       {/* Advisory Disclaimer */}
-      <div className="p-2 bg-white bg-opacity-50 rounded border-l-2 border-current">
+      <div className="p-2 bg-background/40 rounded">
         <p className="text-xs font-medium italic">{prediction.advisory}</p>
       </div>
     </div>
