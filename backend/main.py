@@ -88,6 +88,10 @@ def _try_catalyst_app(request: Request):
 
 class DataStore:
     cases:       pd.DataFrame = pd.DataFrame()
+    # Cases sorted by CrimeRegisteredDate descending, precomputed once whenever
+    # DB.cases changes (see _refresh_cases_by_date()) so /api/reports never has
+    # to re-sort all rows on every request — just slice a page off this view.
+    cases_by_date: pd.DataFrame = pd.DataFrame()
     accused:     pd.DataFrame = pd.DataFrame()
     arrests:     pd.DataFrame = pd.DataFrame()
     crime_heads: pd.DataFrame = pd.DataFrame()
@@ -99,6 +103,10 @@ class DataStore:
     centrality:   dict[str, dict]   = {}
     communities:  list[set]         = []
     community_of: dict[str, int]    = {}
+    # False until the background centrality/community-detection pass (kicked
+    # off after build_graph()) finishes — lets the server accept requests for
+    # everything else (KPIs, hotspots, reports, map) without waiting for it.
+    network_analytics_ready: bool   = False
 
 DB = DataStore()
 
@@ -418,6 +426,10 @@ def ensure_data_loaded(request: Request) -> bool:
         try:
             load_from_catalyst(capp)
             build_graph()
+            # Sync here (not backgrounded): this is a rare crash-recovery path,
+            # not the primary startup path this optimization targets.
+            _compute_network_analytics()
+            DB.network_analytics_ready = True
             _LOCAL_CACHE.clear()
             return not DB.cases.empty
         except Exception:
@@ -458,6 +470,16 @@ def _assign_districts() -> None:
     unique_stations = DB.cases["PoliceStationID"].dropna().astype(int).unique()
     station_to_district = {sid: district_of_station(int(sid)).district_id for sid in unique_stations}
     DB.cases["DistrictID"] = DB.cases["PoliceStationID"].astype(int).map(station_to_district)
+    _refresh_cases_by_date()
+
+def _refresh_cases_by_date() -> None:
+    """Precomputes DB.cases sorted by date once per load/reload/intake, instead
+    of re-sorting all rows on every /api/reports request (measured as a real,
+    uncached O(n log n) cost on the full 124k-row table previously)."""
+    if DB.cases.empty or "CrimeRegisteredDate" not in DB.cases.columns:
+        DB.cases_by_date = DB.cases
+        return
+    DB.cases_by_date = DB.cases.sort_values("CrimeRegisteredDate", ascending=False)
 
 def load_from_csv() -> None:
     data_dir = os.path.join(os.path.dirname(__file__), "data")
@@ -505,7 +527,27 @@ def build_graph() -> None:
 
     DB.graph = G
     log.info(f"Graph: {G.number_of_nodes()} nodes, {G.number_of_edges()} edges")
-    _compute_network_analytics()
+    DB.network_analytics_ready = False
+
+def _require_network_analytics_ready() -> None:
+    """Deep network analytics (centrality/communities) now compute in the
+    background after startup instead of blocking every endpoint — including
+    ones that don't need them (KPIs, hotspots, reports) — behind a ~7-15s
+    precompute. Endpoints that DO need them fail fast with a clear, honest
+    503 instead of silently returning empty/wrong results while it's still
+    running."""
+    if not DB.network_analytics_ready:
+        raise HTTPException(503, "Network analytics are still being computed; please retry in a few seconds.")
+
+async def _refresh_network_analytics_background() -> None:
+    """Fire-and-forget: runs the slow centrality/community-detection pass off
+    the request/startup path. Called after every build_graph() from an async
+    context (lifespan, admin reload, incident intake)."""
+    try:
+        await asyncio.to_thread(_compute_network_analytics)
+        DB.network_analytics_ready = True
+    except Exception:
+        log.exception("Background network analytics computation failed")
 
 def _build_co_offender_graph(bipartite: nx.Graph) -> nx.Graph:
     """Suspect-suspect projection: two suspects are linked if named as
@@ -872,6 +914,7 @@ async def lifespan(app: FastAPI):
     try:
         load_from_csv()
         build_graph()
+        asyncio.create_task(_refresh_network_analytics_background())
     except Exception as e:
         log.error(f"Startup failed: {e}")
     yield
@@ -990,6 +1033,7 @@ async def health():
         "ready": ready,
         "cases": len(DB.cases),
         "graph_nodes": DB.graph.number_of_nodes(),
+        "network_analytics_ready": DB.network_analytics_ready,
         "schema_version": _DATA_MANIFEST.get("schema_version"),
         "data_generated_at": _DATA_MANIFEST.get("statewide_generated_at") or _DATA_MANIFEST.get("generated_at"),
     }
@@ -1041,6 +1085,7 @@ async def reload_from_datastore(request: Request):
     try:
         load_from_catalyst(capp)
         build_graph()
+        asyncio.create_task(_refresh_network_analytics_background())
     except Exception as e:
         log.exception("reload_from_datastore failed")
         raise HTTPException(500, "Reload failed")
@@ -2002,7 +2047,9 @@ async def create_incident(body: IncidentIntakeRequest, request: Request):
     if accused_rows:
         DB.accused = pd.concat([DB.accused, pd.DataFrame(accused_rows)], ignore_index=True)
         _reset_risk_feature_cache()
+    _assign_districts()
     build_graph()
+    asyncio.create_task(_refresh_network_analytics_background())
     _LOCAL_CACHE.clear()
 
     return {
@@ -2095,6 +2142,7 @@ async def get_kingpins(
     require_permission(request, "canViewNetwork")
     if not ensure_data_loaded(request):
         raise HTTPException(503, "Data not loaded")
+    _require_network_analytics_ready()
     if DB.co_graph.number_of_nodes() == 0:
         return []
 
@@ -2150,6 +2198,7 @@ async def get_communities(
     require_permission(request, "canViewNetwork")
     if not ensure_data_loaded(request):
         raise HTTPException(503, "Data not loaded")
+    _require_network_analytics_ready()
     case_station = _case_station_map()
     out = []
     for idx, members in enumerate(DB.communities):
@@ -2200,6 +2249,7 @@ async def get_connection_path(request: Request, source: str = Query(...), target
     require_permission(request, "canViewNetwork")
     if not ensure_data_loaded(request):
         raise HTTPException(503, "Data not loaded")
+    _require_network_analytics_ready()
     if source not in DB.co_graph or target not in DB.co_graph:
         raise HTTPException(404, "Unknown suspect id(s) — use ids returned by /api/network or /api/network/kingpins")
 
@@ -2251,6 +2301,7 @@ async def predict_links(request: Request, limit: int = Query(20, ge=1, le=100)):
     require_permission(request, "canViewNetwork")
     if not ensure_data_loaded(request):
         raise HTTPException(503, "Data not loaded")
+    _require_network_analytics_ready()
     if DB.co_graph.number_of_nodes() < 3:
         return []
 
@@ -2446,13 +2497,18 @@ async def get_reports(
 ):
     if not ensure_data_loaded(request):
         raise HTTPException(503, "Data not loaded")
-    scoped = _scope_filter(DB.cases, district_id, station_id)
+    scoped = _scope_filter(DB.cases_by_date, district_id, station_id)
     total = len(scoped)
-    df = scoped.sort_values("CrimeRegisteredDate", ascending=False).iloc[offset : offset + limit].copy()
+    df = scoped.iloc[offset : offset + limit].copy()
     if not DB.crime_heads.empty:
         df = df.merge(DB.crime_heads[["CrimeHeadID", "CrimeGroupName"]],
                       left_on="CrimeMajorHeadID", right_on="CrimeHeadID", how="left")
-    accused_counts = DB.accused.groupby("CaseMasterID").size().to_dict() if not DB.accused.empty else {}
+    page_case_ids = df["CaseMasterID"].astype(int).tolist()
+    if not DB.accused.empty and page_case_ids:
+        page_accused = DB.accused[DB.accused["CaseMasterID"].astype(int).isin(page_case_ids)]
+        accused_counts = page_accused.groupby("CaseMasterID").size().to_dict()
+    else:
+        accused_counts = {}
     results = []
     for _, row in df.iterrows():
         case_id = int(row["CaseMasterID"])
