@@ -69,5 +69,17 @@
       157,
       164
     ]
+  },
+  "district_anomaly_injected": true,
+  "district_anomaly_injected_at": "2026-08-21T12:52:10",
+  "district_anomaly_spiked_stations": {
+    "Mysuru": 102,
+    "Dakshina Kannada": 109,
+    "Belagavi": 118,
+    "Kalaburagi": 129,
+    "Ballari": 135,
+    "Tumakuru": 148,
+    "Dharwad": 154,
+    "Udupi": 162
   }
 }
