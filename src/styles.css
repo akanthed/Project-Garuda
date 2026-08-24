@@ -170,3 +170,18 @@
     linear-gradient(90deg, color-mix(in oklab, var(--foreground) 3%, transparent) 1px, transparent 1px);
   background-size: 32px 32px;
 }
+
+.maplibregl-popup.garuda-map-popup {
+  max-width: min(320px, calc(100vw - 2rem)) !important;
+}
+
+.garuda-map-popup .maplibregl-popup-content {
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.garuda-map-popup .maplibregl-popup-tip {
+  display: none;
+}

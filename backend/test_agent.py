@@ -54,8 +54,19 @@ class TestAgentPlanValidation:
         assert not hasattr(plan, "sql")
         assert not hasattr(plan, "shell_command")
 
+    def test_this_month_alias_is_normalized(self):
+        plan = main.AgentPlan.model_validate({"time_window": "this_month"})
+        assert plan.time_window == "last_30_days"
+
 
 class TestMalformedQuickMLOutput:
+    def test_reasoning_content_shape_is_supported(self):
+        payload = {"choices": [{"message": {
+            "content": "",
+            "reasoning_content": '{"action":"show_hotspots","confidence":0.8}',
+        }}]}
+        assert main._parse_plan_json(main._extract_quickml_text(payload)).action == "show_hotspots"
+
     def test_non_json_text_raises(self):
         with pytest.raises(Exception):
             main._parse_plan_json("I'm sorry, I cannot help with that.")
@@ -72,6 +83,16 @@ class TestMalformedQuickMLOutput:
     def test_empty_string_raises(self):
         with pytest.raises(Exception):
             main._parse_plan_json("")
+
+    def test_null_defaulted_fields_use_safe_defaults(self):
+        plan = main._parse_plan_json(
+            '{"action":"show_hotspots","horizon_days":null,'
+            '"time_window":null,"language":null,"confidence":null}'
+        )
+        assert plan.horizon_days == 30
+        assert plan.time_window == "all"
+        assert plan.language == "en"
+        assert plan.confidence == 0.5
 
 
 class TestPromptInjection:
@@ -96,6 +117,36 @@ class TestPromptInjection:
 
 
 class TestQuickMLTimeoutFallback:
+    def test_connection_credentials_accept_direct_headers(self):
+        response = {
+            "headers": {
+                "Authorization": "Zoho-oauthtoken token",
+                "CATALYST-ORG": "60078749238",
+            },
+            "parameters": {},
+        }
+        assert main._normalize_connection_headers(response) == response["headers"]
+
+    def test_connection_credentials_use_configured_org(self, monkeypatch):
+        monkeypatch.delenv("X_ZOHO_CATALYST_ORG_ID", raising=False)
+        monkeypatch.setattr(main, "QUICKML_ORG_ID", "60078749238")
+        response = {"headers": {"Authorization": "Zoho-oauthtoken token"}, "parameters": {}}
+        assert main._normalize_connection_headers(response) == {
+            "Authorization": "Zoho-oauthtoken token",
+            "CATALYST-ORG": "60078749238",
+        }
+
+    def test_connection_credentials_promote_parameters_and_runtime_org(self, monkeypatch):
+        monkeypatch.setenv("X_ZOHO_CATALYST_ORG_ID", "60078749238")
+        response = {"connections": {"headers": {}, "parameters": {
+            "refresh_token": "must-not-be-used",
+            "access_token": "token",
+        }}}
+        assert main._normalize_connection_headers(response) == {
+            "Authorization": "Zoho-oauthtoken token",
+            "CATALYST-ORG": "60078749238",
+        }
+
     def test_timeout_raises_and_is_catchable(self, monkeypatch):
         def _raise_timeout(*args, **kwargs):
             raise socket.timeout("timed out")
@@ -111,6 +162,119 @@ class TestQuickMLTimeoutFallback:
         monkeypatch.setattr(main, "QUICKML_ENDPOINT", "")
         with pytest.raises(RuntimeError):
             main._quickml_plan_sync("show me hotspots")
+
+
+class TestGroundedAnswers:
+    @pytest.mark.parametrize(("query", "expected_action"), [
+        ("What questions can I ask Garuda?", "app_help"),
+        ("How do I scan and add an FIR?", "app_help"),
+        ("Show current KPIs for Mysuru", "summarize_kpis"),
+        ("Show active anomalies", "summarize_kpis"),
+        ("Which stations are forecast to rise?", "forecast_hotspots"),
+        ("Brief me on case 1", "case_brief"),
+        ("What is the risk score for case 1?", "assess_case_risk"),
+        ("Scan FIR", "app_help"),
+        ("Export intelligence brief", "app_help"),
+        ("Show patrol units", "app_help"),
+        ("Assign case 1 to an officer", "app_help"),
+    ])
+    def test_webapp_queries_route_to_supported_actions(self, setup_test_data, query, expected_action):
+        assert main._rule_plan(query).action == expected_action
+
+    def test_app_help_lists_supported_workflows_without_mutating_data(self, setup_test_data):
+        plan = main._rule_plan("What questions can I ask Garuda?")
+        result = main._run_agent("What questions can I ask Garuda?", plan, "rules")
+
+        assert "cases" in result["answer"].lower()
+        assert "forecast" in result["answer"].lower()
+        assert "simulator" in result["answer"].lower()
+        assert result["suggested_view"] == "dashboard"
+
+    def test_case_risk_query_uses_a_real_case(self, setup_test_data):
+        case_id = int(main.DB.cases.iloc[0]["CaseMasterID"])
+        query = f"What is the risk score for case {case_id}?"
+        plan = main._rule_plan(query)
+        result = main._run_agent(query, plan, "rules")
+
+        assert result["tool_calls"][0]["tool"] == "assess_case_risk"
+        assert str(case_id) in result["answer"]
+        assert "prototype" in result["answer"].lower()
+
+    def test_case_brief_accepts_the_displayed_fir_number(self, setup_test_data):
+        crime_no = str(main.DB.cases.iloc[0]["CrimeNo"])
+        query = f"Brief FIR {crime_no}"
+        plan = main._rule_plan(query)
+        result = main._run_agent(query, plan, "rules")
+
+        assert plan.action == "case_brief"
+        assert crime_no in result["answer"]
+        assert result["tool_calls"][0]["status"] == "completed"
+
+    def test_new_read_only_tools_return_grounded_results(self, setup_test_data):
+        case_id = int(main.DB.cases.iloc[0]["CaseMasterID"])
+        queries = (
+            (f"Brief me on case {case_id}", "case_brief", "reports"),
+            ("Show current KPIs for Mysuru", "summarize_kpis", "dashboard"),
+            ("Which Mysuru stations are forecast to rise?", "forecast_hotspots", "geospatial"),
+        )
+
+        for query, expected_tool, expected_view in queries:
+            plan = main._rule_plan(query)
+            result = main._run_agent(query, plan, "rules")
+            assert result["tool_calls"][0]["tool"] == expected_tool
+            assert result["suggested_view"] == expected_view
+            assert result["answer"]
+
+    def test_case_search_honors_district_scope(self, setup_test_data):
+        query = "Show theft cases in Mysuru"
+        plan = main._rule_plan(query)
+        result = main._run_agent(query, plan, "rules")
+
+        assert plan.district_ids == [2]
+        assert result["matched_cases"]
+        mysuru_stations = {
+            main.station_name(station_id)
+            for station_id in range(main.KARNATAKA_DISTRICTS[1].station_start, main.KARNATAKA_DISTRICTS[1].station_end + 1)
+        }
+        assert all(case["station"] in mysuru_stations for case in result["matched_cases"])
+
+    def test_repeat_accused_links_use_network_ranking(self, setup_test_data):
+        plan = main._rule_plan("Find repeat accused links")
+        result = main._run_agent("Find repeat accused links", plan, "rules")
+
+        assert plan.action == "investigate_network"
+        assert result["offender_ranking"]
+        assert "network" in result["answer"].lower()
+
+    def test_high_risk_theft_areas_filters_and_summarizes_hotspots(self, setup_test_data):
+        query = "High-risk theft areas this month"
+        plan = main._rule_plan(query)
+
+        assert plan.action == "show_hotspots"
+        result = main._run_agent(query, plan, "rules")
+
+        assert "high-risk" in result["answer"].lower()
+        assert "station" in result["answer"].lower()
+        assert all(case["gravity"] >= 4 for case in result["matched_cases"])
+
+        case_result = main._run_agent(
+            "theft this month",
+            main.AgentPlan(action="search_cases", time_window="last_30_days", confidence=1),
+            "rules",
+        )
+        assert case_result["matched_cases"]
+        assert all(not case["id"].startswith("BLR-KSP/") for case in case_result["matched_cases"])
+
+    def test_unrelated_question_executes_no_case_tool(self, setup_test_data):
+        query = "capital of karnatak"
+        plan = main._rule_plan(query)
+
+        assert plan.action == "out_of_scope"
+        result = main._run_agent(query, plan, "rules")
+
+        assert result["matched_cases"] == []
+        assert result["tool_calls"] == []
+        assert "crime intelligence" in result["answer"].lower()
 
 
 class TestDisallowedToolNeverReachesDispatch:

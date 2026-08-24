@@ -43,6 +43,11 @@ const TOOL_LABELS: Record<AskResponse["tool_calls"][number]["tool"], Translation
   find_connection: "ask_tool_find_connection",
   rank_offenders: "ask_tool_rank_offenders",
   explain_correlations: "ask_tool_explain_correlations",
+  case_brief: "ask_tool_case_brief",
+  assess_case_risk: "ask_tool_assess_case_risk",
+  summarize_kpis: "ask_tool_summarize_kpis",
+  forecast_hotspots: "ask_tool_forecast_hotspots",
+  app_help: "ask_tool_app_help",
 };
 
 const TRACE_STEP_LABELS: Record<string, TranslationKey> = {
@@ -191,7 +196,7 @@ export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
                   <div className="space-y-3 py-2">
                     <p className="max-w-sm text-xs leading-5 text-muted-foreground">{t("ask_greeting", locale)}</p>
                     <div className="grid gap-2 sm:grid-cols-2">
-                      {(["ask_sample_hotspots", "ask_sample_network", "ask_sample_compare", "ask_sample_kingpins"] as const).map((key) => (
+                      {(["ask_sample_hotspots", "ask_sample_network", "ask_sample_compare", "ask_sample_kingpins", "ask_sample_forecast", "ask_sample_help"] as const).map((key) => (
                         <button key={key} type="button" onClick={() => { setQ(t(key, locale)); inputRef.current?.focus(); }} className="min-h-14 rounded-md border border-border bg-background/60 px-3 py-2 text-left text-xs leading-4 text-foreground transition hover:border-primary/40 hover:bg-primary/[0.05]">
                           {t(key, locale)}
                         </button>
@@ -207,14 +212,16 @@ export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
                           {message.result.source === "quickml" && <Sparkles className="h-2.5 w-2.5" />}
                           {t(message.result.source === "quickml" ? "ask_quickml" : "ask_fallback", locale)}
                         </span>
-                        <span className="font-mono text-[9px] text-muted-foreground">{Math.round(message.result.confidence * 100)}%</span>
+                        <span className="font-mono text-[9px] text-muted-foreground">
+                          {t("ask_intent_confidence", locale)} {Math.round(message.result.confidence * 100)}%
+                        </span>
                       </div>
                     )}
                     <p className="leading-5">{message.text}</p>
                     {message.result?.tool_calls.map((call) => (
                       <div key={call.tool} className="mt-2.5 flex items-center justify-between gap-3 rounded-md border border-emerald-500/15 bg-emerald-500/[0.04] px-2.5 py-2 text-[10px]">
                         <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400"><ShieldCheck className="h-3 w-3" /> {t(TOOL_LABELS[call.tool], locale)}</span>
-                        <span className="shrink-0 font-mono text-muted-foreground">{call.result_count.toLocaleString()} {t("ask_result_count", locale)}</span>
+                        {call.tool !== "app_help" && <span className="shrink-0 font-mono text-muted-foreground">{call.result_count.toLocaleString()} {t("ask_result_count", locale)}</span>}
                       </div>
                     ))}
 
@@ -304,7 +311,7 @@ export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
                       </div>
                     )}
 
-                    {message.result && onNavigate && <button type="button" onClick={() => { onNavigate(message.result!.suggested_view); setChatOpen(false); }} className="mt-2.5 flex items-center gap-1 text-[11px] font-medium text-primary hover:underline">{t("ask_view_results", locale)} <ArrowRight className="h-3 w-3" /></button>}
+                    {message.result && message.result.tool_calls.length > 0 && onNavigate && <button type="button" onClick={() => { onNavigate(message.result!.suggested_view); setChatOpen(false); }} className="mt-2.5 flex items-center gap-1 text-[11px] font-medium text-primary hover:underline">{t("ask_view_results", locale)} <ArrowRight className="h-3 w-3" /></button>}
                   </div>
                 ))}
                 {asking && <div className="mr-24 flex items-center gap-2 rounded-md border border-border bg-muted/60 px-3 py-3 text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin text-primary" /> {t("ask_thinking", locale)}</div>}

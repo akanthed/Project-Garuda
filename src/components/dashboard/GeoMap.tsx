@@ -336,7 +336,7 @@ export function GeoMap({ compact = false }: GeoMapProps) {
                   // further out than the full map, where 220m is sub-pixel.
                   radius: compact ? (activeDistrict ? 1200 : 9000) : 220,
                   elevationScale: compact ? 20 : 6,
-                  extruded: !compact,
+                  extruded: false,
                   pickable: false,
                   opacity: predictedMode ? 0.55 : 0.75,
                   colorRange: predictedMode
@@ -388,11 +388,11 @@ export function GeoMap({ compact = false }: GeoMapProps) {
             <Popup
               longitude={selected.lng}
               latitude={selected.lat}
-              anchor="bottom"
+              anchor="right"
               offset={16}
               closeButton={false}
               closeOnClick={false}
-              style={{ background: "transparent", border: "none", padding: 0 }}
+              className="garuda-map-popup"
             >
               <HotspotPopupContent hotspot={selected} nearestPatrol={nearestPatrol} onClose={() => setSelected(null)} />
             </Popup>

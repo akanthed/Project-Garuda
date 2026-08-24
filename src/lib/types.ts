@@ -143,7 +143,9 @@ export interface StationAnomaly {
 export type AgentAction =
   | "search_cases" | "show_hotspots" | "investigate_network"
   | "compare_districts" | "summarize_trends" | "find_connection"
-  | "rank_offenders" | "explain_correlations";
+  | "rank_offenders" | "explain_correlations" | "case_brief"
+  | "assess_case_risk" | "summarize_kpis" | "forecast_hotspots"
+  | "app_help";
 
 export interface AskMatchedCase {
   id: string;

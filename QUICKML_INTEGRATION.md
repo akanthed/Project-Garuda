@@ -102,12 +102,13 @@ QUICKML_CONNECTION_LINK_NAME=garudaquickml   # optional, this is the default
 ```
 
 At request time, `backend/main.py`'s `_quickml_connection_headers(capp)` calls
-`capp.connections().get_connection_credentials(QUICKML_CONNECTION_LINK_NAME)`, which returns
-`{"connections": {"headers": {...}, "parameters": {...}}}` — a ready-to-use `Authorization` header
-with a live, Catalyst-refreshed token. This requires `capp` (a real per-request Catalyst app
-instance, per the standing per-request-initialize pattern in this repo — see repo memory), so it
-only activates when actually running on Catalyst AppSail; local/non-Catalyst dev falls through to
-the static-token path below.
+`capp.connections().get_connection_credentials(QUICKML_CONNECTION_LINK_NAME)`. Catalyst SDK
+versions return either direct `{"headers": {...}, "parameters": {...}}` details or the same details
+under a `connections` key. Garuda normalizes both forms and also supports credentials supplied in
+`parameters`; the AppSail-provided `X_ZOHO_CATALYST_ORG_ID` supplies `CATALYST-ORG` when the
+connection response omits it. This requires `capp` (a real per-request Catalyst app instance, per
+the standing per-request-initialize pattern in this repo), so it only activates when actually
+running on Catalyst AppSail; local/non-Catalyst dev falls through to the static-token path below.
 
 ### Fallback: static access token (manual refresh required)
 

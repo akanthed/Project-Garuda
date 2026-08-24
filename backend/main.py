@@ -1582,16 +1582,26 @@ class AgentPlan(BaseModel):
     action: Literal[
         "search_cases", "show_hotspots", "investigate_network",
         "compare_districts", "summarize_trends", "find_connection",
-        "rank_offenders", "explain_correlations",
+        "rank_offenders", "explain_correlations", "case_brief",
+        "assess_case_risk", "summarize_kpis", "forecast_hotspots",
+        "app_help", "out_of_scope",
     ] = "search_cases"
     crime_type: Optional[str] = None
     area: Optional[str] = None
     district_ids: Optional[list[int]] = Field(default=None, max_length=4)
+    case_id: Optional[int] = Field(default=None, ge=1)
+    case_reference: Optional[str] = None
+    horizon_days: int = Field(default=30, ge=7, le=90)
     suspect_a: Optional[str] = None
     suspect_b: Optional[str] = None
     time_window: Literal["today", "this_week", "last_month", "last_30_days", "this_year", "all"] = "all"
     language: Literal["en", "kn"] = "en"
     confidence: float = Field(default=0.5, ge=0, le=1)
+
+    @field_validator("time_window", mode="before")
+    @classmethod
+    def _normalize_time_window(cls, value):
+        return "last_30_days" if value == "this_month" else value
 
     @field_validator("district_ids")
     @classmethod
@@ -1609,10 +1619,42 @@ QUICKML_ENDPOINT_KEY = os.environ.get("QUICKML_ENDPOINT_KEY", "").strip()
 QUICKML_ACCESS_TOKEN = os.environ.get("QUICKML_ACCESS_TOKEN", "").strip()
 QUICKML_ORG_ID = os.environ.get("QUICKML_ORG_ID", "").strip()
 QUICKML_MODEL = os.environ.get("QUICKML_MODEL", "").strip()
+QUICKML_TIMEOUT_SECONDS = float(os.environ.get("QUICKML_TIMEOUT_SECONDS", "30"))
+QUICKML_MAX_TOKENS = int(os.environ.get("QUICKML_MAX_TOKENS", "1600"))
 # Catalyst Connections manages this OAuth relationship server-side (auto-refreshed,
 # no static token to expire) — preferred over QUICKML_ACCESS_TOKEN below, which is
 # kept only as a fallback for local/non-Catalyst dev where Connections isn't reachable.
 QUICKML_CONNECTION_LINK_NAME = os.environ.get("QUICKML_CONNECTION_LINK_NAME", "garudaquickml").strip()
+
+def _normalize_connection_headers(response: dict) -> Optional[dict]:
+    details = response.get("connections") or response
+    headers = {
+        str(key): str(value)
+        for key, value in (details.get("headers") or {}).items()
+        if value
+    }
+    parameters = details.get("parameters") or {}
+    lower_parameters = {str(key).lower().replace("-", "_"): value for key, value in parameters.items()}
+
+    if not any(key.lower() == "authorization" for key in headers):
+        token = next((lower_parameters.get(key) for key in (
+            "authorization", "access_token", "oauth_token", "token", "auth",
+        ) if lower_parameters.get(key)), None)
+        if token:
+            token = str(token)
+            headers["Authorization"] = token if " " in token else f"Zoho-oauthtoken {token}"
+
+    if not any(key.lower() == "catalyst-org" for key in headers):
+        org_id = next((
+            value for key, value in lower_parameters.items()
+            if value and key in {"catalyst_org", "org", "org_id", "zaid"}
+        ), None) or os.environ.get("X_ZOHO_CATALYST_ORG_ID") or QUICKML_ORG_ID
+        if org_id:
+            headers["CATALYST-ORG"] = str(org_id)
+
+    has_authorization = any(key.lower() == "authorization" for key in headers)
+    has_org = any(key.lower() == "catalyst-org" for key in headers)
+    return headers if has_authorization and has_org else None
 
 def _quickml_connection_headers(capp) -> Optional[dict]:
     if capp is None:
@@ -1623,13 +1665,15 @@ def _quickml_connection_headers(capp) -> Optional[dict]:
         return None
     try:
         resp = capp.connections().get_connection_credentials(QUICKML_CONNECTION_LINK_NAME) or {}
-        # Verified empirically (2026-08-21 diagnostic logging): the real SDK
-        # response is {"headers": {...}, "parameters": {...}} directly — there
-        # is no wrapping "connections" key, despite the docs/earlier assumption.
-        # Handle both shapes defensively in case a future SDK version nests it.
-        headers = resp.get("headers") or resp.get("connections", {}).get("headers") or None
+        headers = _normalize_connection_headers(resp)
         if not headers:
-            log.info(f"QuickML Connections returned no headers: full response={resp!r}")
+            details = resp.get("connections") or resp
+            log.info(
+                "QuickML Connections returned incomplete credentials: response keys=%s, "
+                "header keys=%s, parameter keys=%s",
+                sorted(resp), sorted((details.get("headers") or {}).keys()),
+                sorted((details.get("parameters") or {}).keys()),
+            )
         return headers
     except Exception as exc:
         # Temporarily logged at info (not debug) to diagnose a live fallback issue;
@@ -1648,7 +1692,10 @@ def _extract_quickml_text(payload) -> str:
                 return text
         return ""
     if isinstance(payload, dict):
-        for key in ("generated_text", "response", "output", "content", "text", "message", "data", "choices"):
+        for key in (
+            "generated_text", "response", "output", "content", "text",
+            "reasoning_content", "message", "data", "choices",
+        ):
             if key in payload:
                 text = _extract_quickml_text(payload[key])
                 if text:
@@ -1660,11 +1707,15 @@ def _parse_plan_json(text: str) -> AgentPlan:
     candidate = fenced.group(1) if fenced else text[text.find("{"):text.rfind("}") + 1]
     if not candidate:
         raise ValueError("QuickML response did not contain a JSON object")
+    plan_data = json.loads(candidate)
+    for field in ("horizon_days", "time_window", "language", "confidence"):
+        if plan_data.get(field) is None:
+            plan_data.pop(field, None)
     # Pydantic rejects any `action` outside the Literal allowlist above (and
     # silently drops unrecognized fields) — this is the enforcement point
     # that stops a malformed or adversarial LLM response from ever reaching
     # a tool: only a validated AgentPlan is allowed past this line.
-    return AgentPlan.model_validate(json.loads(candidate))
+    return AgentPlan.model_validate(plan_data)
 
 def _quickml_plan_sync(query: str, capp=None) -> AgentPlan:
     if not QUICKML_ENDPOINT or not QUICKML_MODEL:
@@ -1676,15 +1727,26 @@ def _quickml_plan_sync(query: str, capp=None) -> AgentPlan:
     system_prompt = """You are the intent planner for Project Garuda, a Karnataka police decision-support prototype.
 Interpret the English or Kannada request. Return JSON only, with no markdown or explanation.
 Schema:
-{"action":"search_cases|show_hotspots|investigate_network|compare_districts|summarize_trends|find_connection|rank_offenders|explain_correlations",
+{"action":"search_cases|show_hotspots|investigate_network|compare_districts|summarize_trends|find_connection|rank_offenders|explain_correlations|case_brief|assess_case_risk|summarize_kpis|forecast_hotspots|app_help|out_of_scope",
   "crime_type":string|null,"area":string|null,"district_ids":number[]|null,
-  "suspect_a":string|null,"suspect_b":string|null,
+    "case_id":number|null,"case_reference":string|null,"horizon_days":number,"suspect_a":string|null,"suspect_b":string|null,
   "time_window":"today|this_week|last_month|last_30_days|this_year|all","language":"en|kn","confidence":number}
 Tool guide: search_cases/show_hotspots/investigate_network filter the case list; compare_districts needs 2+ district_ids;
 summarize_trends reports rising/falling activity; find_connection needs suspect_a and suspect_b (person names);
 rank_offenders ranks suspects by network centrality; explain_correlations explains why an area looks risky.
-Never invent a crime type, area, district, or suspect name that isn't in the request. Use null when absent.
+Use investigate_network for repeat-accused or shared-case network searches without two named people.
+Use find_connection only when the request names exactly two people to connect.
+case_brief and assess_case_risk require a numeric case_id; summarize_kpis reports dashboard metrics;
+forecast_hotspots predicts station trends for 7-90 days; app_help explains navigation and workflows.
+Use out_of_scope for requests unrelated to police cases, crime patterns, hotspots, suspects, or operational intelligence.
+Represent "this month" as time_window="last_30_days".
+Never invent a crime type, area, district, or suspect name that isn't in the request. Use null only for nullable fields.
+Always provide horizon_days, time_window, language, and confidence using the schema types shown above.
 This plan is advisory and will be validated before any tool runs."""
+    district_reference = ", ".join(
+        f"{district.name}={district.district_id}" for district in KARNATAKA_DISTRICTS
+    )
+    system_prompt += f"\nKnown district IDs: {district_reference}. Use only these IDs."
     # Request/response shape confirmed empirically against the live Console's
     # "Sample Request and Response" panel for the deployed LLM Serving model
     # (an OpenAI-style chat-completion contract, NOT the flat "prompt" field
@@ -1695,7 +1757,7 @@ This plan is advisory and will be validated before any tool runs."""
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": query},
         ],
-        "max_tokens": 300,
+        "max_tokens": QUICKML_MAX_TOKENS,
         "temperature": 0.1,
         "stream": False,
     }
@@ -1714,12 +1776,58 @@ This plan is advisory and will be validated before any tool runs."""
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=12) as response:
+        with urllib.request.urlopen(request, timeout=QUICKML_TIMEOUT_SECONDS) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")[:500]
         raise RuntimeError(f"QuickML returned HTTP {exc.code}: {detail}") from exc
     return _parse_plan_json(_extract_quickml_text(payload))
+
+def _is_app_help_query(query: str) -> bool:
+    q = query.casefold().strip()
+    help_phrases = (
+        "what can i ask", "what questions", "help me use", "how do i", "how to",
+        "where can i", "where is", "navigate", "open the", "go to", "what is garuda",
+    )
+    app_topics = (
+        "garuda", "dashboard", "map", "report", "fir", "incident", "scan", "upload",
+        "simulator", "planner", "scenario", "setting", "theme", "language", "profile",
+        "analytics", "export", "brief", "district scope", "connection", "kingpin",
+    )
+    direct_workflows = (
+        "scan fir", "upload fir", "add incident", "file incident", "export brief",
+        "export intelligence brief", "show patrol", "assign case", "close case",
+        "change case status", "change theme", "switch language", "run simulator",
+    )
+    return (
+        any(phrase in q for phrase in help_phrases) and any(topic in q for topic in app_topics)
+    ) or any(phrase in q for phrase in direct_workflows)
+
+def _is_domain_query(query: str) -> bool:
+    q = query.casefold().strip()
+    if _is_app_help_query(query):
+        return True
+    domain_terms = (
+        "case", "crime", "criminal", "fir", "incident", "offender", "suspect", "accused",
+        "arrest", "theft", "robbery", "assault", "narcotic", "cyber", "fraud",
+        "murder", "homicide", "police", "station", "hotspot", "risk", "anomal",
+        "network", "connection", "link", "linked", "patrol", "district", "trend", "forecast",
+        "predict", "kpi", "dashboard", "garuda", "simulator", "scenario", "report",
+        "scan", "upload", "export", "brief", "setting", "theme", "language", "analytics",
+        "ಪ್ರಕರಣ", "ಅಪರಾಧ", "ಆರೋಪಿ", "ಬಂಧನ", "ಪೊಲೀಸ್", "ಹಾಟ್‌ಸ್ಪಾಟ್", "ಅಪಾಯ",
+    )
+    if any(term in q for term in domain_terms):
+        return True
+    if any(d.name.casefold() in q or d.name.split()[0].casefold() in q for d in KARNATAKA_DISTRICTS):
+        return True
+    if any(area.casefold() in q for area in BENGALURU_AREAS):
+        return True
+    if not DB.crime_heads.empty:
+        for name in DB.crime_heads["CrimeGroupName"].dropna().astype(str):
+            words = [word.casefold() for word in re.findall(r"[A-Za-z]{4,}", name)]
+            if name.casefold() in q or any(word in q for word in words):
+                return True
+    return False
 
 def _rule_plan(query: str) -> AgentPlan:
     """Deterministic fallback planner — always available, no external call.
@@ -1729,6 +1837,12 @@ def _rule_plan(query: str) -> AgentPlan:
     language = "kn" if re.search(r"[\u0c80-\u0cff]", query) else "en"
 
     district_ids = [d.district_id for d in KARNATAKA_DISTRICTS if d.name.lower() in q or d.name.split()[0].lower() in q]
+    case_match = re.search(r"\b(?:case|fir)(?:\s+(?:id|number|no\.?))?\s*[:#-]?\s*(\d+)\b", q)
+    case_id = int(case_match.group(1)) if case_match else None
+    case_reference_match = re.search(r"\b[A-Z]{2,5}(?:[-/][A-Z0-9]{2,12}){2,4}\b", query, re.IGNORECASE)
+    case_reference = case_reference_match.group(0) if case_reference_match else None
+    horizon_match = re.search(r"\b(\d{1,2})\s*(?:day|days)\b", q)
+    horizon_days = max(7, min(90, int(horizon_match.group(1)))) if horizon_match else 30
 
     suspect_a = suspect_b = None
     connection_trigger = any(term in q for term in ("connection between", "connect", "linked to", "ಸಂಪರ್ಕ"))
@@ -1736,7 +1850,19 @@ def _rule_plan(query: str) -> AgentPlan:
     if connection_trigger and match:
         suspect_a, suspect_b = match.group(1).strip(), match.group(2).strip()
 
-    if suspect_a and suspect_b:
+    if _is_app_help_query(query):
+        action = "app_help"
+    elif not _is_domain_query(query):
+        action = "out_of_scope"
+    elif (case_id is not None or case_reference is not None) and any(term in q for term in ("risk", "score", "assess")):
+        action = "assess_case_risk"
+    elif (case_id is not None or case_reference is not None) and any(term in q for term in ("brief", "detail", "summary", "summar")):
+        action = "case_brief"
+    elif any(term in q for term in ("forecast", "predicted hotspot", "predict hotspot", "likely to rise")):
+        action = "forecast_hotspots"
+    elif any(term in q for term in ("kpi", "dashboard metric", "overview", "anomal", "how many cases", "case count", "arrest rate")):
+        action = "summarize_kpis"
+    elif suspect_a and suspect_b:
         action = "find_connection"
     elif len(district_ids) >= 2 and any(term in q for term in ("compare", "vs", "versus", "ಹೋಲಿಸಿ")):
         action = "compare_districts"
@@ -1748,7 +1874,10 @@ def _rule_plan(query: str) -> AgentPlan:
         action = "summarize_trends"
     elif any(word in q for word in ("network", "link", "repeat", "ಸಂಪರ್ಕ")):
         action = "investigate_network"
-    elif any(word in q for word in ("hotspot", "risk area", "risk zone", "ಹಾಟ್‌ಸ್ಪಾಟ್", "ಅಪಾಯ ಪ್ರದೇಶ")):
+    elif (
+        any(word in q for word in ("hotspot", "risk area", "risk zone", "ಹಾಟ್‌ಸ್ಪಾಟ್", "ಅಪಾಯ ಪ್ರದೇಶ"))
+        or (any(term in q for term in ("high-risk", "high risk")) and any(term in q for term in ("area", "zone", "station")))
+    ):
         action = "show_hotspots"
     else:
         action = "search_cases"
@@ -1767,8 +1896,11 @@ def _rule_plan(query: str) -> AgentPlan:
         time_window = "all"
 
     return AgentPlan(
-        action=action, time_window=time_window, language=language, confidence=0.45,
-        district_ids=district_ids or None, suspect_a=suspect_a, suspect_b=suspect_b,
+        action=action, time_window=time_window, language=language,
+        confidence=0.95 if action == "out_of_scope" else 0.45,
+        district_ids=district_ids or None, case_id=case_id, case_reference=case_reference,
+        horizon_days=horizon_days,
+        suspect_a=suspect_a, suspect_b=suspect_b,
     )
 
 def _resolve_suspect_by_name(name: Optional[str]) -> Optional[str]:
@@ -1802,6 +1934,9 @@ def _agent_search_cases(query: str, plan: AgentPlan, trace: list[dict]) -> dict:
     q = query.lower().strip()
     df = DB.cases
     matched = df
+    district_id = (plan.district_ids or [None])[0]
+    if district_id is not None:
+        matched = _scope_filter(matched, district_id=district_id)
     matched_crime = None
     if not DB.crime_heads.empty:
         for _, ch in DB.crime_heads.iterrows():
@@ -1823,7 +1958,8 @@ def _agent_search_cases(query: str, plan: AgentPlan, trace: list[dict]) -> dict:
             break
 
     trace.append({"step": "execute", "tool": plan.action,
-                   "parameters": {"crime_type": plan.crime_type, "area": plan.area, "time_window": plan.time_window}})
+                   "parameters": {"crime_type": plan.crime_type, "area": plan.area,
+                                  "district_id": district_id, "time_window": plan.time_window}})
 
     latest_case_date = pd.to_datetime(DB.cases["CrimeRegisteredDate"], errors="coerce").max()
     now = min(pd.Timestamp.now(), latest_case_date) if pd.notna(latest_case_date) else pd.Timestamp.now()
@@ -1839,24 +1975,60 @@ def _agent_search_cases(query: str, plan: AgentPlan, trace: list[dict]) -> dict:
     elif plan.time_window == "this_year":
         matched = matched[dates >= now - pd.Timedelta(days=365)]
 
+    hotspot_candidates = matched
+    if plan.action == "show_hotspots":
+        matched = matched[matched["GravityOffenceID"] >= 4]
+
     count = len(matched)
     trace.append({"step": "observe", "records_examined": int(len(df)), "result_count": count})
 
-    if plan.language == "kn":
+    if plan.action == "show_hotspots":
+        station_counts = matched["PoliceStationID"].value_counts()
+        top_stations = [
+            f"{station_name(int(station_id))} ({int(station_count)})"
+            for station_id, station_count in station_counts.head(3).items()
+        ]
+        period = {
+            "today": "today", "this_week": "the last 7 days", "last_month": "the previous 30-day period",
+            "last_30_days": "the last 30 days", "this_year": "the last 365 days", "all": "the available period",
+        }[plan.time_window]
+        crime_label = ""
+        if matched_crime is not None and not DB.crime_heads.empty:
+            crime_name = DB.crime_heads.loc[DB.crime_heads["CrimeHeadID"] == matched_crime, "CrimeGroupName"].iloc[0]
+            crime_label = f" {crime_name}"
+        if count == 0 and len(hotspot_candidates) > 0:
+            candidate_stations = hotspot_candidates["PoliceStationID"].nunique()
+            if plan.language == "kn":
+                answer = f"{period} ಅವಧಿಯಲ್ಲಿ {len(hotspot_candidates)}{crime_label} ಪ್ರಕರಣಗಳು {candidate_stations} ಠಾಣೆಗಳಲ್ಲಿ ಕಂಡುಬಂದಿವೆ, ಆದರೆ ಯಾವುದೂ ಗರುಡದ ಹೆಚ್ಚಿನ ಅಪಾಯದ ಮಿತಿ (ಗಂಭೀರತೆ 4-5) ತಲುಪಿಲ್ಲ."
+            else:
+                answer = f"Found {len(hotspot_candidates)}{crime_label} cases across {candidate_stations} stations in {period}, but none meet Garuda's high-risk threshold (gravity 4-5)."
+        elif plan.language == "kn":
+            answer = f"{period} ಅವಧಿಯಲ್ಲಿ {count} ಹೆಚ್ಚಿನ ಅಪಾಯದ{crime_label} ಪ್ರಕರಣಗಳು {len(station_counts)} ಠಾಣೆಗಳಲ್ಲಿ ಕಂಡುಬಂದಿವೆ."
+        else:
+            answer = f"Found {count} high-risk{crime_label} cases across {len(station_counts)} stations in {period}."
+        if top_stations:
+            answer += (" ಅತಿ ಹೆಚ್ಚು ಸಾಂದ್ರತೆ: " if plan.language == "kn" else " Highest concentrations: ") + ", ".join(top_stations) + "."
+    elif plan.language == "kn":
         parts = [f"{count} ಹೊಂದಾಣಿಕೆಯ ಪ್ರಕರಣಗಳು ಕಂಡುಬಂದಿವೆ"]
+        if matched_crime is not None and not DB.crime_heads.empty:
+            crime_name = DB.crime_heads.loc[DB.crime_heads["CrimeHeadID"] == matched_crime, "CrimeGroupName"].iloc[0]
+            parts.append(f"- {crime_name}")
+        if matched_station is not None:
+            parts.append(f"- {station_name(matched_station)}")
+        answer = " ".join(parts) + "."
     else:
         parts = [f"Found {count} matching case{'s' if count != 1 else ''}"]
-    if matched_crime is not None and not DB.crime_heads.empty:
-        crime_name = DB.crime_heads.loc[DB.crime_heads["CrimeHeadID"] == matched_crime, "CrimeGroupName"].iloc[0]
-        parts.append(f"- {crime_name}" if plan.language == "kn" else f"of type {crime_name}")
-    if matched_station is not None:
-        parts.append(f"- {station_name(matched_station)}" if plan.language == "kn" else f"at {station_name(matched_station)}")
-    answer = " ".join(parts) + "."
+        if matched_crime is not None and not DB.crime_heads.empty:
+            crime_name = DB.crime_heads.loc[DB.crime_heads["CrimeHeadID"] == matched_crime, "CrimeGroupName"].iloc[0]
+            parts.append(f"of type {crime_name}")
+        if matched_station is not None:
+            parts.append(f"at {station_name(matched_station)}")
+        answer = " ".join(parts) + "."
     trace.append({"step": "answer", "detail": answer})
 
     top = matched.sort_values("CrimeRegisteredDate", ascending=False).head(10)
     matched_cases = [
-        {"id": f"BLR-{row['CrimeNo']}", "date": str(row["CrimeRegisteredDate"]),
+        {"id": str(row["CrimeNo"]), "date": str(row["CrimeRegisteredDate"]),
          "station": station_name(int(row["PoliceStationID"])),
          "gravity": int(row["GravityOffenceID"])}
         for _, row in top.iterrows()
@@ -1867,6 +2039,212 @@ def _agent_search_cases(query: str, plan: AgentPlan, trace: list[dict]) -> dict:
         "matched_cases": matched_cases,
         "suggested_view": suggested_view,
         "tool_calls": [{"tool": plan.action, "status": "completed", "result_count": count}],
+    }
+
+def _agent_investigate_network(query: str, plan: AgentPlan, trace: list[dict]) -> dict:
+    result = _agent_rank_offenders(query, plan, trace)
+    ranking = result.get("offender_ranking", [])
+    if not ranking:
+        ranking = [
+            {
+                "id": node_id, "label": data.get("label", node_id),
+                "kingpin_score": 0.0, "case_count": int(DB.graph.degree(node_id)),
+            }
+            for node_id, data in DB.graph.nodes(data=True)
+            if data.get("type") == "Suspect" and DB.graph.degree(node_id) > 1
+        ]
+        ranking.sort(key=lambda row: row["case_count"], reverse=True)
+        ranking = ranking[:5]
+        result["offender_ranking"] = ranking
+    result["answer"] = (
+        f"Found {len(ranking)} leading repeat-accused network records ranked by shared-case centrality. "
+        "Open Connections to inspect their recorded links; rankings are investigative leads, not evidence."
+    )
+    result["tool_calls"] = [{
+        "tool": "investigate_network", "status": "completed", "result_count": len(ranking),
+    }]
+    if trace and trace[-1].get("step") == "answer":
+        trace[-1]["detail"] = result["answer"]
+    return result
+
+def _agent_out_of_scope(query: str, plan: AgentPlan, trace: list[dict]) -> dict:
+    trace.append({"step": "observe", "detail": "The request is outside Garuda's crime-intelligence data and approved tools."})
+    answer = (
+        "ಈ ಪ್ರಶ್ನೆ ಗರುಡದ ಅಪರಾಧ ಗುಪ್ತಚರ ವ್ಯಾಪ್ತಿಗೆ ಹೊರತಾಗಿದೆ. ಪ್ರಕರಣಗಳು, ಹಾಟ್‌ಸ್ಪಾಟ್‌ಗಳು, ಪ್ರವೃತ್ತಿಗಳು ಅಥವಾ ಶಂಕಿತರ ಸಂಪರ್ಕಗಳ ಬಗ್ಗೆ ಕೇಳಿ."
+        if plan.language == "kn"
+        else "That question is outside Garuda's crime intelligence scope. Ask about cases, hotspots, trends, or suspect connections."
+    )
+    trace.append({"step": "answer", "detail": answer})
+    return {
+        "answer": answer, "matched_cases": [], "suggested_view": "dashboard", "tool_calls": [],
+    }
+
+def _agent_app_help(query: str, plan: AgentPlan, trace: list[dict]) -> dict:
+    q = query.casefold()
+    suggested_view = "dashboard"
+    if any(term in q for term in ("scan", "upload", "add", "file", "report", "fir", "incident", "assign", "close")):
+        suggested_view = "reports"
+        answer = (
+            "Open Reports. Use Scan FIR to create a reviewable draft from an image or PDF, or Add Incident for manual entry. "
+            "Garuda never submits or changes a case from chat; review the form and submit it yourself."
+        )
+    elif any(term in q for term in ("connection", "network", "kingpin", "syndicate", "suspect")):
+        suggested_view = "network"
+        answer = "Open Connections to inspect suspect links, communities, ranked offenders, predicted leads, or a path between two suspects."
+    elif any(term in q for term in ("simulator", "planner", "scenario")):
+        suggested_view = "simulator"
+        answer = "Open Planner to set patrol density, infrastructure health, and response readiness, then run the scenario. SI permission is required."
+    elif any(term in q for term in ("map", "forecast", "predicted", "hotspot", "patrol")):
+        suggested_view = "geospatial"
+        answer = "Open Map to inspect historical hotspots, predicted station risk, patrol units, infrastructure, and station details."
+    elif any(term in q for term in ("setting", "theme", "language", "profile", "analytics", "security")):
+        suggested_view = "settings"
+        answer = "Open Settings for theme, language, profile, integration status, visit analytics, and security information."
+    elif "export" in q:
+        answer = "Use Export Brief in the top bar to download a PDF computed from the current district scope and latest data."
+    elif any(term in q for term in ("district scope", "change district", "district filter")):
+        answer = "Use the district selector in the top bar. Dashboard metrics, maps, reports, and summaries then use that scope."
+    else:
+        answer = (
+            "You can ask Garuda to search cases by crime, area, and time; find high-risk hotspots; summarize KPIs, anomalies, and trends; "
+            "forecast rising stations; compare districts; brief or assess a case by numeric case ID; rank offenders; trace suspect connections; "
+            "explain risk correlations; or show how to use the map, Reports, simulator, settings, FIR scan, and PDF export."
+        )
+    trace.append({"step": "execute", "tool": "app_help", "parameters": {"suggested_view": suggested_view}})
+    trace.append({"step": "answer", "detail": answer})
+    return {
+        "answer": answer, "matched_cases": [], "suggested_view": suggested_view,
+        "tool_calls": [{"tool": "app_help", "status": "completed", "result_count": 1}],
+    }
+
+def _case_row(case_id: Optional[int], case_reference: Optional[str] = None):
+    if case_id is not None:
+        rows = DB.cases[DB.cases["CaseMasterID"].astype(int) == case_id]
+    elif case_reference:
+        normalized = case_reference.casefold().replace("-", "/")
+        crime_numbers = DB.cases["CrimeNo"].astype(str).str.casefold().str.replace("-", "/", regex=False)
+        rows = DB.cases[crime_numbers == normalized]
+    else:
+        return None
+    return None if rows.empty else rows.iloc[0]
+
+def _agent_case_brief(query: str, plan: AgentPlan, trace: list[dict]) -> dict:
+    case = _case_row(plan.case_id, plan.case_reference)
+    trace.append({"step": "execute", "tool": "case_brief", "parameters": {"case_id": plan.case_id, "case_reference": plan.case_reference}})
+    if case is None:
+        answer = "Specify a valid numeric case ID, for example: Brief case 1042."
+        trace.append({"step": "answer", "detail": answer})
+        return {
+            "answer": answer, "matched_cases": [], "suggested_view": "reports",
+            "tool_calls": [{"tool": "case_brief", "status": "unresolved", "result_count": 0}],
+        }
+
+    case_id = int(case["CaseMasterID"])
+    station_id = int(case["PoliceStationID"])
+    accused_count = int((DB.accused["CaseMasterID"].astype(int) == case_id).sum())
+    crime_name = "Unknown"
+    if not DB.crime_heads.empty:
+        names = DB.crime_heads.loc[DB.crime_heads["CrimeHeadID"] == case["CrimeMajorHeadID"], "CrimeGroupName"]
+        if not names.empty:
+            crime_name = str(names.iloc[0])
+    answer = (
+        f"Case {case_id} ({case['CrimeNo']}) is a {crime_name} case registered on {case['CrimeRegisteredDate']} "
+        f"at {station_name(station_id)}, with gravity {int(case['GravityOffenceID'])}/5 and {accused_count} accused record(s)."
+    )
+    trace.append({"step": "observe", "result_count": 1, "accused_count": accused_count})
+    trace.append({"step": "answer", "detail": answer})
+    return {
+        "answer": answer,
+        "matched_cases": [{
+            "id": str(case["CrimeNo"]), "date": str(case["CrimeRegisteredDate"]),
+            "station": station_name(station_id), "gravity": int(case["GravityOffenceID"]),
+        }],
+        "suggested_view": "reports",
+        "tool_calls": [{"tool": "case_brief", "status": "completed", "result_count": 1}],
+    }
+
+def _agent_assess_case_risk(query: str, plan: AgentPlan, trace: list[dict]) -> dict:
+    case = _case_row(plan.case_id, plan.case_reference)
+    resolved_case_id = int(case["CaseMasterID"]) if case is not None else None
+    trace.append({"step": "execute", "tool": "assess_case_risk", "parameters": {"case_id": resolved_case_id, "case_reference": plan.case_reference}})
+    if resolved_case_id is None:
+        answer = "Specify a valid numeric case ID, for example: Assess risk for case 1042."
+        trace.append({"step": "answer", "detail": answer})
+        return {
+            "answer": answer, "matched_cases": [], "suggested_view": "reports",
+            "tool_calls": [{"tool": "assess_case_risk", "status": "unresolved", "result_count": 0}],
+        }
+    features = _risk_features(resolved_case_id)
+    prediction = _local_risk_prediction(features)
+    answer = (
+        f"Case {resolved_case_id} is {prediction['risk_class']} risk under Garuda's transparent local prototype model "
+        f"(gravity {features['gravity_level']}/5, {features['repeat_accused_count']} repeat accused, "
+        f"{features['arrest_rate_percent']}% arrest coverage). This is advisory and requires supervisor review."
+    )
+    trace.append({"step": "observe", "risk_class": prediction["risk_class"], "features": features})
+    trace.append({"step": "answer", "detail": answer})
+    return {
+        "answer": answer, "matched_cases": [], "suggested_view": "reports",
+        "tool_calls": [{"tool": "assess_case_risk", "status": "completed", "result_count": 1}],
+    }
+
+def _agent_summarize_kpis(query: str, plan: AgentPlan, trace: list[dict]) -> dict:
+    district_id = (plan.district_ids or [None])[0]
+    cases = _scope_filter(DB.cases, district_id=district_id) if district_id else DB.cases
+    case_ids = set(cases["CaseMasterID"])
+    arrests = DB.arrests[DB.arrests["CaseMasterID"].isin(case_ids)] if not DB.arrests.empty else DB.arrests
+    total = len(cases)
+    high_risk = int((cases["GravityOffenceID"] >= 4).sum())
+    arrest_rate = round(arrests["CaseMasterID"].nunique() / max(total, 1) * 100, 1) if not arrests.empty else 0.0
+    anomalies = _compute_anomalies(cases)
+    district = district_by_id(district_id) if district_id else None
+    scope = district.name if district else "Karnataka"
+    answer = (
+        f"{scope}: {total:,} cases, {high_risk:,} high-risk cases, {arrest_rate}% case arrest rate, "
+        f"and {len(anomalies)} active station anomalies."
+    )
+    trace.append({"step": "execute", "tool": "summarize_kpis", "parameters": {"district_id": district_id}})
+    trace.append({"step": "observe", "records_examined": total, "active_anomalies": len(anomalies)})
+    trace.append({"step": "answer", "detail": answer})
+    return {
+        "answer": answer, "matched_cases": [], "suggested_view": "dashboard",
+        "tool_calls": [{"tool": "summarize_kpis", "status": "completed", "result_count": total}],
+    }
+
+def _agent_forecast_hotspots(query: str, plan: AgentPlan, trace: list[dict]) -> dict:
+    district_id = (plan.district_ids or [None])[0]
+    cases = _scope_filter(DB.cases, district_id=district_id) if district_id else DB.cases
+    monthly = _monthly_counts_by_station(cases)
+    model_fn = FORECAST_MODELS.get(DEPLOYED_FORECAST_MODEL, _forecast_linear_trend)
+    forecasts = []
+    for station_id, series in monthly.items():
+        if len(series) < 3:
+            continue
+        predicted = model_fn(series.values.astype(float))
+        baseline = float(series.values[-3:].mean()) or 1.0
+        forecasts.append({
+            "station": station_name(station_id), "predicted": round(predicted, 1),
+            "trend": round((predicted - baseline) / baseline * 100, 1),
+        })
+    asks_for_rise = any(term in query.casefold() for term in ("rise", "rising", "increase", "growth", "ಏರಿಕೆ"))
+    if asks_for_rise:
+        rising = [row for row in forecasts if row["trend"] > 0]
+        top = sorted(rising or forecasts, key=lambda row: row["trend"], reverse=True)[:3]
+    else:
+        top = sorted(forecasts, key=lambda row: row["predicted"], reverse=True)[:3]
+    district = district_by_id(district_id) if district_id else None
+    scope = district.name if district else "Karnataka"
+    if top:
+        leaders = ", ".join(f"{row['station']} ({row['predicted']} cases, {row['trend']:+.1f}%)" for row in top)
+        answer = f"Top {plan.horizon_days}-day station forecasts for {scope}: {leaders}. Forecasts are advisory trend estimates, not dispatch instructions."
+    else:
+        answer = f"There is not enough history to forecast stations for {scope}."
+    trace.append({"step": "execute", "tool": "forecast_hotspots", "parameters": {"district_id": district_id, "horizon_days": plan.horizon_days}})
+    trace.append({"step": "observe", "stations_forecast": len(forecasts), "model": DEPLOYED_FORECAST_MODEL})
+    trace.append({"step": "answer", "detail": answer})
+    return {
+        "answer": answer, "matched_cases": [], "suggested_view": "geospatial",
+        "tool_calls": [{"tool": "forecast_hotspots", "status": "completed", "result_count": len(forecasts)}],
     }
 
 def _agent_compare_districts(query: str, plan: AgentPlan, trace: list[dict]) -> dict:
@@ -2037,12 +2415,18 @@ def _agent_explain_correlations(query: str, plan: AgentPlan, trace: list[dict]) 
 _AGENT_DISPATCH = {
     "search_cases":        _agent_search_cases,
     "show_hotspots":       _agent_search_cases,
-    "investigate_network": _agent_search_cases,
+    "investigate_network": _agent_investigate_network,
     "compare_districts":   _agent_compare_districts,
     "summarize_trends":    _agent_summarize_trends,
     "find_connection":     _agent_find_connection,
     "rank_offenders":      _agent_rank_offenders,
     "explain_correlations": _agent_explain_correlations,
+    "case_brief":           _agent_case_brief,
+    "assess_case_risk":     _agent_assess_case_risk,
+    "summarize_kpis":       _agent_summarize_kpis,
+    "forecast_hotspots":    _agent_forecast_hotspots,
+    "app_help":             _agent_app_help,
+    "out_of_scope":          _agent_out_of_scope,
 }
 
 _AGENT_AUDIT_LOG = logging.getLogger("garuda.audit")
@@ -2120,13 +2504,55 @@ async def ask_garuda(body: AskRequest, request: Request):
         raise HTTPException(503, "Data not loaded")
     capp = _try_catalyst_app(request)
     source: Literal["quickml", "rules"] = "rules"
-    try:
-        plan = await asyncio.to_thread(_quickml_plan_sync, body.query.strip(), capp)
-        source = "quickml"
-    except Exception as exc:
-        log.info(f"QuickML planner unavailable; using deterministic planner: {exc}")
-        plan = _rule_plan(body.query)
+    rules_plan = _rule_plan(body.query)
+    deterministic_actions = {
+        "app_help", "out_of_scope", "case_brief", "assess_case_risk",
+        "summarize_kpis", "forecast_hotspots",
+    }
+    if rules_plan.action in deterministic_actions:
+        plan = rules_plan
+    else:
+        try:
+            plan = await asyncio.to_thread(_quickml_plan_sync, body.query.strip(), capp)
+            source = "quickml"
+        except Exception as exc:
+            log.info(f"QuickML planner unavailable; using deterministic planner: {exc}")
+            plan = _rule_plan(body.query)
     return _run_agent(body.query, plan, source, officer.get("badge"), capp)
+
+@app.get("/api/agent/quickml-status")
+async def get_quickml_status(request: Request):
+    require_session(request)
+    capp = _try_catalyst_app(request)
+    result = {
+        "endpoint_configured": bool(QUICKML_ENDPOINT),
+        "model_configured": bool(QUICKML_MODEL),
+        "connection_name_configured": bool(QUICKML_CONNECTION_LINK_NAME),
+        "catalyst_app_context": capp is not None,
+        "connection_response_keys": [],
+        "connection_header_keys": [],
+        "connection_parameter_keys": [],
+        "normalized_authorization": False,
+        "normalized_org": False,
+        "status": "unavailable",
+    }
+    if capp is None or not QUICKML_CONNECTION_LINK_NAME:
+        result["status"] = "missing_catalyst_context"
+        return result
+    try:
+        response = capp.connections().get_connection_credentials(QUICKML_CONNECTION_LINK_NAME) or {}
+        details = response.get("connections") or response
+        result["connection_response_keys"] = sorted(str(key) for key in response)
+        result["connection_header_keys"] = sorted(str(key) for key in (details.get("headers") or {}))
+        result["connection_parameter_keys"] = sorted(str(key) for key in (details.get("parameters") or {}))
+        normalized = _normalize_connection_headers(response) or {}
+        result["normalized_authorization"] = any(key.lower() == "authorization" for key in normalized)
+        result["normalized_org"] = any(key.lower() == "catalyst-org" for key in normalized)
+        result["status"] = "ready" if normalized else "incomplete_credentials"
+    except Exception as exc:
+        result["status"] = "connection_error"
+        result["error_type"] = type(exc).__name__
+    return result
 
 # ─── GET /api/agent/case-brief/{case_master_id} — case-briefing agent ────────
 # Chains 4 existing tools (risk score, network centrality, causal context,

@@ -56,6 +56,7 @@ export const translations = {
   ask_close: { en: "Close Ask Garuda", kn: "ಗರುಡವನ್ನು ಮುಚ್ಚಿ" },
   ask_quickml: { en: "QuickML AI", kn: "QuickML AI" },
   ask_fallback: { en: "Local fallback", kn: "ಸ್ಥಳೀಯ ಪರ್ಯಾಯ" },
+  ask_intent_confidence: { en: "Intent confidence", kn: "ಉದ್ದೇಶದ ವಿಶ್ವಾಸ" },
   ask_tool_search_cases: { en: "Searched case records", kn: "ಪ್ರಕರಣ ದಾಖಲೆಗಳನ್ನು ಹುಡುಕಲಾಗಿದೆ" },
   ask_tool_show_hotspots: { en: "Analyzed hotspot evidence", kn: "ಹಾಟ್‌ಸ್ಪಾಟ್ ಸಾಕ್ಷ್ಯವನ್ನು ವಿಶ್ಲೇಷಿಸಲಾಗಿದೆ" },
   ask_tool_investigate_network: { en: "Investigated connected records", kn: "ಸಂಪರ್ಕಿತ ದಾಖಲೆಗಳನ್ನು ಪರಿಶೀಲಿಸಲಾಗಿದೆ" },
@@ -64,11 +65,18 @@ export const translations = {
   ask_tool_find_connection: { en: "Traced suspect connection", kn: "ಶಂಕಿತರ ಸಂಪರ್ಕ ಪತ್ತೆ" },
   ask_tool_rank_offenders: { en: "Ranked network kingpins", kn: "ಜಾಲದ ಪ್ರಮುಖರನ್ನು ಶ್ರೇಣೀಕರಿಸಲಾಗಿದೆ" },
   ask_tool_explain_correlations: { en: "Explained risk correlation", kn: "ಅಪಾಯದ ಸಂಬಂಧವನ್ನು ವಿವರಿಸಲಾಗಿದೆ" },
+  ask_tool_case_brief: { en: "Assembled case brief", kn: "ಪ್ರಕರಣದ ಸಾರಾಂಶ ಸಿದ್ಧಪಡಿಸಲಾಗಿದೆ" },
+  ask_tool_assess_case_risk: { en: "Assessed case risk", kn: "ಪ್ರಕರಣದ ಅಪಾಯವನ್ನು ಮೌಲ್ಯಮಾಪನ ಮಾಡಲಾಗಿದೆ" },
+  ask_tool_summarize_kpis: { en: "Summarized dashboard metrics", kn: "ಡ್ಯಾಶ್‌ಬೋರ್ಡ್ ಅಳತೆಗಳ ಸಾರಾಂಶ" },
+  ask_tool_forecast_hotspots: { en: "Forecast station trends", kn: "ಠಾಣೆಯ ಪ್ರವೃತ್ತಿಗಳ ಮುನ್ಸೂಚನೆ" },
+  ask_tool_app_help: { en: "Provided app guidance", kn: "ಆ್ಯಪ್ ಮಾರ್ಗದರ್ಶನ ನೀಡಲಾಗಿದೆ" },
   ask_result_count: { en: "records", kn: "ದಾಖಲೆಗಳು" },
   ask_sample_hotspots: { en: "High-risk theft areas this month", kn: "ಈ ತಿಂಗಳ ಹೆಚ್ಚಿನ ಅಪಾಯದ ಕಳ್ಳತನ ಪ್ರದೇಶಗಳು" },
   ask_sample_network: { en: "Find repeat accused links", kn: "ಪುನರಾವರ್ತಿತ ಆರೋಪಿಗಳ ಸಂಪರ್ಕ ಹುಡುಕಿ" },
   ask_sample_compare: { en: "Compare Mysuru and Bengaluru Urban", kn: "Mysuru ಮತ್ತು Bengaluru Urban ಹೋಲಿಸಿ" },
   ask_sample_kingpins: { en: "Who are the top offenders", kn: "ಪ್ರಮುಖ ಅಪರಾಧಿಗಳು ಯಾರು" },
+  ask_sample_forecast: { en: "Which stations are forecast to rise?", kn: "ಯಾವ ಠಾಣೆಗಳಲ್ಲಿ ಏರಿಕೆಯ ಮುನ್ಸೂಚನೆ ಇದೆ?" },
+  ask_sample_help: { en: "What questions can I ask Garuda?", kn: "ನಾನು ಗರುಡನಿಗೆ ಯಾವ ಪ್ರಶ್ನೆಗಳನ್ನು ಕೇಳಬಹುದು?" },
   ask_grounded_notice: { en: "AI plans the request. Garuda validates and runs approved tools.", kn: "AI ವಿನಂತಿಯನ್ನು ಯೋಜಿಸುತ್ತದೆ. ಗರುಡ ಪರಿಶೀಲಿಸಿ ಅನುಮೋದಿತ ಸಾಧನಗಳನ್ನು ಚಲಾಯಿಸುತ್ತದೆ." },
   ask_trace_toggle: { en: "Show reasoning", kn: "ತಾರ್ಕಿಕತೆ ತೋರಿಸಿ" },
   ask_trace_hide: { en: "Hide reasoning", kn: "ತಾರ್ಕಿಕತೆ ಮರೆಮಾಡಿ" },
@@ -464,9 +472,9 @@ export const translations = {
   map_model_feedback_loop_title: { en: "Feedback-loop risk", kn: "ಪ್ರತಿಕ್ರಿಯಾ ಲೂಪ್ ಅಪಾಯ" },
 
   // ─── Ask Garuda (NL search) ────────────────────────────────────────────────
-  ask_placeholder:  { en: "Ask about cases, hotspots, or links…", kn: "ಪ್ರಕರಣಗಳು, ಹಾಟ್‌ಸ್ಪಾಟ್‌ಗಳು ಅಥವಾ ಸಂಪರ್ಕಗಳ ಬಗ್ಗೆ ಕೇಳಿ…" },
-  ask_thinking:     { en: "Searching case records…", kn: "ಪ್ರಕರಣ ದಾಖಲೆ ಹುಡುಕಲಾಗುತ್ತಿದೆ…" },
-  ask_view_results: { en: "View matching cases →",   kn: "ಹೊಂದಾಣಿಕೆ ಪ್ರಕರಣ ನೋಡಿ →" },
+  ask_placeholder:  { en: "Ask about cases, risk, forecasts, or how to use Garuda…", kn: "ಪ್ರಕರಣಗಳು, ಅಪಾಯ, ಮುನ್ಸೂಚನೆಗಳು ಅಥವಾ ಗರುಡ ಬಳಕೆಯ ಬಗ್ಗೆ ಕೇಳಿ…" },
+  ask_thinking:     { en: "Analyzing request…", kn: "ವಿನಂತಿಯನ್ನು ವಿಶ್ಲೇಷಿಸಲಾಗುತ್ತಿದೆ…" },
+  ask_view_results: { en: "Open suggested view →", kn: "ಸೂಚಿಸಿದ ವೀಕ್ಷಣೆ ತೆರೆಯಿರಿ →" },
 } as const;
 
 export type TranslationKey = keyof typeof translations;
