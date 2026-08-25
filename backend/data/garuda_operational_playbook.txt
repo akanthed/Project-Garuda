@@ -1,0 +1,44 @@
+GARUDA OPERATIONAL PLAYBOOK
+Version: Prototype 1.0
+Purpose: Product workflow and evidence-safeguard guidance for the Garuda prototype.
+Authority: This is not an official Karnataka Police SOP, legal order, or policy. Officers must follow current departmental orders and applicable law.
+
+[SOURCE: GP-01 | Alert review]
+An anomaly alert means a station recorded more cases than its usual historical level. It is a triage signal, not a prediction, allegation, or proof. Review the underlying case records, date range, station scope, and data quality before acting. Record the human decision and reason in the Action Brief.
+Kannada summary: ಅಸಾಮಾನ್ಯತೆ ಎಚ್ಚರಿಕೆ ಪರಿಶೀಲನೆಗೆ ಆದ್ಯತೆ ನೀಡುವ ಸೂಚನೆ ಮಾತ್ರ. ಇದು ಮುನ್ಸೂಚನೆ ಅಥವಾ ಅಪರಾಧದ ಪುರಾವೆಯಲ್ಲ. ಕ್ರಮಕ್ಕೂ ಮೊದಲು ಮೂಲ ಪ್ರಕರಣ ದಾಖಲೆಗಳನ್ನು ಪರಿಶೀಲಿಸಿ.
+
+[SOURCE: GP-02 | Action Brief and assignment]
+A supervisor should open the alert's Action Brief, compare current and usual monthly cases, inspect the station and relevant records, choose approve, modify, or escalate, add a reason, and assign a field officer. The assigned task must contain a clear objective and must not instruct an officer to treat a statistical score as evidence.
+Kannada summary: ಮೇಲ್ವಿಚಾರಕರು ಪ್ರಸ್ತುತ ಮತ್ತು ಸಾಮಾನ್ಯ ಪ್ರಕರಣ ಸಂಖ್ಯೆಯನ್ನು ಹೋಲಿಸಿ, ದಾಖಲೆಗಳನ್ನು ಪರಿಶೀಲಿಸಿ, ಕಾರಣದೊಂದಿಗೆ ನಿರ್ಧಾರ ದಾಖಲಿಸಿ ಮತ್ತು ಸ್ಪಷ್ಟ ಕಾರ್ಯವನ್ನು ನಿಯೋಜಿಸಬೇಕು.
+
+[SOURCE: GP-03 | Field task]
+The field officer should acknowledge the task, record factual observations, attach only relevant photos or PDFs, and mark completion with an outcome note. Do not include unnecessary personal data. If the instruction is unclear, unsafe, or outside authority, pause and contact the supervisor.
+Kannada summary: ಕ್ಷೇತ್ರ ಅಧಿಕಾರಿ ವಾಸ್ತವಿಕ ಗಮನಿಕೆಗಳನ್ನು ಮಾತ್ರ ದಾಖಲಿಸಬೇಕು, ಸಂಬಂಧಿತ ಲಗತ್ತುಗಳನ್ನು ಮಾತ್ರ ಸೇರಿಸಬೇಕು ಮತ್ತು ಅಸ್ಪಷ್ಟ ಅಥವಾ ಅಧಿಕಾರದ ಹೊರಗಿನ ಸೂಚನೆಗೆ ಮೇಲ್ವಿಚಾರಕರನ್ನು ಸಂಪರ್ಕಿಸಬೇಕು.
+
+[SOURCE: GP-04 | FIR scan]
+OCR creates a draft only. Confirm the FIR number, registration date, station, category, severity, and extracted names against the original document. Low-confidence fields require manual review. Garuda never auto-submits an OCR draft.
+Kannada summary: OCR ಕರಡು ಮಾತ್ರ ರಚಿಸುತ್ತದೆ. ಮೂಲ ದಾಖಲೆಯೊಂದಿಗೆ ಎಲ್ಲಾ ಕ್ಷೇತ್ರಗಳನ್ನು ಪರಿಶೀಲಿಸಿ. ಕಡಿಮೆ ವಿಶ್ವಾಸದ ಕ್ಷೇತ್ರಗಳನ್ನು ಕೈಯಾರೆ ಪರಿಶೀಲಿಸಿ; ಗರುಡ ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಸಲ್ಲಿಸುವುದಿಲ್ಲ.
+
+[SOURCE: GP-05 | Network analysis]
+Connections, communities, centrality rankings, and predicted links are investigative leads. They do not establish identity, association, guilt, or intent. Verify every link against original case records and corroborating evidence. Synthetic demo data may create artificial clusters.
+Kannada summary: ಜಾಲ ಸಂಪರ್ಕಗಳು ಮತ್ತು ಶ್ರೇಯಾಂಕಗಳು ತನಿಖಾ ಸುಳಿವುಗಳು ಮಾತ್ರ. ಅವು ತಪ್ಪಿತಸ್ಥತೆ ಅಥವಾ ಸಂಬಂಧವನ್ನು ಸ್ಥಾಪಿಸುವುದಿಲ್ಲ. ಮೂಲ ದಾಖಲೆಗಳಿಂದ ದೃಢೀಕರಿಸಿ.
+
+[SOURCE: GP-06 | Forecast and planner]
+Forecasts and what-if estimates support resource discussion; they are not validated causal effects or guarantees. Review the model window, uncertainty, operational constraints, and local knowledge. A supervisor remains responsible for deployment decisions.
+Kannada summary: ಮುನ್ಸೂಚನೆ ಮತ್ತು ಏನಾದರೆ ಅಂದಾಜು ಸಂಪನ್ಮೂಲ ಚರ್ಚೆಗೆ ಮಾತ್ರ. ಅವು ಖಚಿತ ಫಲಿತಾಂಶವಲ್ಲ; ಅಂತಿಮ ನಿರ್ಧಾರ ಮಾನವ ಮೇಲ್ವಿಚಾರಕರದ್ದಾಗಿದೆ.
+
+[SOURCE: GP-07 | Evidence and privacy]
+Use the minimum information needed for the task. Keep attachments relevant, preserve original records, and do not copy operational data into unapproved services. Exported briefs and AI summaries are secondary aids; original records remain authoritative.
+Kannada summary: ಅಗತ್ಯವಿರುವ ಕನಿಷ್ಠ ಮಾಹಿತಿಯನ್ನು ಮಾತ್ರ ಬಳಸಿ. ಮೂಲ ದಾಖಲೆಗಳನ್ನು ಉಳಿಸಿ. AI ಸಾರಾಂಶಕ್ಕಿಂತ ಮೂಲ ದಾಖಲೆ ಅಧಿಕೃತವಾಗಿದೆ.
+
+[SOURCE: GP-08 | Escalation]
+Escalate when there is an immediate safety concern, conflicting or incomplete evidence, a task outside the officer's authority, possible data corruption, or a high-impact decision that requires senior review. Garuda does not replace emergency channels, chain of command, or statutory procedure.
+Kannada summary: ತಕ್ಷಣದ ಸುರಕ್ಷತಾ ಅಪಾಯ, ಅಪೂರ್ಣ ಸಾಕ್ಷ್ಯ, ಅಧಿಕಾರದ ಹೊರಗಿನ ಕಾರ್ಯ, ದತ್ತಾಂಶ ದೋಷ ಅಥವಾ ಹಿರಿಯ ಪರಿಶೀಲನೆ ಅಗತ್ಯವಿರುವ ನಿರ್ಧಾರವನ್ನು ಮೇಲ್ದರ್ಜೆಗೆ ಕಳುಹಿಸಿ.
+
+[SOURCE: GP-09 | Ask Garuda]
+Ask Garuda may select approved analytical tools or retrieve this playbook. It may not write to case records, submit an FIR, assign guilt, recommend detention, or issue an operational order. Answers must identify their source and should be checked against original records or current official instructions.
+Kannada summary: ಗರುಡ ಅನುಮೋದಿತ ವಿಶ್ಲೇಷಣಾ ಸಾಧನ ಅಥವಾ ಈ ಮಾರ್ಗದರ್ಶಿಯನ್ನು ಬಳಸಬಹುದು. ಇದು ಪ್ರಕರಣ ಬದಲಾವಣೆ, FIR ಸಲ್ಲಿಕೆ, ತಪ್ಪಿತಸ್ಥತೆ ನಿರ್ಧಾರ ಅಥವಾ ಕಾರ್ಯಾಚರಣಾ ಆದೇಶ ನೀಡುವುದಿಲ್ಲ.
+
+[SOURCE: GP-10 | Human review checklist]
+Before action: confirm scope, source, date, station, and uncertainty. Before submission: review every field and attachment. Before escalation: state the reason and evidence gap. After completion: record factual outcome and preserve the audit trail.
+Kannada summary: ಕ್ರಮಕ್ಕೂ ಮೊದಲು ವ್ಯಾಪ್ತಿ, ಮೂಲ, ದಿನಾಂಕ, ಠಾಣೆ ಮತ್ತು ಅನಿಶ್ಚಿತತೆಯನ್ನು ಪರಿಶೀಲಿಸಿ. ಸಲ್ಲಿಕೆಗೆ ಮೊದಲು ಎಲ್ಲಾ ಕ್ಷೇತ್ರ ಮತ್ತು ಲಗತ್ತು ಪರಿಶೀಲಿಸಿ; ಫಲಿತಾಂಶ ಮತ್ತು ಆಡಿಟ್ ದಾಖಲೆಯನ್ನು ಉಳಿಸಿ.

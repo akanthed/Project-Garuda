@@ -47,6 +47,7 @@ const TOOL_LABELS: Record<AskResponse["tool_calls"][number]["tool"], Translation
   assess_case_risk: "ask_tool_assess_case_risk",
   summarize_kpis: "ask_tool_summarize_kpis",
   forecast_hotspots: "ask_tool_forecast_hotspots",
+  operational_guidance: "ask_tool_operational_guidance",
   app_help: "ask_tool_app_help",
 };
 
@@ -208,9 +209,9 @@ export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
                   <div key={message.id} className={message.role === "user" ? "ml-10 rounded-md bg-primary px-3 py-2.5 text-xs leading-5 text-primary-foreground" : "mr-2 rounded-md border border-border bg-muted/60 px-3 py-3 text-xs text-foreground"}>
                     {message.result && (
                       <div className="mb-2.5 flex items-center justify-between gap-2 border-b border-border pb-2">
-                        <span className={`inline-flex items-center gap-1 rounded px-1.5 py-1 text-[9px] font-semibold uppercase ${message.result.source === "quickml" ? "bg-emerald-500/10 text-emerald-500" : "bg-amber-500/10 text-amber-500"}`}>
-                          {message.result.source === "quickml" && <Sparkles className="h-2.5 w-2.5" />}
-                          {t(message.result.source === "quickml" ? "ask_quickml" : "ask_fallback", locale)}
+                        <span className={`inline-flex items-center gap-1 rounded px-1.5 py-1 text-[9px] font-semibold uppercase ${message.result.knowledge_source === "quickml_rag" || message.result.source === "quickml" ? "bg-emerald-500/10 text-emerald-500" : "bg-amber-500/10 text-amber-500"}`}>
+                          {(message.result.knowledge_source === "quickml_rag" || message.result.source === "quickml") && <Sparkles className="h-2.5 w-2.5" />}
+                          {t(message.result.knowledge_source === "quickml_rag" ? "ask_quickml_rag" : message.result.source === "quickml" ? "ask_quickml" : "ask_fallback", locale)}
                         </span>
                         <span className="font-mono text-[9px] text-muted-foreground">
                           {t("ask_intent_confidence", locale)} {Math.round(message.result.confidence * 100)}%
@@ -218,12 +219,32 @@ export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
                       </div>
                     )}
                     <p className="leading-5">{message.text}</p>
+                    {message.result?.knowledge_source && (
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[9px]">
+                        <span className="rounded bg-cyan-500/10 px-1.5 py-1 font-semibold uppercase text-cyan-600 dark:text-cyan-400">
+                          {t(message.result.knowledge_source === "quickml_rag" ? "ask_quickml_rag" : "ask_local_knowledge", locale)}
+                        </span>
+                        <span className="text-muted-foreground">{t("ask_prototype_guidance", locale)}</span>
+                      </div>
+                    )}
                     {message.result?.tool_calls.map((call) => (
                       <div key={call.tool} className="mt-2.5 flex items-center justify-between gap-3 rounded-md border border-emerald-500/15 bg-emerald-500/[0.04] px-2.5 py-2 text-[10px]">
                         <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400"><ShieldCheck className="h-3 w-3" /> {t(TOOL_LABELS[call.tool], locale)}</span>
-                        {call.tool !== "app_help" && <span className="shrink-0 font-mono text-muted-foreground">{call.result_count.toLocaleString()} {t("ask_result_count", locale)}</span>}
+                        {!(["app_help", "operational_guidance"] as const).includes(call.tool as "app_help" | "operational_guidance") && <span className="shrink-0 font-mono text-muted-foreground">{call.result_count.toLocaleString()} {t("ask_result_count", locale)}</span>}
                       </div>
                     ))}
+                    {message.result?.citations && message.result.citations.length > 0 && (
+                      <div className="mt-2 border-t border-border pt-2">
+                        <div className="mb-1 text-[9px] font-semibold uppercase text-muted-foreground">{t("ask_sources", locale)}</div>
+                        <div className="flex flex-wrap gap-1">
+                          {message.result.citations.map((citation, index) => (
+                            <span key={`${citation.source_id}-${index}`} title={citation.title} className="rounded border border-cyan-500/20 bg-cyan-500/[0.05] px-1.5 py-1 font-mono text-[9px] text-cyan-700 dark:text-cyan-300">
+                              {citation.source_id} · {citation.title}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     {/* District comparison table */}
                     {message.result?.district_comparison && message.result.district_comparison.length > 0 && (
@@ -273,7 +294,7 @@ export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
                     {/* Trend summary */}
                     {message.result?.trend_summary && (
                       <div className="mt-2 border-t border-border pt-2 font-mono text-[10px] text-muted-foreground">
-                        {message.result.trend_summary.direction} · {message.result.trend_summary.active_anomalies.length} {t("ask_result_count", locale)}
+                        {t(message.result.trend_summary.direction === "rising" ? "trend_rising" : message.result.trend_summary.direction === "falling" ? "trend_falling" : "trend_stable", locale)} · {message.result.trend_summary.active_anomalies.length} {t("ask_result_count", locale)}
                       </div>
                     )}
 

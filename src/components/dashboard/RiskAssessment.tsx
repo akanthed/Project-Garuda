@@ -120,7 +120,7 @@ export function RiskAssessment({ caseMasterId }: RiskAssessmentProps) {
         </div>
         <div className="text-right">
           <div className={`px-3 py-1 rounded-full text-sm font-bold ${getRiskBadgeColor(prediction.risk_class)}`}>
-            {prediction.risk_class.toUpperCase()}
+            {t(prediction.risk_class === "high" ? "risk_level_high" : prediction.risk_class === "medium" ? "risk_level_medium" : "risk_level_low", locale)}
           </div>
         </div>
       </div>
@@ -149,7 +149,7 @@ export function RiskAssessment({ caseMasterId }: RiskAssessmentProps) {
       <div className="mb-3 grid grid-cols-3 gap-2 text-xs">
         {Object.entries(prediction.scores).map(([label, score]) => (
           <div key={label} className="bg-background/40 p-2 rounded text-center">
-            <div className="font-medium capitalize">{label}</div>
+            <div className="font-medium">{t(label === "high" ? "risk_level_high" : label === "medium" ? "risk_level_medium" : "risk_level_low", locale)}</div>
             <div className="text-sm font-bold">{Math.round(score as number)}%</div>
           </div>
         ))}

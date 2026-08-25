@@ -177,6 +177,8 @@ class TestGroundedAnswers:
         ("Export intelligence brief", "app_help"),
         ("Show patrol units", "app_help"),
         ("Assign case 1 to an officer", "app_help"),
+        ("What should an officer verify before acting on an anomaly alert?", "operational_guidance"),
+        ("When should this task be escalated?", "operational_guidance"),
     ])
     def test_webapp_queries_route_to_supported_actions(self, setup_test_data, query, expected_action):
         assert main._rule_plan(query).action == expected_action
@@ -188,6 +190,28 @@ class TestGroundedAnswers:
         assert "cases" in result["answer"].lower()
         assert "forecast" in result["answer"].lower()
         assert "simulator" in result["answer"].lower()
+
+    def test_operational_guidance_uses_cited_local_fallback(self, setup_test_data, monkeypatch):
+        monkeypatch.setattr(main, "_quickml_rag_sync", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("offline")))
+        plan = main._rule_plan("What should an officer verify before acting on an anomaly alert?")
+
+        result = main._run_agent("What should an officer verify before acting on an anomaly alert?", plan, "rules")
+
+        assert result["knowledge_source"] == "local_playbook"
+        assert result["citations"][0]["source_id"] == "GP-01"
+        assert "not official police policy" in result["answer"]
+
+    def test_operational_guidance_preserves_rag_citations(self, setup_test_data, monkeypatch):
+        monkeypatch.setattr(main, "_quickml_rag_sync", lambda *args, **kwargs: {
+            "answer": "Review the source records first.",
+            "retrieved_nodes": [{"content": "[SOURCE: GP-01 | Alert review] Review records."}],
+        })
+        plan = main.AgentPlan(action="operational_guidance", language="en")
+
+        result = main._run_agent("What should I verify?", plan, "rules", capp=object())
+
+        assert result["knowledge_source"] == "quickml_rag"
+        assert result["citations"][0]["source_id"] == "GP-01"
         assert result["suggested_view"] == "dashboard"
 
     def test_case_risk_query_uses_a_real_case(self, setup_test_data):

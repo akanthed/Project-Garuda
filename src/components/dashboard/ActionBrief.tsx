@@ -28,6 +28,12 @@ export function ActionBrief({ anomaly, open, onOpenChange, onRecordDecision }: A
   if (!anomaly) return null;
 
   const estimatedImpact = anomaly.severity === "critical" ? 24 : 16;
+  const usualRatio = anomaly.mean_count > 0 ? anomaly.current_count / anomaly.mean_count : 0;
+  const strengthKey = anomaly.z_score >= 5
+    ? "anomaly_strength_very_high"
+    : anomaly.z_score >= 3
+      ? "anomaly_strength_high"
+      : "anomaly_strength_elevated";
   const actionItems = [
     { icon: MapPin, text: t("action_brief_hotspot", locale) },
     { icon: ShieldAlert, text: t("action_brief_patrol", locale) },
@@ -69,7 +75,7 @@ export function ActionBrief({ anomaly, open, onOpenChange, onRecordDecision }: A
                 <div>
                   <div className="text-sm font-medium">{t("action_brief_anomaly", locale)}</div>
                   <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                    {anomaly.current_count} {t("action_brief_current", locale)} {t("reports_of", locale)} {anomaly.mean_count} {t("action_brief_usual", locale)}.
+                    {t("anomaly_summary", locale)}
                   </p>
                 </div>
               </div>
@@ -78,12 +84,17 @@ export function ActionBrief({ anomaly, open, onOpenChange, onRecordDecision }: A
 
           <section>
             <h3 className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">{t("action_brief_evidence", locale)}</h3>
-            <dl className="mt-2 grid grid-cols-2 gap-2 rounded-lg border border-foreground/5 bg-card p-3 text-xs">
+            <dl className="mt-2 grid grid-cols-2 gap-3 rounded-lg border border-foreground/5 bg-card p-3 text-xs">
               <div><dt className="text-muted-foreground">{t("action_brief_station", locale)}</dt><dd className="mt-1 font-medium">{anomaly.station_name}</dd></div>
-              <div><dt className="text-muted-foreground">{t("alerts_diagnostic", locale)}</dt><dd className="mt-1 font-mono">z={anomaly.z_score}</dd></div>
-              <div><dt className="text-muted-foreground">{t("action_brief_current", locale)}</dt><dd className="mt-1 font-mono">{anomaly.current_count}</dd></div>
-              <div><dt className="text-muted-foreground">{t("action_brief_usual", locale)}</dt><dd className="mt-1 font-mono">{anomaly.mean_count}</dd></div>
+              <div><dt className="text-muted-foreground">{t("anomaly_alert_strength", locale)}</dt><dd className="mt-1 font-medium text-[var(--danger)]">{t(strengthKey, locale)}</dd></div>
+              <div><dt className="text-muted-foreground">{t("action_brief_current", locale)}</dt><dd className="mt-1 font-mono text-base">{anomaly.current_count}</dd></div>
+              <div><dt className="text-muted-foreground">{t("action_brief_usual", locale)}</dt><dd className="mt-1 font-mono text-base">{anomaly.mean_count}</dd></div>
+              <div><dt className="text-muted-foreground">{t("anomaly_ratio", locale)}</dt><dd className="mt-1 font-mono text-base">{usualRatio.toFixed(1)}×</dd></div>
             </dl>
+            <details className="mt-2 rounded-md border border-foreground/5 px-3 py-2 text-[11px] text-muted-foreground">
+              <summary className="cursor-pointer font-medium text-foreground">{t("anomaly_technical_score", locale)}: z={anomaly.z_score}</summary>
+              <p className="mt-2 leading-relaxed">{t("anomaly_technical_hint", locale)}</p>
+            </details>
           </section>
 
           <section>

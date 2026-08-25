@@ -37,6 +37,7 @@ from collections import Counter
 from contextlib import asynccontextmanager
 from datetime import datetime
 from io import BytesIO
+from pathlib import Path
 from threading import Lock
 from typing import Literal, Optional
 
@@ -2030,7 +2031,7 @@ class AgentPlan(BaseModel):
         "compare_districts", "summarize_trends", "find_connection",
         "rank_offenders", "explain_correlations", "case_brief",
         "assess_case_risk", "summarize_kpis", "forecast_hotspots",
-        "app_help", "out_of_scope",
+        "operational_guidance", "app_help", "out_of_scope",
     ] = "search_cases"
     crime_type: Optional[str] = None
     area: Optional[str] = None
@@ -2071,6 +2072,16 @@ QUICKML_MAX_TOKENS = int(os.environ.get("QUICKML_MAX_TOKENS", "1600"))
 # no static token to expire) — preferred over QUICKML_ACCESS_TOKEN below, which is
 # kept only as a fallback for local/non-Catalyst dev where Connections isn't reachable.
 QUICKML_CONNECTION_LINK_NAME = os.environ.get("QUICKML_CONNECTION_LINK_NAME", "garudaquickml").strip()
+QUICKML_RAG_CONNECTION_LINK_NAME = os.environ.get("QUICKML_RAG_CONNECTION_LINK_NAME", "garudarag").strip()
+QUICKML_RAG_ENDPOINT = os.environ.get(
+    "QUICKML_RAG_ENDPOINT",
+    "https://api.catalyst.zoho.in/quickml/v1/project/52319000000013050/rag/answer",
+).strip()
+QUICKML_RAG_DOCUMENT_IDS = [
+    value.strip() for value in os.environ.get("QUICKML_RAG_DOCUMENT_IDS", "6441000000004002").split(",")
+    if value.strip()
+]
+_OPERATIONAL_PLAYBOOK_PATH = Path(__file__).parent / "data" / "garuda_operational_playbook.txt"
 
 def _normalize_connection_headers(response: dict) -> Optional[dict]:
     details = response.get("connections") or response
@@ -2229,6 +2240,53 @@ This plan is advisory and will be validated before any tool runs."""
         raise RuntimeError(f"QuickML returned HTTP {exc.code}: {detail}") from exc
     return _parse_plan_json(_extract_quickml_text(payload))
 
+def _quickml_rag_sync(query: str, capp=None) -> dict:
+    if not QUICKML_RAG_ENDPOINT or not QUICKML_RAG_DOCUMENT_IDS:
+        raise RuntimeError("QuickML RAG configuration is incomplete")
+    if capp is None or not QUICKML_RAG_CONNECTION_LINK_NAME:
+        raise RuntimeError("QuickML RAG connection is unavailable")
+    response = capp.connections().get_connection_credentials(QUICKML_RAG_CONNECTION_LINK_NAME) or {}
+    headers = _normalize_connection_headers(response)
+    if not headers:
+        raise RuntimeError("QuickML RAG credentials are unavailable")
+    request = urllib.request.Request(
+        QUICKML_RAG_ENDPOINT,
+        data=json.dumps({"query": query, "documents": QUICKML_RAG_DOCUMENT_IDS}).encode("utf-8"),
+        headers={"Content-Type": "application/json", **headers},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=QUICKML_TIMEOUT_SECONDS) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")[:500]
+        raise RuntimeError(f"QuickML RAG returned HTTP {exc.code}: {detail}") from exc
+    answer = str(payload.get("response") or "").strip()
+    if not answer:
+        raise RuntimeError("QuickML RAG returned no answer")
+    return {"answer": answer, "retrieved_nodes": payload.get("retrieved_nodes") or []}
+
+def _local_playbook_guidance(query: str) -> dict:
+    text = _OPERATIONAL_PLAYBOOK_PATH.read_text(encoding="utf-8")
+    sections = re.findall(
+        r"\[SOURCE:\s*([^|\]]+)\s*\|\s*([^\]]+)\]\s*(.*?)(?=\n\[SOURCE:|\Z)",
+        text,
+        re.DOTALL,
+    )
+    query_terms = set(re.findall(r"[a-zA-Z\u0c80-\u0cff]{3,}", query.casefold()))
+    ranked = []
+    for source_id, title, content in sections:
+        terms = set(re.findall(r"[a-zA-Z\u0c80-\u0cff]{3,}", f"{title} {content}".casefold()))
+        ranked.append((len(query_terms & terms), source_id.strip(), title.strip(), content.strip()))
+    _, source_id, title, content = max(ranked, key=lambda item: item[0])
+    english = content.split("Kannada summary:", 1)[0].strip()
+    kannada = content.split("Kannada summary:", 1)[1].strip() if "Kannada summary:" in content else english
+    return {
+        "answer": kannada if re.search(r"[\u0c80-\u0cff]", query) else english,
+        "source_id": source_id,
+        "title": title,
+    }
+
 def _is_app_help_query(query: str) -> bool:
     q = query.casefold().strip()
     help_phrases = (
@@ -2296,7 +2354,14 @@ def _rule_plan(query: str) -> AgentPlan:
     if connection_trigger and match:
         suspect_a, suspect_b = match.group(1).strip(), match.group(2).strip()
 
-    if _is_app_help_query(query):
+    guidance_terms = (
+        "what should", "before acting", "procedure", "safeguard", "escalat", "verify",
+        "field task", "action brief", "ocr draft", "evidence", "privacy", "official sop",
+        "ಏನು ಮಾಡಬೇಕು", "ಪರಿಶೀಲ", "ಮೇಲ್ದರ್ಜೆ", "ಸಾಕ್ಷ್ಯ", "ಗೌಪ್ಯತೆ",
+    )
+    if any(term in q for term in guidance_terms):
+        action = "operational_guidance"
+    elif _is_app_help_query(query):
         action = "app_help"
     elif not _is_domain_query(query):
         action = "out_of_scope"
@@ -2561,6 +2626,44 @@ def _agent_app_help(query: str, plan: AgentPlan, trace: list[dict]) -> dict:
     return {
         "answer": answer, "matched_cases": [], "suggested_view": suggested_view,
         "tool_calls": [{"tool": "app_help", "status": "completed", "result_count": 1}],
+    }
+
+def _agent_operational_guidance(query: str, plan: AgentPlan, trace: list[dict], capp=None) -> dict:
+    trace.append({"step": "execute", "tool": "operational_guidance", "parameters": {"documents": QUICKML_RAG_DOCUMENT_IDS}})
+    citations = []
+    knowledge_source = "local_playbook"
+    try:
+        rag = _quickml_rag_sync(query, capp)
+        answer = rag["answer"]
+        knowledge_source = "quickml_rag"
+        for node in rag["retrieved_nodes"][:3]:
+            content = str(node.get("content") or "")
+            source_match = re.search(r"SOURCE:\s*([^|\]]+)", content)
+            citations.append({
+                "source_id": source_match.group(1).strip() if source_match else "GP",
+                "title": "Garuda Operational Playbook",
+                "document_id": QUICKML_RAG_DOCUMENT_IDS[0],
+            })
+    except Exception as exc:
+        log.info(f"QuickML RAG unavailable; using local playbook: {exc}")
+        local = _local_playbook_guidance(query)
+        answer = local["answer"]
+        citations = [{"source_id": local["source_id"], "title": local["title"], "document_id": "local-playbook"}]
+    disclaimer = (
+        " ಇದು ಗರುಡ ಪ್ರೋಟೋಟೈಪ್ ಮಾರ್ಗದರ್ಶನ ಮಾತ್ರ; ಅಧಿಕೃತ ಇಲಾಖಾ ಆದೇಶ ಮತ್ತು ಅನ್ವಯಿಸುವ ಕಾನೂನನ್ನು ಅನುಸರಿಸಿ."
+        if plan.language == "kn"
+        else " This is Garuda prototype guidance, not official police policy; follow current departmental orders and applicable law."
+    )
+    answer = answer.rstrip() + disclaimer
+    trace.append({"step": "observe", "knowledge_source": knowledge_source, "citations": len(citations)})
+    trace.append({"step": "answer", "detail": answer})
+    return {
+        "answer": answer,
+        "matched_cases": [],
+        "suggested_view": "dashboard",
+        "tool_calls": [{"tool": "operational_guidance", "status": "completed", "result_count": len(citations)}],
+        "knowledge_source": knowledge_source,
+        "citations": citations,
     }
 
 def _case_row(case_id: Optional[int], case_reference: Optional[str] = None):
@@ -2871,6 +2974,7 @@ _AGENT_DISPATCH = {
     "assess_case_risk":     _agent_assess_case_risk,
     "summarize_kpis":       _agent_summarize_kpis,
     "forecast_hotspots":    _agent_forecast_hotspots,
+    "operational_guidance": _agent_operational_guidance,
     "app_help":             _agent_app_help,
     "out_of_scope":          _agent_out_of_scope,
 }
@@ -2932,7 +3036,7 @@ def _run_agent(
                 "language": plan.language, "confidence": plan.confidence, "tool_calls": [], "trace": trace}
 
     handler = _AGENT_DISPATCH.get(plan.action, _agent_search_cases)
-    result = handler(query, plan, trace)
+    result = handler(query, plan, trace, capp) if plan.action == "operational_guidance" else handler(query, plan, trace)
     result["source"] = source
     result["language"] = plan.language
     result["confidence"] = round(plan.confidence, 2)
@@ -2953,7 +3057,7 @@ async def ask_garuda(body: AskRequest, request: Request):
     rules_plan = _rule_plan(body.query)
     deterministic_actions = {
         "app_help", "out_of_scope", "case_brief", "assess_case_risk",
-        "summarize_kpis", "forecast_hotspots",
+        "summarize_kpis", "forecast_hotspots", "operational_guidance",
     }
     if rules_plan.action in deterministic_actions:
         plan = rules_plan
@@ -2981,6 +3085,10 @@ async def get_quickml_status(request: Request):
         "normalized_authorization": False,
         "normalized_org": False,
         "status": "unavailable",
+        "rag_endpoint_configured": bool(QUICKML_RAG_ENDPOINT),
+        "rag_documents_configured": bool(QUICKML_RAG_DOCUMENT_IDS),
+        "rag_connection_name_configured": bool(QUICKML_RAG_CONNECTION_LINK_NAME),
+        "rag_connection_ready": False,
     }
     if capp is None or not QUICKML_CONNECTION_LINK_NAME:
         result["status"] = "missing_catalyst_context"
@@ -2995,6 +3103,9 @@ async def get_quickml_status(request: Request):
         result["normalized_authorization"] = any(key.lower() == "authorization" for key in normalized)
         result["normalized_org"] = any(key.lower() == "catalyst-org" for key in normalized)
         result["status"] = "ready" if normalized else "incomplete_credentials"
+        if QUICKML_RAG_CONNECTION_LINK_NAME:
+            rag_response = capp.connections().get_connection_credentials(QUICKML_RAG_CONNECTION_LINK_NAME) or {}
+            result["rag_connection_ready"] = bool(_normalize_connection_headers(rag_response))
     except Exception as exc:
         result["status"] = "connection_error"
         result["error_type"] = type(exc).__name__

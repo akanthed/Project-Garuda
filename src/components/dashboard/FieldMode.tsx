@@ -5,7 +5,14 @@ import type { Officer } from "@/lib/auth";
 import type { ResponsePlan } from "@/lib/types";
 import { fetchResponsePlans, updateResponsePlan, uploadOperationAttachment } from "@/lib/mock-api";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { t } from "@/lib/i18n";
+import { t, type TranslationKey } from "@/lib/i18n";
+
+const STATUS_KEYS: Record<string, TranslationKey> = {
+  assigned: "status_assigned",
+  acknowledged: "status_acknowledged",
+  in_progress: "status_in_progress",
+  completed: "status_completed",
+} as const;
 import type { ViewKey } from "@/components/dashboard/Sidebar";
 
 interface FieldModeProps {
@@ -105,7 +112,10 @@ export function FieldMode({ officer, onNavigate }: FieldModeProps) {
                   <div>
                     <h3 className="text-lg font-semibold">{task.station_name}</h3>
                     <p className="mt-1 text-base">{t("field_unusual_activity", locale)}</p>
-                    <p className="mt-1 text-sm text-muted-foreground">{task.current_count} {t("field_usual_comparison", locale)} {task.usual_count}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      <span className="font-mono font-semibold text-foreground">{task.current_count}</span> {t("alerts_vs_avg", locale)} <span className="font-mono">{task.usual_count}</span>
+                    </p>
+                    <p className="mt-1 text-sm font-medium text-amber-500">{(task.current_count / task.usual_count).toFixed(1)}× {t("field_usual_comparison", locale)}</p>
                   </div>
                   {task.status === "completed" && <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-sm text-emerald-500">{t("field_completed", locale)}</span>}
                 </div>
@@ -116,7 +126,7 @@ export function FieldMode({ officer, onNavigate }: FieldModeProps) {
                     <div className="mt-3 space-y-2">
                       {(task.updates ?? []).map((update) => (
                         <div key={update.update_id} className="text-sm text-muted-foreground">
-                          <span className="font-medium text-foreground">{update.status}</span> · {update.note || update.attachment_name || t("field_no_note", locale)}
+                          <span className="font-medium text-foreground">{t(STATUS_KEYS[update.status] ?? "status_in_progress", locale)}</span> · {update.note || update.attachment_name || t("field_no_note", locale)}
                         </div>
                       ))}
                     </div>

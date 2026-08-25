@@ -6,6 +6,13 @@ import type { OperationAssessment, ResponsePlan } from "@/lib/types";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { t } from "@/lib/i18n";
 
+const STATUS_KEYS = {
+  assigned: "status_assigned",
+  acknowledged: "status_acknowledged",
+  in_progress: "status_in_progress",
+  completed: "status_completed",
+} as const;
+
 export function OperationsBoard({ refreshKey }: { refreshKey: number }) {
   const { locale } = useLanguage();
   const [plans, setPlans] = useState<ResponsePlan[]>([]);
@@ -61,7 +68,7 @@ export function OperationsBoard({ refreshKey }: { refreshKey: number }) {
             const assessment = assessments[plan.operation_id];
             return (
               <article key={plan.operation_id} className="rounded-lg border border-foreground/10 bg-card p-4">
-                <div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold">{plan.station_name}</h3><p className="mt-1 text-sm text-muted-foreground">{t("operations_assigned_to", locale)}: {plan.assigned_to}</p></div><span className="rounded-full bg-primary/10 px-2 py-1 text-xs text-primary">{plan.status}</span></div>
+                <div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold">{plan.station_name}</h3><p className="mt-1 text-sm text-muted-foreground">{t("operations_assigned_to", locale)}: {plan.assigned_to}</p></div><span className="rounded-full bg-primary/10 px-2 py-1 text-xs text-primary">{t(STATUS_KEYS[plan.status], locale)}</span></div>
                 <p className="mt-3 text-sm">{plan.note || t("operations_timeline_no_note", locale)}</p>
                 <p className="mt-2 text-xs text-muted-foreground">{plan.updates?.length ?? 0} {t("field_history", locale).toLowerCase()}</p>
                 {assessment && <div className="mt-3 rounded-md border border-foreground/10 p-3 text-sm"><p className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-emerald-500" />{t(assessment.process_status === "completed" ? "operations_process_complete" : "operations_process_active", locale)}</p><p className="mt-2 text-amber-500">{t("operations_impact_pending", locale)}</p><p className="mt-1 text-xs text-muted-foreground">{t("operations_historical_context", locale)}: {assessment.baseline_30d_cases ?? "-"} → {assessment.latest_historical_30d_cases ?? "-"}</p></div>}

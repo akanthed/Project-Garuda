@@ -57,6 +57,14 @@ function localizedCrimeType(crimeType: string, locale: ReturnType<typeof useLang
   return key ? t(key, locale) : crimeType;
 }
 
+const OCR_FIELD_KEYS: Record<string, TranslationKey> = {
+  crime_no: "reports_ocr_field_crime_no",
+  registered_date: "reports_ocr_field_registered_date",
+  police_station_id: "reports_ocr_field_station",
+  crime_major_head_id: "reports_ocr_field_category",
+  gravity_offence_id: "reports_ocr_field_gravity",
+};
+
 function SeverityBadge({ severity }: { severity: CaseSeverity }) {
   const { locale } = useLanguage();
   return (
@@ -153,7 +161,7 @@ function CaseDetailDrawer({ report, onClose, onWorkflowUpdated }: { report: Case
           { label: t("reports_detail_section", locale), value: report.ipc_section },
           { label: t("reports_detail_type", locale), value: localizedCrimeType(report.crime_type, locale) },
           { label: t("reports_detail_filed", locale), value: new Date(report.date).toLocaleDateString(locale === "kn" ? "kn-IN" : "en-IN", { day: "numeric", month: "short", year: "numeric" }) },
-          { label: t("reports_detail_officer", locale), value: report.assigned_officer },
+          { label: t("reports_detail_officer", locale), value: report.assigned_officer === "Unassigned" ? t("reports_unassigned", locale) : report.assigned_officer },
           { label: t("reports_detail_suspects", locale), value: String(report.suspects) },
         ].map(({ label, value }) => (
           <div key={label}>
@@ -269,7 +277,7 @@ function IncidentIntakeForm({ onClose, onSubmitted, initialDraft, scanMeta }: { 
         <div className="mt-4 rounded-lg border border-primary/20 bg-primary/[0.04] p-3 text-xs leading-relaxed text-muted-foreground">
           <div className="flex items-center gap-2 text-primary"><ScanLine className="h-3.5 w-3.5" />{t("reports_scan_banner", locale)}</div>
           {scanMeta.low_confidence_fields.length > 0 && (
-            <div className="mt-1.5">{t("reports_scan_low_confidence", locale)}: {scanMeta.low_confidence_fields.join(", ")}</div>
+            <div className="mt-1.5">{t("reports_scan_low_confidence", locale)}: {scanMeta.low_confidence_fields.map((field) => t(OCR_FIELD_KEYS[field] ?? "reports_ocr_field_category", locale)).join(", ")}</div>
           )}
         </div>
       )}
@@ -354,8 +362,8 @@ export function ReportsView() {
       setScanDraft(data);
       setIntakeOpen(true);
       toast.success(t("reports_scan_fir", locale), { description: data.advisory });
-    } catch (error) {
-      toast.error(t("reports_scan_failed", locale), { description: error instanceof Error ? error.message : t("reports_review_details", locale) });
+    } catch {
+      toast.error(t("reports_scan_failed", locale), { description: t("reports_scan_failed_desc", locale) });
     } finally {
       setScanning(false);
     }

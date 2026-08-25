@@ -40,8 +40,8 @@ export function AlertsFeed({ onOpenView, onOpenBrief }: AlertsFeedProps) {
           </div>
           <div className="mt-0.5 text-sm font-medium">{t("alerts_subtitle", locale)}</div>
         </div>
-        <span className="rounded-full border border-foreground/10 px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
-          z-score
+        <span className="rounded-full border border-foreground/10 px-2 py-0.5 text-[10px] text-muted-foreground">
+          {t("anomaly_alert_strength", locale)}
         </span>
       </div>
 
@@ -77,8 +77,8 @@ export function AlertsFeed({ onOpenView, onOpenBrief }: AlertsFeedProps) {
                   </div>
                   <div className="min-w-0">
                     <div className="truncate text-xs font-medium leading-tight">{a.station_name}</div>
-                    <div className="mt-0.5 font-mono text-[10px] text-muted-foreground">
-                      {a.current_count} vs {a.mean_count} {t("alerts_vs_avg", locale)}
+                    <div className="mt-0.5 text-[10px] text-muted-foreground">
+                      <span className="font-mono font-medium text-foreground">{a.current_count}</span> {t("alerts_vs_avg", locale)} <span className="font-mono">{a.mean_count}</span>
                     </div>
                   </div>
                 </div>
@@ -117,7 +117,7 @@ export function AlertsFeed({ onOpenView, onOpenBrief }: AlertsFeedProps) {
                   <p className="mt-2 leading-relaxed text-muted-foreground">{t("alerts_anomaly_explainer", locale)}</p>
                   <p className="mt-2 border-t border-foreground/5 pt-2 text-muted-foreground">{t("alerts_anomaly_action", locale)}</p>
                   <div className="mt-3 font-mono text-[10px] text-muted-foreground">
-                    {t("alerts_diagnostic", locale)}: z={a.z_score}
+                    {t("alerts_diagnostic", locale)}: z={a.z_score} · {(a.current_count / a.mean_count).toFixed(1)}× {t("field_usual_comparison", locale)}
                   </div>
                 </PopoverContent>
               </Popover>

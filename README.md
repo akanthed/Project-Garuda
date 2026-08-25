@@ -81,6 +81,7 @@ flowchart TD
     AS --> ST["Stratus<br/>encrypted field attachments"]
     AS --> CA["Cache<br/>network analytics"]
     AS --> CN["Connections"] --> QM["QuickML<br/>GLM-4.7-Flash"]
+    AS --> RAG["QuickML RAG<br/>cited operational guidance"] --> KB["Knowledge Base<br/>Garuda Operational Playbook"]
     AS --> ZA["Zia AutoML<br/>case risk"]
     AS --> SB["SmartBrowz<br/>PDF brief"]
     JS["Job Scheduling<br/>daily 02:00 IST cron"] -->|X-Job-Token| AS
@@ -103,6 +104,7 @@ and is exercised by the test suite.
 | **Cache** | Persists the network-analytics blob across restarts (6-hour TTL) |
 | **Connections** | Auto-refreshed OAuth for QuickML, replacing a manual 1-hour token |
 | **QuickML (LLM Serving)** | GLM-4.7-Flash powers the Ask Garuda natural-language planner |
+| **QuickML RAG / Knowledge Base** | Retrieves source-tagged bilingual operational safeguards for Ask Garuda; every answer is labeled prototype guidance and cites the playbook |
 | **Zia AutoML** | Structured case-risk classification |
 | **Zia OCR** | Scanned/photographed FIR → draft incident form (never auto-submits) |
 | **SmartBrowz** | PDF intelligence-brief generation |

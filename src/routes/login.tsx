@@ -66,7 +66,8 @@ function LoginPage() {
         <div className="mb-4 flex justify-end gap-2">
           <button
             onClick={toggleTheme}
-            title={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+            title={t(theme === "dark" ? "topbar_theme_dark" : "topbar_theme_light", locale)}
+            aria-label={t(theme === "dark" ? "topbar_theme_dark" : "topbar_theme_light", locale)}
             className="flex h-8 w-8 items-center justify-center rounded-md border border-foreground/5 bg-foreground/[0.02] text-primary transition hover:border-primary/30 hover:bg-primary/5"
           >
             {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
@@ -137,6 +138,7 @@ function LoginPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword((v) => !v)}
+                  aria-label={t(showPassword ? "login_hide_password" : "login_show_password", locale)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition hover:text-foreground"
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -176,12 +178,12 @@ function LoginPage() {
             <div className="text-center font-mono text-[10px] uppercase tracking-widest text-muted-foreground/40 mb-2">
               {t("login_demo", locale)}
             </div>
-            {[
-              { badge: "KSP-DGP-0001", pass: "dgp2026",       role: "DGP",        access: "Full" },
-              { badge: "KSP-BLR-7741", pass: "sentinel2026",  role: "CI",         access: "Full" },
-              { badge: "KSP-BLR-4412", pass: "garuda2026",    role: "SI",         access: "Simulate" },
-              { badge: "KSP-BLR-1001", pass: "constable123",  role: "Constable",  access: "Map only" },
-            ].map(({ badge: b, pass, role, access }) => (
+            {([
+              { badge: "KSP-DGP-0001", pass: "dgp2026",       role: "DGP",        access: "login_access_full" },
+              { badge: "KSP-BLR-7741", pass: "sentinel2026",  role: "CI",         access: "login_access_full" },
+              { badge: "KSP-BLR-4412", pass: "garuda2026",    role: "SI",         access: "login_access_simulate" },
+              { badge: "KSP-BLR-1001", pass: "constable123",  role: "Constable",  access: "login_access_map" },
+            ] as const).map(({ badge: b, pass, role, access }) => (
               <button
                 key={b}
                 type="button"
@@ -191,7 +193,7 @@ function LoginPage() {
                 <span className="font-mono text-muted-foreground">{b}</span>
                 <div className="flex items-center gap-2">
                   <span className="text-muted-foreground/60">{role}</span>
-                  <span className="rounded-full bg-primary/10 px-1.5 py-0.5 font-mono text-[9px] text-primary">{access}</span>
+                  <span className="rounded-full bg-primary/10 px-1.5 py-0.5 font-mono text-[9px] text-primary">{t(access, locale)}</span>
                 </div>
               </button>
             ))}
@@ -200,7 +202,7 @@ function LoginPage() {
 
         {/* Footer */}
         <div className="mt-6 text-center font-mono text-[10px] text-muted-foreground/40">
-          KSP Intelligence Division · Node BLR-A1 · Secure Channel
+          {t("login_intelligence_division", locale)} · Node BLR-A1 · {t("login_secure_channel", locale)}
         </div>
       </div>
     </div>

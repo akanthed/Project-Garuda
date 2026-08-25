@@ -39,22 +39,24 @@ const LinkGraph = lazy(() =>
 );
 
 function MapPlaceholder({ compact = false }: { compact?: boolean }) {
+  const { locale } = useLanguage();
   return (
     <div className={`col-span-2 flex ${compact ? "min-h-[220px] flex-1" : "h-[460px]"} items-center justify-center rounded-xl border border-foreground/5 bg-card`}>
       <div className="flex flex-col items-center gap-3">
         <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary/20 border-t-primary" />
-        <span className="font-mono text-[11px] text-muted-foreground">Loading map…</span>
+        <span className="font-mono text-[11px] text-muted-foreground">{t("loading_map", locale)}</span>
       </div>
     </div>
   );
 }
 
 function GraphPlaceholder() {
+  const { locale } = useLanguage();
   return (
     <div className="flex h-[460px] items-center justify-center rounded-xl border border-foreground/5 bg-card">
       <div className="flex flex-col items-center gap-3">
         <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary/20 border-t-primary" />
-        <span className="font-mono text-[11px] text-muted-foreground">Loading network…</span>
+        <span className="font-mono text-[11px] text-muted-foreground">{t("loading_network", locale)}</span>
       </div>
     </div>
   );
@@ -88,11 +90,12 @@ function RbacBlock({ labelKey, minRoleKey }: { labelKey: TranslationKey; minRole
 }
 
 function Placeholder({ title, subtitle }: { title: string; subtitle: string }) {
+  const { locale } = useLanguage();
   return (
     <div className="flex h-[70vh] items-center justify-center rounded-xl border border-foreground/5 bg-card">
       <div className="text-center">
         <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-          Module
+          {t("common_module", locale)}
         </div>
         <div className="mt-2 text-2xl font-medium tracking-tight">{title}</div>
         <div className="mt-1 text-sm text-muted-foreground">{subtitle}</div>
@@ -166,7 +169,7 @@ function Dashboard() {
                       return (
                         <KpiCard
                           key={k.id}
-                          label={meta ? t(meta.labelKey, locale) : k.label}
+                          label={meta ? t(meta.labelKey, locale) : t("kpi_metric", locale)}
                           value={k.value}
                           delta={k.delta}
                           trend={k.trend}

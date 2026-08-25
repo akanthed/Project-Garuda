@@ -145,7 +145,7 @@ export type AgentAction =
   | "compare_districts" | "summarize_trends" | "find_connection"
   | "rank_offenders" | "explain_correlations" | "case_brief"
   | "assess_case_risk" | "summarize_kpis" | "forecast_hotspots"
-  | "app_help";
+  | "operational_guidance" | "app_help";
 
 export interface AskMatchedCase {
   id: string;
@@ -213,6 +213,12 @@ export interface AskResponse {
   connection_result?: ConnectionResult;
   offender_ranking?: OffenderRankingRow[];
   correlation_explanation?: CorrelationExplanation;
+  knowledge_source?: "quickml_rag" | "local_playbook";
+  citations?: Array<{
+    source_id: string;
+    title: string;
+    document_id: string;
+  }>;
 }
 
 // ─── Criminal Network ─────────────────────────────────────────────────────────

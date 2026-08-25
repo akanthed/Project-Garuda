@@ -99,6 +99,41 @@ function nodeTypeLabel(type: string, locale: ReturnType<typeof useLanguage>["loc
   return t(key, locale);
 }
 
+const RISK_KEYS: Record<string, TranslationKey> = {
+  high: "common_high",
+  med: "common_med",
+  low: "common_low",
+  undefined: "common_low",
+};
+
+const RELATION_KEYS: Record<string, TranslationKey> = {
+  "Known Associate": "graph_relation_known_associate",
+  Financier: "graph_relation_financier",
+  "Operational Link": "graph_relation_operational",
+  "Primary Accused": "graph_relation_primary_accused",
+  "Named Suspect": "graph_relation_named_suspect",
+  "Co-Accused": "graph_relation_co_accused",
+  "Frequent Operating Hub": "graph_relation_operating_hub",
+  "Residence Proximity": "graph_relation_residence",
+  "Registered Owner": "graph_relation_owner",
+  "Spotted At": "graph_relation_spotted",
+};
+
+const CRIME_KEYS: Record<string, TranslationKey> = {
+  "Property Theft": "reports_crime_property_theft",
+  "Vehicle Theft": "reports_crime_vehicle_theft",
+  "Cyber Fraud": "crime_cyber_fraud",
+  Robbery: "crime_robbery",
+  "Unlawful Assembly": "reports_crime_unlawful_assembly",
+  Assault: "reports_crime_assault",
+  Narcotics: "reports_crime_narcotics",
+  "Financial Fraud": "crime_financial_fraud",
+};
+
+function localizedCrimeType(value: string | null, locale: ReturnType<typeof useLanguage>["locale"]) {
+  return value ? t(CRIME_KEYS[value] ?? "crime_operational_intake", locale) : "—";
+}
+
 function NetworkHelp() {
   const { locale } = useLanguage();
 
@@ -181,7 +216,7 @@ function NodeDetail({ node, links, allNodes, onClose }: NodeDetailProps) {
             className="rounded-full px-2 py-0.5 font-mono text-[10px]"
             style={{ background: `${color}22`, color }}
           >
-            {(node.risk ?? "LOW").toUpperCase()}
+            {t(RISK_KEYS[node.risk ?? "undefined"] ?? "common_low", locale)}
           </span>
         </div>
         <div className="flex items-center justify-between text-[11px]">
@@ -236,7 +271,7 @@ function NodeDetail({ node, links, allNodes, onClose }: NodeDetailProps) {
                     {other?.label ?? otherId}
                   </span>
                   <span className="max-w-[80px] truncate text-right font-mono text-[10px] text-muted-foreground/70">
-                    {l.relation}
+                    {t(RELATION_KEYS[l.relation] ?? "graph_links", locale)}
                   </span>
                 </div>
               );
@@ -315,7 +350,7 @@ function CommunitiesPanel({ communities, onClose, locale }: {
             <span className="font-mono text-[10px] text-muted-foreground">{t("graph_cohesion", locale)} {c.cohesion.toFixed(2)}</span>
           </div>
           <div className="mt-1 font-mono text-[10px] text-muted-foreground">
-            {c.dominant_crime_type ?? "—"} · {t("graph_case_count", locale)} {c.case_count}
+            {localizedCrimeType(c.dominant_crime_type, locale)} · {t("graph_case_count", locale)} {c.case_count}
           </div>
           {c.likely_synthetic_artifact && (
             <div className="mt-1 text-[10px] leading-snug text-amber-400/80">{t("graph_synthetic_flag", locale)}</div>
@@ -699,7 +734,7 @@ export function LinkGraph({ compact = false }: LinkGraphProps) {
               onNodeClick={handleNodeClick}
               onNodeDrag={keepNodeInViewport}
               onNodeDragEnd={handleNodeDragEnd}
-              nodeLabel={(node) => `${node.label} (${node.type})`}
+              nodeLabel={(node) => `${node.label} (${nodeTypeLabel(node.type, locale)})`}
               enableNodeDrag={!compact}
               enableZoomInteraction={!compact}
               enablePanInteraction={!compact}

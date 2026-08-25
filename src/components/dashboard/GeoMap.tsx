@@ -34,6 +34,28 @@ const RISK_SIZE: Record<string, number> = {
   low: 16,
 };
 
+const RISK_KEYS: Record<string, TranslationKey> = {
+  high: "common_high",
+  med: "common_med",
+  low: "common_low",
+};
+
+const CRIME_KEYS: [string, TranslationKey][] = [
+  ["Property Theft", "reports_crime_property_theft"],
+  ["Vehicle Theft", "reports_crime_vehicle_theft"],
+  ["Cyber Fraud", "crime_cyber_fraud"],
+  ["Unlawful Assembly", "reports_crime_unlawful_assembly"],
+  ["Voluntarily Causing Hurt", "crime_hurt"],
+  ["Assault", "reports_crime_assault"],
+];
+
+function localizedCrimeType(value: string, locale: ReturnType<typeof useLanguage>["locale"]) {
+  const match = CRIME_KEYS.find(([name]) => value.includes(name));
+  if (!match) return value;
+  const code = value.match(/^IPC\s+\d+\s*/)?.[0] ?? "";
+  return `${code}${t(match[1], locale)}`;
+}
+
 const INITIAL_LAYERS = [
   { id: "density", labelKey: "map_density_layer", icon: Radio, on: true },
   { id: "threat", labelKey: "map_pins_layer", icon: AlertTriangle, on: true },
@@ -136,7 +158,7 @@ function HotspotPopupContent({
       <div className="mt-3 space-y-1.5">
         <div key="crime" className="flex justify-between text-[11px]">
           <span className="text-muted-foreground">{t("map_crime_type", locale)}</span>
-          <span className="max-w-[150px] text-right font-mono text-[10px]">{hotspot.crime_type}</span>
+          <span className="max-w-[150px] text-right font-mono text-[10px]">{localizedCrimeType(hotspot.crime_type, locale)}</span>
         </div>
         <div key="intensity" className="flex items-center justify-between text-[11px]">
           <span className="text-muted-foreground">{t("map_intensity", locale)}</span>
@@ -153,7 +175,7 @@ function HotspotPopupContent({
             className="rounded-full px-1.5 py-0.5 font-mono text-[10px] uppercase"
             style={{ background: `${color}22`, color }}
           >
-            {hotspot.risk}
+            {t(RISK_KEYS[hotspot.risk] ?? "common_low", locale)}
           </span>
         </div>
         {hotspot.station_name && (
@@ -298,7 +320,7 @@ export function GeoMap({ compact = false }: GeoMapProps) {
             </span>
             {t("topbar_live", locale)}
           </span>
-          <span className="font-mono">IST {new Date().toLocaleTimeString("en-IN", { hour12: false })}</span>
+          <span className="font-mono">IST {new Date().toLocaleTimeString(locale === "kn" ? "kn-IN" : "en-IN", { hour12: false })}</span>
         </div>
       </div>
 
@@ -375,7 +397,7 @@ export function GeoMap({ compact = false }: GeoMapProps) {
             patrols.map((p) => (
               <Marker key={p.id} longitude={p.lng} latitude={p.lat} anchor="center">
                 <div
-                  title={`${p.id} · ${p.status}`}
+                  title={`${p.id} · ${t(p.status === "responding" ? "status_responding" : "status_patrolling", locale)}`}
                   className={`h-3 w-3 rounded-sm border shadow-[0_0_8px_var(--primary)] ${
                     p.status === "responding" ? "border-[var(--danger)] bg-[var(--danger)]/60" : "border-primary bg-primary/60"
                   }`}

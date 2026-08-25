@@ -286,9 +286,9 @@ function SecuritySection() {
   const { locale } = useLanguage();
   const navigate = useNavigate();
   const sessionDetails: { labelKey: TranslationKey; value: string }[] = [
-    { labelKey: "settings_session_token", value: "Active" },
-    { labelKey: "settings_ip_address", value: "Browser session" },
-    { labelKey: "settings_session_expires", value: "Server-managed" },
+    { labelKey: "settings_session_token", value: t("settings_value_active", locale) },
+    { labelKey: "settings_ip_address", value: t("settings_value_browser_session", locale) },
+    { labelKey: "settings_session_expires", value: t("settings_value_server_managed", locale) },
     { labelKey: "settings_2fa_status", value: t("settings_2fa_enabled", locale) },
   ];
   return (
