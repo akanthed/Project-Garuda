@@ -8,6 +8,7 @@ Run from backend directory:
   .venv-test/Scripts/python -m pytest test_agent.py -v --tb=short
 """
 
+import re
 import socket
 
 import pydantic
@@ -209,6 +210,31 @@ class TestGroundedAnswers:
         plan = main.AgentPlan(action="operational_guidance", language="en")
 
         result = main._run_agent("What should I verify?", plan, "rules", capp=object())
+
+        assert result["knowledge_source"] == "quickml_rag"
+        assert result["citations"][0]["source_id"] == "GP-01"
+
+    def test_kannada_guidance_falls_back_when_rag_answers_in_english(self, setup_test_data, monkeypatch):
+        monkeypatch.setattr(main, "_quickml_rag_sync", lambda *args, **kwargs: {
+            "answer": "Review the source records first.",
+            "retrieved_nodes": [],
+        })
+        query = "ಕ್ರಮ ಕೈಗೊಳ್ಳುವ ಮೊದಲು ಅಧಿಕಾರಿ ಏನು ಪರಿಶೀಲಿಸಬೇಕು?"
+        plan = main.AgentPlan(action="operational_guidance", language="kn")
+
+        result = main._run_agent(query, plan, "rules", capp=object())
+
+        assert result["knowledge_source"] == "local_playbook"
+        assert re.search(r"[\u0c80-\u0cff]", result["answer"])
+
+    def test_kannada_guidance_keeps_kannada_rag_answer(self, setup_test_data, monkeypatch):
+        monkeypatch.setattr(main, "_quickml_rag_sync", lambda *args, **kwargs: {
+            "answer": "ಮೂಲ ದಾಖಲೆಗಳನ್ನು ಮೊದಲು ಪರಿಶೀಲಿಸಿ.",
+            "retrieved_nodes": [{"content": "[SOURCE: GP-01 | Alert review]"}],
+        })
+        plan = main.AgentPlan(action="operational_guidance", language="kn")
+
+        result = main._run_agent("ಏನು ಪರಿಶೀಲಿಸಬೇಕು?", plan, "rules", capp=object())
 
         assert result["knowledge_source"] == "quickml_rag"
         assert result["citations"][0]["source_id"] == "GP-01"

@@ -2633,8 +2633,14 @@ def _agent_operational_guidance(query: str, plan: AgentPlan, trace: list[dict], 
     citations = []
     knowledge_source = "local_playbook"
     try:
-        rag = _quickml_rag_sync(query, capp)
+        rag_query = (
+            f"{query}\nಉತ್ತರವನ್ನು ಕನ್ನಡದಲ್ಲಿ ಮಾತ್ರ ನೀಡಿ. ಮೂಲ ದಾಖಲೆಯ ಮಾಹಿತಿಯನ್ನು ಮಾತ್ರ ಬಳಸಿ."
+            if plan.language == "kn" else query
+        )
+        rag = _quickml_rag_sync(rag_query, capp)
         answer = rag["answer"]
+        if plan.language == "kn" and not re.search(r"[\u0c80-\u0cff]", answer):
+            raise RuntimeError("QuickML RAG did not return a Kannada answer")
         knowledge_source = "quickml_rag"
         for node in rag["retrieved_nodes"][:3]:
             content = str(node.get("content") or "")

@@ -444,11 +444,13 @@ export function LinkGraph({ compact = false }: LinkGraphProps) {
   const { locale } = useLanguage();
   const containerRef = useRef<HTMLDivElement>(null);
   const graphRef = useRef<ForceGraphMethods<FGNode, FGLink>>(undefined);
+  const fittedNodeCountRef = useRef(0);
 
   const [graphData, setGraphData] = useState<{ nodes: FGNode[]; links: FGLink[] }>({ nodes: [], links: [] });
   const [rawLinks, setRawLinks]   = useState<FGLink[]>([]);
   const [loading, setLoading]     = useState(true);
   const [selected, setSelected]   = useState<FGNode | null>(null);
+  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const [dimensions, setDimensions] = useState({ width: 400, height: compact ? 180 : 360 });
 
   const [activeTab, setActiveTab] = useState<GraphTab>("inspect");
@@ -499,13 +501,14 @@ export function LinkGraph({ compact = false }: LinkGraphProps) {
     }
   }, [compact]);
 
-  // Fit after both the force layout and the responsive canvas dimensions settle.
-  // A single fit at the initial 400px width leaves the graph anchored left on wide screens.
+  // Fit once when a new graph arrives. Re-fitting on every ResizeObserver update
+  // fights user zoom/pan and creates a visible zoom-in/zoom-out loop.
   useEffect(() => {
-    if (!graphData.nodes.length || dimensions.width <= 0) return;
+    if (!graphData.nodes.length || fittedNodeCountRef.current === graphData.nodes.length) return;
+    fittedNodeCountRef.current = graphData.nodes.length;
     const timer = window.setTimeout(() => graphRef.current?.zoomToFit(400, 64), 900);
     return () => window.clearTimeout(timer);
-  }, [graphData.nodes.length, dimensions.height, dimensions.width]);
+  }, [graphData.nodes.length]);
 
   const handleFindConnection = useCallback(async () => {
     if (!connectSource.trim() || !connectTarget.trim() || connectLoading) return;
@@ -553,6 +556,7 @@ export function LinkGraph({ compact = false }: LinkGraphProps) {
     const commColor = colorByCommunity && node.community_id != null ? communityColor(node.community_id) : null;
     const typeColor = commColor ?? (TYPE_COLOR[node.type] ?? "#5a8cff");
     const isSelected = selected?.id === node.id;
+    const isHovered = hoveredNodeId === node.id;
     const onPath = pathNodeIds.has(node.id);
     const baseR = (NODE_SIZE[node.type] ?? 5) + Math.min(node.weight * 0.3, 4);
     const r = isSelected ? baseR * 1.5 : baseR;
@@ -560,10 +564,10 @@ export function LinkGraph({ compact = false }: LinkGraphProps) {
     const y = node.y ?? 0;
 
     // Glow ring for selected, high-risk, or on the highlighted connection path
-    if (isSelected || node.risk === "high" || onPath) {
+    if (isSelected || isHovered || node.risk === "high" || onPath) {
       ctx.beginPath();
       ctx.arc(x, y, r + 3, 0, 2 * Math.PI);
-      ctx.fillStyle = onPath && !isSelected ? "#22d3ee30" : `${riskColor}30`;
+      ctx.fillStyle = isHovered && !isSelected ? `${typeColor}45` : onPath && !isSelected ? "#22d3ee30" : `${riskColor}30`;
       ctx.fill();
     }
 
@@ -589,7 +593,15 @@ export function LinkGraph({ compact = false }: LinkGraphProps) {
       ctx.fillStyle = isSelected ? "#f1f5f9" : "rgba(200,210,230,0.7)";
       ctx.fillText(label, x, y + r + fontSize + 1);
     }
-  }, [selected, colorByCommunity, pathNodeIds]);
+  }, [selected, hoveredNodeId, colorByCommunity, pathNodeIds]);
+
+  const paintNodePointerArea = useCallback((node: FGNode, color: string, ctx: CanvasRenderingContext2D) => {
+    const baseR = (NODE_SIZE[node.type] ?? 5) + Math.min(node.weight * 0.3, 4);
+    ctx.beginPath();
+    ctx.arc(node.x ?? 0, node.y ?? 0, Math.max(baseR + 5, 10), 0, 2 * Math.PI);
+    ctx.fillStyle = color;
+    ctx.fill();
+  }, []);
 
   // Custom link renderer
   const paintLink = useCallback((
@@ -615,9 +627,12 @@ export function LinkGraph({ compact = false }: LinkGraphProps) {
     if (compact) return;
     setSelected((prev) => (prev?.id === node.id ? null : node));
     setActiveTab("inspect");
-    // Zoom toward clicked node
-    graphRef.current?.centerAt(node.x, node.y, 400);
-    graphRef.current?.zoom(2.5, 400);
+  }, [compact]);
+
+  const handleNodeHover = useCallback((node: FGNode | null) => {
+    if (compact) return;
+    setHoveredNodeId(node?.id ?? null);
+    if (containerRef.current) containerRef.current.style.cursor = node ? "pointer" : "grab";
   }, [compact]);
 
   const keepNodeInViewport = useCallback((node: FGNode) => {
@@ -703,10 +718,6 @@ export function LinkGraph({ compact = false }: LinkGraphProps) {
         ref={containerRef}
         className="relative flex-1"
         style={{ minHeight: compact ? 160 : 380 }}
-        onClick={(e) => {
-          // Click on empty canvas → deselect
-          if (!compact && (e.target as HTMLElement).tagName === "CANVAS") setSelected(null);
-        }}
       >
         {loading ? (
           <div className="flex h-full flex-col items-center justify-center">
@@ -728,10 +739,13 @@ export function LinkGraph({ compact = false }: LinkGraphProps) {
               // Rendering
               nodeCanvasObject={paintNode}
               nodeCanvasObjectMode={() => "replace"}
+              nodePointerAreaPaint={paintNodePointerArea}
               linkCanvasObject={paintLink}
               linkCanvasObjectMode={() => "replace"}
               // Interaction
               onNodeClick={handleNodeClick}
+              onNodeHover={handleNodeHover}
+              onBackgroundClick={() => !compact && setSelected(null)}
               onNodeDrag={keepNodeInViewport}
               onNodeDragEnd={handleNodeDragEnd}
               nodeLabel={(node) => `${node.label} (${nodeTypeLabel(node.type, locale)})`}

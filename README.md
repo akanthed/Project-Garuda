@@ -188,8 +188,8 @@ not made because the simple model already beat every baseline.
 | Check | Result |
 | --- | --- |
 | `npx tsc --noEmit` | 0 errors |
-| `npx vitest run` | 69/69 passing |
-| `pytest` (backend, scoped to `test_agent.py test_risk_prediction.py`) | 32/33 (1 known-flaky timing assert) |
+| `npx vitest run` | 73/73 passing, including real Connections canvas interactions |
+| `pytest test_agent.py test_operations.py test_risk_prediction.py` | 76/76 passing |
 | `npm run build` | Succeeds |
 
 Full methodology and regeneration commands: [HACKATHON_SUBMISSION.md](HACKATHON_SUBMISSION.md).
@@ -294,7 +294,7 @@ MapLibre GL (`react-map-gl`) + deck.gl + `react-force-graph-2d`
 
 **Backend:** Python 3.11 + FastAPI + Uvicorn + Pydantic + NetworkX + pandas + NumPy + fpdf2 + zcatalyst-sdk
 
-**Testing:** Vitest + Testing Library (frontend, 69 tests), pytest (backend, 32-33 tests)
+**Testing:** Vitest + Testing Library (frontend, 73 tests), pytest (backend, 76 tests)
 
 **Infrastructure:** Zoho Catalyst — AppSail, Web Client Hosting, Data Store, NoSQL, Cache,
 Connections, QuickML, Zia AutoML/OCR, SmartBrowz, Stratus
