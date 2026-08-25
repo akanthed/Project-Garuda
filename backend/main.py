@@ -23,6 +23,7 @@ import asyncio
 import base64
 import hashlib
 import hmac
+import html as html_lib
 import json
 import os
 import logging
@@ -1169,6 +1170,439 @@ class CaseWorkflowUpdate(BaseModel):
 
 _LOCAL_CASE_WORKFLOWS: dict[int, dict] = {}
 
+class ResponsePlanCreate(BaseModel):
+    alert_id: str = Field(min_length=1, max_length=80)
+    station_id: int = Field(ge=1, le=1100)
+    current_count: int = Field(ge=0)
+    usual_count: float = Field(ge=0)
+    z_score: float = Field(ge=0)
+    decision: Literal["approve", "modify", "escalate"]
+    note: str = Field(default="", max_length=500)
+    assigned_to: str = Field(min_length=3, max_length=80)
+    due_at: Optional[str] = Field(default=None, max_length=40)
+
+class ResponsePlanUpdate(BaseModel):
+    status: Literal["acknowledged", "in_progress", "completed"]
+    outcome_note: str = Field(default="", max_length=500)
+
+_LOCAL_RESPONSE_PLANS: dict[str, dict] = {}
+_LOCAL_FIELD_UPDATES: dict[str, list[dict]] = {}
+_LOCAL_OPERATION_ATTACHMENTS: dict[str, bytes] = {}
+_RESPONSE_PLAN_LOCK = Lock()
+_OPERATION_AUDIT_NOSQL_TABLE = os.environ.get("OPERATION_AUDIT_NOSQL_TABLE", "OperationAuditEvents").strip()
+_OPERATION_STRATUS_BUCKET = os.environ.get("OPERATION_STRATUS_BUCKET", "garuda-operations").strip()
+
+def _public_response_plan(plan: dict) -> dict:
+    result = {key: value for key, value in plan.items() if not key.startswith("_")}
+    result["updates"] = list(_LOCAL_FIELD_UPDATES.get(plan["operation_id"], []))
+    return result
+
+def _field_update_row(update: dict) -> dict:
+    return {
+        "UpdateID": update["update_id"],
+        "OperationID": update["operation_id"],
+        "OfficerBadge": update["officer_badge"],
+        "Status": update["status"],
+        "Note": update["note"],
+        "AttachmentKey": update.get("attachment_key", ""),
+        "AttachmentName": update.get("attachment_name", ""),
+        "AttachmentType": update.get("attachment_type", ""),
+        "CreatedAt": update["created_at"],
+    }
+
+def _record_field_update(
+    plan: dict,
+    officer_badge: str,
+    status: str,
+    note: str = "",
+    attachment_key: str = "",
+    attachment_name: str = "",
+    attachment_type: str = "",
+    capp=None,
+) -> dict:
+    update = {
+        "update_id": str(uuid.uuid4()),
+        "operation_id": plan["operation_id"],
+        "officer_badge": officer_badge,
+        "status": status,
+        "note": note,
+        "attachment_key": attachment_key,
+        "attachment_name": attachment_name,
+        "attachment_type": attachment_type,
+        "created_at": pd.Timestamp.now(tz="UTC").isoformat(),
+        "persistence": "session",
+    }
+    if capp is not None:
+        try:
+            capp.datastore().table("FieldUpdates").insert_row(_field_update_row(update))
+            update["persistence"] = "datastore"
+        except Exception as exc:
+            log.warning(f"FieldUpdates insert failed; keeping session copy: {exc}")
+    _LOCAL_FIELD_UPDATES.setdefault(plan["operation_id"], []).append(update)
+    return update
+
+def _response_plan_row(plan: dict) -> dict:
+    return {
+        "OperationID": plan["operation_id"],
+        "AlertID": plan["alert_id"],
+        "StationID": plan["station_id"],
+        "StationName": plan["station_name"],
+        "CurrentCount": plan["current_count"],
+        "UsualCount": plan["usual_count"],
+        "ZScore": plan["z_score"],
+        "Decision": plan["decision"],
+        "Note": plan["note"],
+        "AssignedTo": plan["assigned_to"],
+        "Status": plan["status"],
+        "CreatedBy": plan["created_by"],
+        "CreatedAt": plan["created_at"],
+        "DueAt": plan["due_at"] or "",
+        "UpdatedAt": plan["updated_at"],
+        "OutcomeNote": plan["outcome_note"],
+    }
+
+def _hydrate_response_plans(capp) -> None:
+    if capp is None:
+        return
+    try:
+        rows = capp.datastore().table("ResponsePlans").get_iterable_rows()
+        hydrated: dict[str, dict] = {}
+        for row in rows:
+            operation_id = str(row.get("OperationID", "")).strip()
+            if not operation_id:
+                continue
+            hydrated[operation_id] = {
+                "operation_id": operation_id,
+                "alert_id": str(row.get("AlertID", "")),
+                "station_id": int(row.get("StationID", 0)),
+                "station_name": str(row.get("StationName", "")),
+                "current_count": int(row.get("CurrentCount", 0)),
+                "usual_count": float(row.get("UsualCount", 0)),
+                "z_score": float(row.get("ZScore", 0)),
+                "decision": str(row.get("Decision", "approve")),
+                "note": str(row.get("Note", "")),
+                "assigned_to": str(row.get("AssignedTo", "")),
+                "status": str(row.get("Status", "assigned")),
+                "created_by": str(row.get("CreatedBy", "")),
+                "created_at": str(row.get("CreatedAt", "")),
+                "due_at": str(row.get("DueAt", "")) or None,
+                "updated_at": str(row.get("UpdatedAt", "")),
+                "outcome_note": str(row.get("OutcomeNote", "")),
+                "persistence": "datastore",
+                "_datastore_row_id": str(row.get("ROWID", "")),
+            }
+        with _RESPONSE_PLAN_LOCK:
+            _LOCAL_RESPONSE_PLANS.update(hydrated)
+    except Exception as exc:
+        log.debug(f"ResponsePlans hydration unavailable: {exc}")
+
+def _hydrate_field_updates(capp) -> None:
+    if capp is None:
+        return
+    try:
+        rows = capp.datastore().table("FieldUpdates").get_iterable_rows()
+        hydrated: dict[str, list[dict]] = {}
+        for row in rows:
+            operation_id = str(row.get("OperationID", "")).strip()
+            if not operation_id:
+                continue
+            hydrated.setdefault(operation_id, []).append({
+                "update_id": str(row.get("UpdateID", "")),
+                "operation_id": operation_id,
+                "officer_badge": str(row.get("OfficerBadge", "")),
+                "status": str(row.get("Status", "")),
+                "note": str(row.get("Note", "")),
+                "attachment_key": str(row.get("AttachmentKey", "")),
+                "attachment_name": str(row.get("AttachmentName", "")),
+                "attachment_type": str(row.get("AttachmentType", "")),
+                "created_at": str(row.get("CreatedAt", "")),
+                "persistence": "datastore",
+            })
+        for updates in hydrated.values():
+            updates.sort(key=lambda item: item["created_at"])
+        _LOCAL_FIELD_UPDATES.update(hydrated)
+    except Exception as exc:
+        log.debug(f"FieldUpdates hydration unavailable: {exc}")
+
+def _emit_operation_audit_event(plan: dict, actor: str, action: str, capp=None) -> None:
+    event = {
+        "event_id": str(uuid.uuid4()),
+        "ts": pd.Timestamp.now(tz="UTC").isoformat(),
+        "operation_id": plan["operation_id"],
+        "actor": actor,
+        "action": action,
+        "status": plan["status"],
+        "station_id": str(plan["station_id"]),
+    }
+    _AGENT_AUDIT_LOG.info(json.dumps({"type": "operation", **event}))
+    if capp is not None:
+        try:
+            capp.nosql().get_table(_OPERATION_AUDIT_NOSQL_TABLE).insert_items({"item": event})
+        except Exception:
+            log.debug("Operation audit NoSQL write failed", exc_info=True)
+
+def _create_response_plan(body: ResponsePlanCreate, officer: dict, capp=None) -> dict:
+    assigned_to = body.assigned_to.strip().upper()
+    if not _lookup_officer(capp, assigned_to):
+        raise HTTPException(422, "Assigned officer was not found")
+
+    now = pd.Timestamp.now(tz="UTC").isoformat()
+    plan = {
+        "operation_id": str(uuid.uuid4()),
+        "alert_id": body.alert_id.strip(),
+        "station_id": body.station_id,
+        "station_name": station_name(body.station_id),
+        "current_count": body.current_count,
+        "usual_count": body.usual_count,
+        "z_score": body.z_score,
+        "decision": body.decision,
+        "note": body.note.strip(),
+        "assigned_to": assigned_to,
+        "status": "assigned",
+        "created_by": officer["badge"],
+        "created_at": now,
+        "due_at": body.due_at,
+        "updated_at": now,
+        "outcome_note": "",
+        "persistence": "session",
+    }
+    if capp is not None:
+        try:
+            inserted = capp.datastore().table("ResponsePlans").insert_row(_response_plan_row(plan))
+            plan["_datastore_row_id"] = str(inserted.get("ROWID", ""))
+            plan["persistence"] = "datastore"
+        except Exception as exc:
+            log.warning(f"ResponsePlans insert failed; keeping session copy: {exc}")
+    with _RESPONSE_PLAN_LOCK:
+        _LOCAL_RESPONSE_PLANS[plan["operation_id"]] = plan
+    _record_field_update(plan, officer["badge"], "assigned", body.note.strip(), capp=capp)
+    _emit_operation_audit_event(plan, officer["badge"], "created", capp)
+    return _public_response_plan(plan)
+
+def _update_response_plan(operation_id: str, body: ResponsePlanUpdate, officer: dict, capp=None) -> dict:
+    if operation_id not in _LOCAL_RESPONSE_PLANS:
+        _hydrate_response_plans(capp)
+    with _RESPONSE_PLAN_LOCK:
+        plan = _LOCAL_RESPONSE_PLANS.get(operation_id)
+        if plan is None:
+            raise HTTPException(404, "Response plan not found")
+
+        can_manage = _permissions_for(officer.get("clearance", "CLR-1"))["canSimulate"]
+        if not can_manage and plan["assigned_to"] != officer.get("badge"):
+            raise HTTPException(403, "This response plan is assigned to another officer")
+
+        allowed_next = {
+            "assigned": {"acknowledged", "in_progress", "completed"},
+            "acknowledged": {"in_progress", "completed"},
+            "in_progress": {"completed"},
+            "completed": set(),
+        }
+        if body.status not in allowed_next[plan["status"]]:
+            raise HTTPException(409, f"Cannot change status from {plan['status']} to {body.status}")
+
+        plan["status"] = body.status
+        plan["outcome_note"] = body.outcome_note.strip()
+        plan["updated_at"] = pd.Timestamp.now(tz="UTC").isoformat()
+        row_id = plan.get("_datastore_row_id")
+        if capp is not None and row_id:
+            try:
+                capp.datastore().table("ResponsePlans").update_row({
+                    "ROWID": row_id,
+                    "Status": plan["status"],
+                    "OutcomeNote": plan["outcome_note"],
+                    "UpdatedAt": plan["updated_at"],
+                })
+                plan["persistence"] = "datastore"
+            except Exception as exc:
+                log.warning(f"ResponsePlans update failed; keeping session copy: {exc}")
+        result = _public_response_plan(plan)
+    _record_field_update(plan, officer["badge"], body.status, body.outcome_note.strip(), capp=capp)
+    result = _public_response_plan(plan)
+    _emit_operation_audit_event(plan, officer["badge"], "status_changed", capp)
+    return result
+
+def _require_operation_access(operation_id: str, officer: dict, capp=None) -> dict:
+    if operation_id not in _LOCAL_RESPONSE_PLANS:
+        _hydrate_response_plans(capp)
+    plan = _LOCAL_RESPONSE_PLANS.get(operation_id)
+    if plan is None:
+        raise HTTPException(404, "Response plan not found")
+    can_manage = _permissions_for(officer.get("clearance", "CLR-1"))["canSimulate"]
+    if not can_manage and plan["assigned_to"] != officer.get("badge"):
+        raise HTTPException(403, "This response plan is assigned to another officer")
+    return plan
+
+def _operation_assessment(plan: dict) -> dict:
+    if {"PoliceStationID", "CrimeRegisteredDate"}.issubset(DB.cases.columns):
+        station_cases = DB.cases[DB.cases["PoliceStationID"].astype(int) == int(plan["station_id"])].copy()
+        dates = pd.to_datetime(station_cases["CrimeRegisteredDate"], errors="coerce").dropna()
+    else:
+        dates = pd.Series([], dtype="datetime64[ns]")
+    latest_data_at = dates.max() if not dates.empty else None
+    created_at = pd.Timestamp(plan["created_at"])
+    created_at = created_at.tz_convert(None) if created_at.tzinfo else created_at
+    observation_days = max(0, (pd.Timestamp.now(tz="UTC") - pd.Timestamp(plan["created_at"])).days)
+    baseline_count = None
+    recent_count = None
+    historical_change_percent = None
+    if latest_data_at is not None:
+        latest_data_at = pd.Timestamp(latest_data_at).tz_localize(None)
+        baseline_start = latest_data_at - pd.Timedelta(days=59)
+        baseline_end = latest_data_at - pd.Timedelta(days=30)
+        recent_start = latest_data_at - pd.Timedelta(days=29)
+        baseline_count = int(((dates >= baseline_start) & (dates <= baseline_end)).sum())
+        recent_count = int(((dates >= recent_start) & (dates <= latest_data_at)).sum())
+        if baseline_count > 0:
+            historical_change_percent = round((recent_count - baseline_count) / baseline_count * 100, 1)
+    impact_ready = bool(latest_data_at is not None and latest_data_at >= created_at + pd.Timedelta(days=30))
+    return {
+        "operation_id": plan["operation_id"],
+        "process_status": "completed" if plan["status"] == "completed" else "in_progress",
+        "task_status": plan["status"],
+        "observation_days": observation_days,
+        "field_update_count": len(_LOCAL_FIELD_UPDATES.get(plan["operation_id"], [])),
+        "baseline_30d_cases": baseline_count,
+        "latest_historical_30d_cases": recent_count,
+        "historical_change_percent": historical_change_percent,
+        "latest_data_at": latest_data_at.isoformat() if latest_data_at is not None else None,
+        "impact_status": "ready" if impact_ready else "pending_observation_window",
+        "impact_available_after": (created_at + pd.Timedelta(days=30)).isoformat(),
+        "advisory": (
+            "The historical comparison provides context only. It is not attributed to this response. "
+            "A causal outcome assessment requires at least 30 days of post-response records and a comparable control area."
+        ),
+    }
+
+def _persist_operation_assessment(assessment: dict, actor: str, capp=None) -> str:
+    if capp is None:
+        return "session"
+    try:
+        capp.datastore().table("Assessments").insert_row({
+            "AssessmentID": str(uuid.uuid4()),
+            "OperationID": assessment["operation_id"],
+            "ProcessStatus": assessment["process_status"],
+            "ImpactStatus": assessment["impact_status"],
+            "ObservationDays": assessment["observation_days"],
+            "BaselineCount": assessment["baseline_30d_cases"] if assessment["baseline_30d_cases"] is not None else -1,
+            "RecentCount": assessment["latest_historical_30d_cases"] if assessment["latest_historical_30d_cases"] is not None else -1,
+            "HistoricalChange": assessment["historical_change_percent"] if assessment["historical_change_percent"] is not None else 0,
+            "AssessedBy": actor,
+            "AssessedAt": pd.Timestamp.now(tz="UTC").isoformat(),
+            "Advisory": assessment["advisory"],
+        })
+        return "datastore"
+    except Exception as exc:
+        log.warning(f"Assessments insert failed: {exc}")
+        return "session"
+
+def _require_internal_token(request: Request, env_name: str, header_name: str) -> None:
+    expected = os.environ.get(env_name, "").strip()
+    supplied = request.headers.get(header_name, "").strip()
+    if not expected or not supplied or not hmac.compare_digest(supplied, expected):
+        raise HTTPException(403, "Invalid automation credential")
+
+def _run_operation_maintenance(capp=None) -> dict:
+    _hydrate_response_plans(capp)
+    _hydrate_field_updates(capp)
+    completed = [plan for plan in _LOCAL_RESPONSE_PLANS.values() if plan["status"] == "completed"]
+    persisted = 0
+    pending = 0
+    ready = 0
+    for plan in completed:
+        assessment = _operation_assessment(plan)
+        pending += int(assessment["impact_status"] == "pending_observation_window")
+        ready += int(assessment["impact_status"] == "ready")
+        persisted += int(_persist_operation_assessment(assessment, "job-scheduler", capp) == "datastore")
+    return {
+        "completed_operations": len(completed),
+        "assessment_snapshots_persisted": persisted,
+        "pending_observation_window": pending,
+        "impact_ready": ready,
+        "ran_at": pd.Timestamp.now(tz="UTC").isoformat(),
+    }
+
+def _record_signal_delivery(payload: dict, capp=None) -> dict:
+    event = {
+        "event_id": str(uuid.uuid4()),
+        "ts": pd.Timestamp.now(tz="UTC").isoformat(),
+        "operation_id": str(payload.get("operation_id") or payload.get("OperationID") or ""),
+        "actor": "catalyst-signals",
+        "action": str(payload.get("event_type") or payload.get("action") or "signal_received"),
+        "status": str(payload.get("status") or payload.get("Status") or "received"),
+        "station_id": str(payload.get("station_id") or payload.get("StationID") or ""),
+    }
+    if capp is not None:
+        try:
+            capp.nosql().get_table(_OPERATION_AUDIT_NOSQL_TABLE).insert_items({"item": event})
+        except Exception:
+            log.debug("Signals delivery NoSQL write failed", exc_info=True)
+    _AGENT_AUDIT_LOG.info(json.dumps({"type": "signal", **event}))
+    return event
+
+# Catalyst enforces a 20-character limit on cron names.
+_OPERATION_MAINTENANCE_CRON_NAME = "GarudaOpsMaintenance"
+
+def _ensure_operation_maintenance_cron(capp) -> dict:
+    scheduler = capp.job_scheduling()
+    pools = scheduler.get_all_jobpool() or []
+    pool = next((item for item in pools if (item.get("name") or item.get("jobpool_name")) == "GarudaAnalytics"), None)
+    if pool is None:
+        raise RuntimeError("GarudaAnalytics job pool does not exist")
+    existing = scheduler.cron.get_all() or []
+    current = next((item for item in existing if item.get("cron_name") == _OPERATION_MAINTENANCE_CRON_NAME), None)
+    if current is not None:
+        return {"created": False, "cron_id": current.get("id") or current.get("cron_id"), "cron_name": current.get("cron_name")}
+
+    token = os.environ.get("JOB_SCHEDULER_TOKEN", "").strip()
+    if not token:
+        raise RuntimeError("JOB_SCHEDULER_TOKEN is not configured")
+    pool_id = str(pool.get("id") or pool.get("jobpool_id"))
+    pool_name = str(pool.get("name") or pool.get("jobpool_name"))
+    created = scheduler.cron.create({
+        "cron_name": _OPERATION_MAINTENANCE_CRON_NAME,
+        "cron_status": True,
+        "cron_type": "Calendar",
+        "cron_detail": {
+            "repetition_type": "daily", "hour": 2, "minute": 0, "second": 0,
+            "timezone": "Asia/Kolkata",
+        },
+        "job_meta": {
+            "job_name": "GarudaOpsJob",
+            "job_config": {"number_of_retries": 3, "retry_interval": 60},
+            "jobpool_id": pool_id,
+            "jobpool_name": pool_name,
+            "target_type": "AppSail",
+            "target_id": "52319000000017010",
+            "url": "/api/internal/operations/maintenance",
+            "params": {},
+            "headers": {"X-Job-Token": token},
+            "request_method": "POST",
+            "request_body": "{}",
+        },
+    })
+    return {"created": True, "cron_id": created.get("id") or created.get("cron_id"), "cron_name": created.get("cron_name")}
+
+def _operation_debrief_html(plan: dict, assessment: dict) -> str:
+    updates = "".join(
+        f"<li><b>{html_lib.escape(item['status'])}</b> - {html_lib.escape(item['note'] or 'No note')} "
+        f"<small>{html_lib.escape(item['created_at'])}</small></li>"
+        for item in _LOCAL_FIELD_UPDATES.get(plan["operation_id"], [])
+    ) or "<li>No field updates recorded.</li>"
+    return f"""<!doctype html><html><head><style>
+    body{{font-family:sans-serif;padding:28px;color:#18202a}}h1{{font-size:22px}}h2{{font-size:14px;margin-top:22px}}
+    .meta{{color:#52606d;font-size:12px}}.status{{padding:3px 8px;background:#e6f4ea;color:#176b36;border-radius:4px}}
+    li{{margin:8px 0}}footer{{margin-top:30px;font-size:10px;color:#68737d}}
+    </style></head><body><h1>GARUDA OPERATION DEBRIEF</h1>
+    <p class="meta">Operation {html_lib.escape(plan['operation_id'])} - {html_lib.escape(plan['station_name'])}</p>
+    <p><span class="status">{html_lib.escape(plan['status'])}</span></p>
+    <h2>Supervisor Direction</h2><p>{html_lib.escape(plan['note'] or 'No note')}</p>
+    <h2>Field Timeline</h2><ol>{updates}</ol>
+    <h2>Assessment</h2><p>Process: {html_lib.escape(assessment['process_status'])}</p>
+    <p>Historical context: {assessment['baseline_30d_cases']} cases in the prior 30-day window; {assessment['latest_historical_30d_cases']} in the latest available 30-day window.</p>
+    <p>Impact status: {html_lib.escape(assessment['impact_status'])}</p><p>{html_lib.escape(assessment['advisory'])}</p>
+    <footer>Project Garuda | Synthetic prototype data | Human-reviewed operational record | Powered by Zoho Catalyst SmartBrowz</footer>
+    </body></html>"""
+
 # ─── Health ───────────────────────────────────────────────────────────────────
 
 @app.get("/")
@@ -1275,6 +1709,18 @@ async def reload_from_datastore(request: Request):
         log.exception("reload_from_datastore failed")
         raise HTTPException(500, "Reload failed")
     return {"status": "ok", "cases": len(DB.cases), "graph_nodes": DB.graph.number_of_nodes()}
+
+@app.post("/api/admin/setup-operations-automation")
+async def setup_operations_automation(request: Request):
+    _require_admin_token(request)
+    capp = _try_catalyst_app(request)
+    if capp is None:
+        raise HTTPException(400, "Catalyst Job Scheduling is unavailable in this environment")
+    try:
+        return _ensure_operation_maintenance_cron(capp)
+    except Exception:
+        log.exception("Operation automation setup failed")
+        raise HTTPException(502, "Could not configure operation maintenance cron")
 
 # ─── POST /api/auth/login ─────────────────────────────────────────────────────
 
@@ -3431,6 +3877,141 @@ async def update_case_workflow(case_master_id: int, body: CaseWorkflowUpdate, re
         except Exception as exc:
             log.warning(f"Case workflow Data Store write failed; keeping session event: {exc}")
     return {"case_master_id": case_master_id, **workflow, "persistence": persistence, "warning": warning}
+
+# ─── Response plans: intelligence signal -> assigned field task ──────────────
+
+@app.post("/api/operations")
+async def create_operation(body: ResponsePlanCreate, request: Request):
+    officer = require_permission(request, "canSimulate")
+    capp = _try_catalyst_app(request)
+    return _create_response_plan(body, officer, capp)
+
+@app.get("/api/operations")
+async def list_operations(
+    request: Request,
+    status: Optional[Literal["assigned", "acknowledged", "in_progress", "completed"]] = Query(None),
+):
+    officer = require_session(request)
+    capp = _try_catalyst_app(request)
+    _hydrate_response_plans(capp)
+    _hydrate_field_updates(capp)
+    can_manage = _permissions_for(officer.get("clearance", "CLR-1"))["canSimulate"]
+    with _RESPONSE_PLAN_LOCK:
+        plans = list(_LOCAL_RESPONSE_PLANS.values())
+    if not can_manage:
+        plans = [plan for plan in plans if plan["assigned_to"] == officer.get("badge")]
+    if status is not None:
+        plans = [plan for plan in plans if plan["status"] == status]
+    plans.sort(key=lambda plan: plan["created_at"], reverse=True)
+    return {"items": [_public_response_plan(plan) for plan in plans], "total": len(plans)}
+
+@app.patch("/api/operations/{operation_id}")
+async def update_operation(
+    operation_id: str, body: ResponsePlanUpdate, request: Request
+):
+    officer = require_session(request)
+    capp = _try_catalyst_app(request)
+    return _update_response_plan(operation_id, body, officer, capp)
+
+@app.post("/api/operations/{operation_id}/attachments")
+async def upload_operation_attachment(
+    operation_id: str, request: Request, file: UploadFile = File(...)
+):
+    officer = require_session(request)
+    capp = _try_catalyst_app(request)
+    plan = _require_operation_access(operation_id, officer, capp)
+    allowed_types = {"image/jpeg", "image/png", "image/webp", "application/pdf"}
+    if file.content_type not in allowed_types:
+        raise HTTPException(415, "Only JPEG, PNG, WebP, and PDF attachments are supported")
+    content = await file.read()
+    if not content or len(content) > 10 * 1024 * 1024:
+        raise HTTPException(413, "Attachment must be between 1 byte and 10 MB")
+    safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", file.filename or "attachment")[:120]
+    object_key = f"operations/{operation_id}/{uuid.uuid4()}-{safe_name}"
+    persistence = "session"
+    if capp is not None:
+        try:
+            capp.stratus().bucket(_OPERATION_STRATUS_BUCKET).put_object(
+                object_key, content, {"content_type": file.content_type, "meta_data": {"operation_id": operation_id}}
+            )
+            persistence = "stratus"
+        except Exception as exc:
+            log.warning(f"Operation attachment Stratus upload failed; keeping session copy: {exc}")
+    if persistence == "session":
+        _LOCAL_OPERATION_ATTACHMENTS[object_key] = content
+    update = _record_field_update(
+        plan, officer["badge"], plan["status"], attachment_key=object_key,
+        attachment_name=safe_name, attachment_type=file.content_type or "", capp=capp,
+    )
+    _emit_operation_audit_event(plan, officer["badge"], "attachment_added", capp)
+    return {"operation_id": operation_id, "attachment": update, "persistence": persistence}
+
+@app.get("/api/operations/{operation_id}/assessment")
+async def get_operation_assessment(operation_id: str, request: Request):
+    officer = require_session(request)
+    capp = _try_catalyst_app(request)
+    plan = _require_operation_access(operation_id, officer, capp)
+    _hydrate_field_updates(capp)
+    assessment = _operation_assessment(plan)
+    assessment["persistence"] = _persist_operation_assessment(assessment, officer["badge"], capp)
+    return assessment
+
+@app.get("/api/operations/{operation_id}/debrief")
+async def export_operation_debrief(operation_id: str, request: Request):
+    officer = require_permission(request, "canExport")
+    capp = _try_catalyst_app(request)
+    plan = _require_operation_access(operation_id, officer, capp)
+    _hydrate_field_updates(capp)
+    assessment = _operation_assessment(plan)
+    _persist_operation_assessment(assessment, officer["badge"], capp)
+    html = _operation_debrief_html(plan, assessment)
+    if capp is not None:
+        try:
+            response = capp.smart_browz().convert_to_pdf(html)
+            return StreamingResponse(iter([response.content]), media_type="application/pdf", headers={
+                "Content-Disposition": f"attachment; filename=garuda-operation-{operation_id[:8]}.pdf"
+            })
+        except Exception as exc:
+            log.warning(f"Operation SmartBrowz debrief failed; using local PDF: {exc}")
+    try:
+        from fpdf import FPDF
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Helvetica", "B", 15)
+        pdf.cell(0, 10, "GARUDA OPERATION DEBRIEF", ln=True)
+        pdf.set_font("Helvetica", "", 10)
+        for line in [
+            f"Operation: {operation_id}", f"Station: {plan['station_name']}", f"Status: {plan['status']}",
+            f"Direction: {plan['note'] or 'No note'}", f"Assessment: {assessment['impact_status']}",
+            assessment["advisory"],
+        ]:
+            pdf.set_x(pdf.l_margin)
+            pdf.multi_cell(0, 6, str(line).encode("latin-1", errors="replace").decode("latin-1"))
+        buffer = BytesIO()
+        pdf.output(buffer)
+        buffer.seek(0)
+        return StreamingResponse(buffer, media_type="application/pdf", headers={
+            "Content-Disposition": f"attachment; filename=garuda-operation-{operation_id[:8]}.pdf"
+        })
+    except ImportError:
+        raise HTTPException(500, "PDF generation is unavailable")
+
+@app.post("/api/internal/operations/maintenance")
+async def operation_maintenance(request: Request):
+    _require_internal_token(request, "JOB_SCHEDULER_TOKEN", "X-Job-Token")
+    return _run_operation_maintenance(_try_catalyst_app(request))
+
+@app.post("/api/internal/operations/signals")
+async def operation_signal_receiver(request: Request):
+    _require_internal_token(request, "SIGNALS_WEBHOOK_TOKEN", "X-Signals-Token")
+    try:
+        payload = await request.json()
+    except Exception:
+        raise HTTPException(400, "Signals payload must be JSON")
+    if not isinstance(payload, dict):
+        raise HTTPException(400, "Signals payload must be an object")
+    event = _record_signal_delivery(payload, _try_catalyst_app(request))
+    return {"accepted": True, "event_id": event["event_id"]}
 
 # ─── POST /api/export_brief (SmartBrowz PDF) ─────────────────────────────────
 

@@ -61,6 +61,10 @@ where to focus patrols. Garuda collapses that into one Catalyst-hosted workspace
   clearance-gated modules, and an agent audit trail persisted to Catalyst NoSQL.
 - **Incident intake, OCR-assisted FIR scan, and PDF brief export** — every figure in the
   exported brief is computed server-side from live scoped data at export time.
+- **ActionLoop field workflow** — supervisors turn anomaly evidence into assigned response
+  tasks; constables use a plain-language mobile view to start work, attach a photo/PDF,
+  record observations, and complete the task. Structured field history, conservative
+  outcome assessment, and a reviewed operation debrief close the loop.
 - **Bilingual UI** (English/Kannada, including district names) and full light/dark themes.
 
 ---
@@ -72,11 +76,15 @@ flowchart TD
     U["Officer browser"] -->|HTTPS| WC["Catalyst Web Client Hosting<br/>React + Vite SPA"]
     WC -->|REST /api/*| AS["Catalyst AppSail<br/>FastAPI + NetworkX"]
     AS --> DS["Data Store / ZCQL<br/>cases, accused, officers"]
-    AS --> NS["NoSQL<br/>AgentAuditEvents"]
+    AS --> OP["Data Store<br/>ResponsePlans, FieldUpdates, Assessments"]
+    AS --> NS["NoSQL<br/>agent + operation audit events"]
+    AS --> ST["Stratus<br/>encrypted field attachments"]
     AS --> CA["Cache<br/>network analytics"]
     AS --> CN["Connections"] --> QM["QuickML<br/>GLM-4.7-Flash"]
     AS --> ZA["Zia AutoML<br/>case risk"]
     AS --> SB["SmartBrowz<br/>PDF brief"]
+    JS["Job Scheduling<br/>daily 02:00 IST cron"] -->|X-Job-Token| AS
+    OP --> SG["Signals<br/>ResponsePlans row insert"] -->|X-Signals-Token| AS
 ```
 
 The frontend is fully stateless (all data via REST). The backend wraps every Catalyst SDK
@@ -90,19 +98,48 @@ and is exercised by the test suite.
 | --- | --- |
 | **Web Client Hosting** | Serves the built React SPA under `/app/`, with a custom `404.html` deep-link shim |
 | **AppSail** | Hosts the FastAPI backend (Python 3.11, vendored Linux wheels) |
-| **Data Store / ZCQL** | Officer credential lookup and bulk case data, paginated via ZCQL |
-| **NoSQL** | `AgentAuditEvents` — append-only audit trail of every agent action |
+| **Data Store / ZCQL** | Case data plus durable `ResponsePlans`, `FieldUpdates`, and assessment snapshots |
+| **NoSQL** | Append-only audit trails for agent actions and operation lifecycle events |
 | **Cache** | Persists the network-analytics blob across restarts (6-hour TTL) |
 | **Connections** | Auto-refreshed OAuth for QuickML, replacing a manual 1-hour token |
 | **QuickML (LLM Serving)** | GLM-4.7-Flash powers the Ask Garuda natural-language planner |
 | **Zia AutoML** | Structured case-risk classification |
 | **Zia OCR** | Scanned/photographed FIR → draft incident form (never auto-submits) |
 | **SmartBrowz** | PDF intelligence-brief generation |
-| **Stratus** | Staging bucket for CLI-based Data Store imports |
+| **Stratus** | Encrypted, versioned `garuda-operations` evidence bucket plus import staging |
+| **Job Scheduling** | Daily cron re-runs the ActionLoop outcome assessment over completed operations |
+| **Signals** | `ResponsePlans` row inserts are pushed to the backend as operation lifecycle events |
 
 Catalyst API Gateway cannot front an AppSail app directly (only Basic/Advanced I/O
 Functions and Web Client are valid targets) — CORS origin restriction (`ALLOWED_ORIGINS`)
 and in-app rate limiting are used instead; see `backend/main.py`.
+
+### Automation layer (live resource IDs)
+
+The ActionLoop does not depend on someone keeping a browser tab open — two Catalyst
+automations drive it:
+
+| Resource | Name | ID | Behaviour |
+| --- | --- | --- | --- |
+| Job Pool | `GarudaAnalytics` | `52319000000163006` | AppSail-type pool, capacity 1 |
+| Cron | `GarudaOpsMaintenance` | `52319000000163009` | Daily 02:00 Asia/Kolkata → `POST /api/internal/operations/maintenance` (3 retries, 60 s apart) |
+| Signals publisher | Garuda Data Store | `12279000000021058` | CloudScale Data Store event source |
+| Signals rule | `GarudaOperationEvents` | `12279000000021067` | Row Insert on `ResponsePlans` (`52319000000154015`) |
+| Signals target | `Garuda Operations` | `12279000000021066` | `instant_batch` dispatch, 24 h TTL, 5 retries |
+| Signals webhook | `Garuda Operations Receiver` | `12279000000021065` | `POST /api/internal/operations/signals` |
+
+Both internal endpoints are shared-secret gated (`X-Job-Token` / `X-Signals-Token`
+validated with `hmac.compare_digest` against AppSail env vars `JOB_SCHEDULER_TOKEN` and
+`SIGNALS_WEBHOOK_TOKEN`). Verified live: the maintenance endpoint returns `200` with the
+cron's configured token, the signals receiver returns `200` with the correct token and
+`403` with a wrong one, and creating operations through the live API produced Row Insert
+events that Signals logged as **Success** against the webhook.
+
+Three Catalyst-side gotchas worth recording, since none of them surface an error in the
+console UI: cron names are capped at **20 characters** (the validation message is never
+rendered); Catalyst's 17-digit resource IDs exceed `Number.MAX_SAFE_INTEGER`, so any
+tooling that parses them as JSON numbers will silently corrupt them; and a webhook saved
+without headers fails delivery silently while the event log sits on "In Progress".
 
 ---
 

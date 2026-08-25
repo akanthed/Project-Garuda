@@ -11,7 +11,8 @@
     "QUICKML_LLM_ENDPOINT": "https://api.catalyst.zoho.in/quickml/v1/project/52319000000013050/glm/chat",
     "QUICKML_MODEL": "crm-di-glm47b_30b_it",
     "QUICKML_ORG_ID": "60078749238",
-    "QUICKML_CONNECTION_LINK_NAME": "garudaquickml"
+    "QUICKML_CONNECTION_LINK_NAME": "garudaquickml",
+    "OPERATION_STRATUS_BUCKET": "garuda-operations"
   },
   "memory": 512
 }
