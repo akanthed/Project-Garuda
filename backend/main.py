@@ -1539,6 +1539,49 @@ def _record_signal_delivery(payload: dict, capp=None) -> dict:
     _AGENT_AUDIT_LOG.info(json.dumps({"type": "signal", **event}))
     return event
 
+# Catalyst enforces a 20-character limit on cron names.
+_OPERATION_MAINTENANCE_CRON_NAME = "GarudaOpsMaintenance"
+
+def _ensure_operation_maintenance_cron(capp) -> dict:
+    scheduler = capp.job_scheduling()
+    pools = scheduler.get_all_jobpool() or []
+    pool = next((item for item in pools if (item.get("name") or item.get("jobpool_name")) == "GarudaAnalytics"), None)
+    if pool is None:
+        raise RuntimeError("GarudaAnalytics job pool does not exist")
+    existing = scheduler.cron.get_all() or []
+    current = next((item for item in existing if item.get("cron_name") == _OPERATION_MAINTENANCE_CRON_NAME), None)
+    if current is not None:
+        return {"created": False, "cron_id": current.get("id") or current.get("cron_id"), "cron_name": current.get("cron_name")}
+
+    token = os.environ.get("JOB_SCHEDULER_TOKEN", "").strip()
+    if not token:
+        raise RuntimeError("JOB_SCHEDULER_TOKEN is not configured")
+    pool_id = str(pool.get("id") or pool.get("jobpool_id"))
+    pool_name = str(pool.get("name") or pool.get("jobpool_name"))
+    created = scheduler.cron.create({
+        "cron_name": _OPERATION_MAINTENANCE_CRON_NAME,
+        "cron_status": True,
+        "cron_type": "Calendar",
+        "cron_detail": {
+            "repetition_type": "daily", "hour": 2, "minute": 0, "second": 0,
+            "timezone": "Asia/Kolkata",
+        },
+        "job_meta": {
+            "job_name": "GarudaOpsJob",
+            "job_config": {"number_of_retries": 3, "retry_interval": 60},
+            "jobpool_id": pool_id,
+            "jobpool_name": pool_name,
+            "target_type": "AppSail",
+            "target_id": "52319000000017010",
+            "url": "/api/internal/operations/maintenance",
+            "params": {},
+            "headers": {"X-Job-Token": token},
+            "request_method": "POST",
+            "request_body": "{}",
+        },
+    })
+    return {"created": True, "cron_id": created.get("id") or created.get("cron_id"), "cron_name": created.get("cron_name")}
+
 def _operation_debrief_html(plan: dict, assessment: dict) -> str:
     updates = "".join(
         f"<li><b>{html_lib.escape(item['status'])}</b> - {html_lib.escape(item['note'] or 'No note')} "
@@ -1666,6 +1709,18 @@ async def reload_from_datastore(request: Request):
         log.exception("reload_from_datastore failed")
         raise HTTPException(500, "Reload failed")
     return {"status": "ok", "cases": len(DB.cases), "graph_nodes": DB.graph.number_of_nodes()}
+
+@app.post("/api/admin/setup-operations-automation")
+async def setup_operations_automation(request: Request):
+    _require_admin_token(request)
+    capp = _try_catalyst_app(request)
+    if capp is None:
+        raise HTTPException(400, "Catalyst Job Scheduling is unavailable in this environment")
+    try:
+        return _ensure_operation_maintenance_cron(capp)
+    except Exception:
+        log.exception("Operation automation setup failed")
+        raise HTTPException(502, "Could not configure operation maintenance cron")
 
 # ─── POST /api/auth/login ─────────────────────────────────────────────────────
 

@@ -83,6 +83,8 @@ flowchart TD
     AS --> CN["Connections"] --> QM["QuickML<br/>GLM-4.7-Flash"]
     AS --> ZA["Zia AutoML<br/>case risk"]
     AS --> SB["SmartBrowz<br/>PDF brief"]
+    JS["Job Scheduling<br/>daily 02:00 IST cron"] -->|X-Job-Token| AS
+    OP --> SG["Signals<br/>ResponsePlans row insert"] -->|X-Signals-Token| AS
 ```
 
 The frontend is fully stateless (all data via REST). The backend wraps every Catalyst SDK
@@ -105,10 +107,39 @@ and is exercised by the test suite.
 | **Zia OCR** | Scanned/photographed FIR → draft incident form (never auto-submits) |
 | **SmartBrowz** | PDF intelligence-brief generation |
 | **Stratus** | Encrypted, versioned `garuda-operations` evidence bucket plus import staging |
+| **Job Scheduling** | Daily cron re-runs the ActionLoop outcome assessment over completed operations |
+| **Signals** | `ResponsePlans` row inserts are pushed to the backend as operation lifecycle events |
 
 Catalyst API Gateway cannot front an AppSail app directly (only Basic/Advanced I/O
 Functions and Web Client are valid targets) — CORS origin restriction (`ALLOWED_ORIGINS`)
 and in-app rate limiting are used instead; see `backend/main.py`.
+
+### Automation layer (live resource IDs)
+
+The ActionLoop does not depend on someone keeping a browser tab open — two Catalyst
+automations drive it:
+
+| Resource | Name | ID | Behaviour |
+| --- | --- | --- | --- |
+| Job Pool | `GarudaAnalytics` | `52319000000163006` | AppSail-type pool, capacity 1 |
+| Cron | `GarudaOpsMaintenance` | `52319000000163009` | Daily 02:00 Asia/Kolkata → `POST /api/internal/operations/maintenance` (3 retries, 60 s apart) |
+| Signals publisher | Garuda Data Store | `12279000000021058` | CloudScale Data Store event source |
+| Signals rule | `GarudaOperationEvents` | `12279000000021067` | Row Insert on `ResponsePlans` (`52319000000154015`) |
+| Signals target | `Garuda Operations` | `12279000000021066` | `instant_batch` dispatch, 24 h TTL, 5 retries |
+| Signals webhook | `Garuda Operations Receiver` | `12279000000021065` | `POST /api/internal/operations/signals` |
+
+Both internal endpoints are shared-secret gated (`X-Job-Token` / `X-Signals-Token`
+validated with `hmac.compare_digest` against AppSail env vars `JOB_SCHEDULER_TOKEN` and
+`SIGNALS_WEBHOOK_TOKEN`). Verified live: the maintenance endpoint returns `200` with the
+cron's configured token, the signals receiver returns `200` with the correct token and
+`403` with a wrong one, and creating operations through the live API produced Row Insert
+events that Signals logged as **Success** against the webhook.
+
+Three Catalyst-side gotchas worth recording, since none of them surface an error in the
+console UI: cron names are capped at **20 characters** (the validation message is never
+rendered); Catalyst's 17-digit resource IDs exceed `Number.MAX_SAFE_INTEGER`, so any
+tooling that parses them as JSON numbers will silently corrupt them; and a webhook saved
+without headers fails delivery silently while the event log sits on "In Progress".
 
 ---
 

@@ -203,3 +203,17 @@ def test_signal_delivery_is_sanitized():
     assert event["operation_id"] == "operation-1"
     assert event["action"] == "signal_received"
     assert "raw_sensitive_note" not in event
+
+
+def test_job_scheduling_setup_is_idempotent(monkeypatch):
+    monkeypatch.setenv("JOB_SCHEDULER_TOKEN", "job-secret")
+    scheduler = Mock()
+    scheduler.get_all_jobpool.return_value = [{"id": "pool-1", "name": "GarudaAnalytics"}]
+    scheduler.cron.get_all.return_value = [{"id": "cron-1", "cron_name": "GarudaOpsMaintenance"}]
+    capp = Mock()
+    capp.job_scheduling.return_value = scheduler
+
+    result = main._ensure_operation_maintenance_cron(capp)
+
+    assert result == {"created": False, "cron_id": "cron-1", "cron_name": "GarudaOpsMaintenance"}
+    scheduler.cron.create.assert_not_called()
