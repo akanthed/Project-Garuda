@@ -194,8 +194,11 @@ Garuda integrates **Zia AutoML**, Zoho's built-in machine learning service, to p
 2. Log in as an authorised officer and show role-aware modules.
 3. Open the map, switch risk layers, and inspect one hotspot.
 4. Move to the link graph and explain a suspect-to-FIR connection.
-5. Adjust the three planner controls, run the scenario, and state that it is an estimate with assumptions.
-6. Export the intelligence brief and close on Catalyst-native deployment.
+5. Ask Garuda a question and show plan -> execute -> answer with source transparency.
+6. In Planner, run one scenario and create a response operation from the reviewed signal.
+7. Open ActionLoop field workflow, acknowledge/update the operation, and show attachment + observation capture.
+8. Show the closed loop: operation status, audit trail, and automated maintenance assessment path.
+9. Export the intelligence brief and close on Catalyst-native deployment.
 
 ## Slide 12 Continued - Final Submission Checklist
 

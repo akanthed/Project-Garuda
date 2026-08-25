@@ -33,7 +33,9 @@ Built for the Karnataka State Police (KSP) Datathon 2026, entirely on Zoho Catal
 log in as `KSP-DGP-0001` (same screens unlock — RBAC is real, not cosmetic) → open the map,
 toggle Historical → Predicted, click a hotspot → drill from statewide into one district →
 open Network, run Kingpins, then trace a path between two suspects → ask Ask Garuda a
-question in Kannada → open the planner, move a slider, run a scenario → export the PDF brief.
+question in Kannada and show plan -> execute -> answer trace → open the planner, move a slider,
+run a scenario, create an operation, then open ActionLoop to acknowledge/update with a field note
+and attachment → show status + audit evidence, then export the PDF brief.
 
 ---
 
@@ -281,9 +283,8 @@ Key gotchas (full detail in [DEPLOY.md](DEPLOY.md)):
 
 `DEPLOY.md`, `QUICK_DEPLOYMENT.md`, `QUICKML_INTEGRATION.md`, `FRONTEND_INTEGRATION_GUIDE.md`,
 `RISK_ASSESSMENT_VISUAL_GUIDE.md`, and `PRESENTATION_CONTENT.md` are supplementary/how-to
-docs, current as of the latest deploy. `TODAY_COMPLETION_SUMMARY.md`, `dev-log.txt`, and
-`deploy_log.txt` are session-diary artifacts kept for our own traceability, not evaluator-
-facing claims — start from this README and HACKATHON_SUBMISSION.md instead.
+docs, current as of the latest deploy; start from this README and HACKATHON_SUBMISSION.md
+for evaluator-facing claims.
 
 ---
 

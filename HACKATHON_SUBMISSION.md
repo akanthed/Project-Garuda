@@ -259,6 +259,7 @@ $env:VITE_API_URL="http://localhost:8000"; npm run dev
    nearest patrol, and the causal narrative.
 4. **Drill from statewide into one district** — every panel re-scopes together.
 5. **Network** — run kingpins, then trace a path between two connected accused.
-6. **Ask Garuda** — ask a question in Kannada, then follow "View matching cases".
-7. **Planner** — move a slider, hit Run Test, and point at the *confidence range*.
-8. **Export the PDF brief** to close.
+6. **Ask Garuda** — ask a question in Kannada and show plan -> execute -> answer trace.
+7. **Planner** — move a slider, hit Run Test, point at the *confidence range*, then create an operation.
+8. **ActionLoop** — acknowledge/update the operation with a field note and attachment, then show status plus audit evidence.
+9. **Export the PDF brief** to close.
