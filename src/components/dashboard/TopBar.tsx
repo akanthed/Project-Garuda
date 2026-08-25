@@ -138,7 +138,7 @@ export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
         <div className="text-[11px] font-mono uppercase tracking-[0.2em] text-muted-foreground">
           {t("topbar_intel", locale)}
         </div>
-        {districts.length > 0 && (
+        {officer.designation !== "Constable" && districts.length > 0 && (
           <select
             value={districtId ?? ""}
             onChange={(e) => setDistrictId(e.target.value ? Number(e.target.value) : null)}
@@ -162,7 +162,7 @@ export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
           aria-haspopup="dialog"
           aria-expanded={chatOpen}
           title={t("topbar_ask_label", locale)}
-          className="flex h-8 items-center gap-1.5 rounded-md border border-primary/20 bg-primary/[0.04] px-2.5 text-primary transition hover:border-primary/50 hover:bg-primary/10"
+          className="flex h-11 items-center gap-1.5 rounded-md border border-primary/20 bg-primary/[0.04] px-3 text-primary transition hover:border-primary/50 hover:bg-primary/10 sm:h-8 sm:px-2.5"
         >
           {asking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Bot className="h-3.5 w-3.5" />}
           <span className="hidden text-xs font-medium sm:inline">{t("topbar_ask_label", locale)}</span>
@@ -324,25 +324,27 @@ export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
         </Dialog>
 
         {/* PDF Export — triggers SmartBrowz on backend */}
-        <button
-          onClick={handleExport}
-          disabled={exporting}
-          title={t("topbar_export_title", locale)}
-          className="flex items-center gap-1.5 rounded-md border border-foreground/5 bg-foreground/[0.02] px-2.5 py-1.5 text-xs text-muted-foreground transition hover:border-emerald-500/30 hover:text-emerald-400 disabled:opacity-50"
-        >
-          {exporting ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <FileDown className="h-3.5 w-3.5" />
-          )}
-          <span className="hidden sm:inline">{t("topbar_brief", locale)}</span>
-        </button>
+        {officer.canExport && (
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            title={t("topbar_export_title", locale)}
+            className="flex h-10 items-center gap-1.5 rounded-md border border-foreground/5 bg-foreground/[0.02] px-2.5 text-xs text-muted-foreground transition hover:border-emerald-500/30 hover:text-emerald-400 disabled:opacity-50 sm:h-8"
+          >
+            {exporting ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <FileDown className="h-3.5 w-3.5" />
+            )}
+            <span className="hidden sm:inline">{t("topbar_brief", locale)}</span>
+          </button>
+        )}
 
         {/* Language toggle */}
         <button
           onClick={toggle}
           title={t(locale === "en" ? "topbar_language_en" : "topbar_language_kn", locale)}
-          className="flex items-center gap-1.5 rounded-md border border-foreground/5 bg-foreground/[0.02] px-2.5 py-1.5 transition hover:border-primary/30 hover:bg-primary/5"
+          className="flex h-11 items-center gap-1.5 rounded-md border border-foreground/5 bg-foreground/[0.02] px-3 transition hover:border-primary/30 hover:bg-primary/5 sm:h-8 sm:px-2.5"
         >
           <span className="font-mono text-[11px] text-primary">
             {locale === "en" ? "ಕನ್ನಡ" : "EN"}
@@ -352,7 +354,7 @@ export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
         <button
           onClick={toggleTheme}
           title={t(theme === "dark" ? "topbar_theme_dark" : "topbar_theme_light", locale)}
-          className="flex h-8 w-8 items-center justify-center rounded-md border border-foreground/5 text-muted-foreground transition hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
+          className="flex h-11 w-11 items-center justify-center rounded-md border border-foreground/5 text-muted-foreground transition hover:border-primary/30 hover:bg-primary/5 hover:text-primary sm:h-8 sm:w-8"
         >
           {theme === "dark" ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
         </button>
@@ -361,7 +363,7 @@ export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
         <button
           onClick={handleLogout}
           title={t("topbar_logout_tt", locale)}
-          className="flex h-8 w-8 items-center justify-center rounded-md border border-foreground/5 text-muted-foreground transition hover:border-[var(--danger)]/30 hover:text-[var(--danger)]"
+          className="flex h-11 w-11 items-center justify-center rounded-md border border-foreground/5 text-muted-foreground transition hover:border-[var(--danger)]/30 hover:text-[var(--danger)] sm:h-8 sm:w-8"
         >
           <LogOut className="h-3.5 w-3.5" />
         </button>

@@ -30,8 +30,13 @@ import type {
   KingpinRow,
   KpiMetric,
   NetworkGraph,
+  OperationAssessment,
   PatrolUnit,
   PredictedLink,
+  ResponsePlan,
+  ResponsePlanCreate,
+  ResponsePlansPage,
+  ResponsePlanStatus,
   RiskPrediction,
   SimulationResult,
   SimulatorVariable,
@@ -76,7 +81,7 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
-      "Content-Type": "application/json",
+      ...(options?.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options?.headers,
     },
@@ -88,6 +93,15 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   }
   if (!res.ok) throw new Error(`API ${path} failed: ${res.status} ${res.statusText}`);
   return res.json() as Promise<T>;
+}
+
+async function apiBlob(path: string): Promise<Blob> {
+  const token = getToken();
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) throw new Error(`API ${path} failed: ${res.status} ${res.statusText}`);
+  return res.blob();
 }
 
 // ─── GET /api/districts ────────────────────────────────────────────────────────
@@ -843,4 +857,114 @@ export async function fetchAnalyticsSummary(): Promise<ApiResponse<AnalyticsSumm
   }
   await delay(200);
   return wrap(MOCK_ANALYTICS_SUMMARY);
+}
+
+// ─── ActionLoop response plans ──────────────────────────────────────────────
+
+const MOCK_RESPONSE_PLANS: ResponsePlan[] = [];
+
+export async function createResponsePlan(input: ResponsePlanCreate): Promise<ApiResponse<ResponsePlan>> {
+  if (USE_REAL_API) {
+    const data = await apiFetch<ResponsePlan>("/api/operations", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+    return wrap(data);
+  }
+  await delay(200);
+  const now = new Date().toISOString();
+  const data: ResponsePlan = {
+    ...input,
+    operation_id: crypto.randomUUID(),
+    station_name: input.station_name ?? `Police Station ${input.station_id}`,
+    status: "assigned",
+    created_by: "KSP-DGP-0001",
+    created_at: now,
+    updated_at: now,
+    outcome_note: "",
+    persistence: "session",
+    updates: [],
+  };
+  data.updates.push({
+    update_id: crypto.randomUUID(), operation_id: data.operation_id, officer_badge: data.created_by,
+    status: "assigned", note: input.note, attachment_key: "", attachment_name: "", attachment_type: "",
+    created_at: now, persistence: "session",
+  });
+  MOCK_RESPONSE_PLANS.unshift(data);
+  return wrap(data);
+}
+
+export async function fetchResponsePlans(): Promise<ApiResponse<ResponsePlansPage>> {
+  if (USE_REAL_API) {
+    const data = await apiFetch<ResponsePlansPage>("/api/operations");
+    return wrap({ ...data, items: data.items.map((plan) => ({ ...plan, updates: plan.updates ?? [] })) });
+  }
+  await delay(150);
+  return wrap({ items: [...MOCK_RESPONSE_PLANS], total: MOCK_RESPONSE_PLANS.length });
+}
+
+export async function updateResponsePlan(
+  operationId: string,
+  status: Exclude<ResponsePlanStatus, "assigned">,
+  outcomeNote = "",
+): Promise<ApiResponse<ResponsePlan>> {
+  if (USE_REAL_API) {
+    const data = await apiFetch<ResponsePlan>(`/api/operations/${operationId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status, outcome_note: outcomeNote }),
+    });
+    return wrap(data);
+  }
+  await delay(150);
+  const plan = MOCK_RESPONSE_PLANS.find((item) => item.operation_id === operationId);
+  if (!plan) throw new Error("Response plan not found");
+  plan.status = status;
+  plan.outcome_note = outcomeNote;
+  plan.updated_at = new Date().toISOString();
+  plan.updates.push({
+    update_id: crypto.randomUUID(), operation_id: operationId, officer_badge: "KSP-BLR-1001",
+    status, note: outcomeNote, attachment_key: "", attachment_name: "", attachment_type: "",
+    created_at: plan.updated_at, persistence: "session",
+  });
+  return wrap({ ...plan });
+}
+
+export async function uploadOperationAttachment(operationId: string, file: File): Promise<ApiResponse<ResponsePlan["updates"][number]>> {
+  if (USE_REAL_API) {
+    const form = new FormData();
+    form.append("file", file);
+    const data = await apiFetch<{ attachment: ResponsePlan["updates"][number] }>(`/api/operations/${operationId}/attachments`, { method: "POST", body: form });
+    return wrap(data.attachment);
+  }
+  await delay(180);
+  const plan = MOCK_RESPONSE_PLANS.find((item) => item.operation_id === operationId);
+  if (!plan) throw new Error("Response plan not found");
+  const attachment = {
+    update_id: crypto.randomUUID(), operation_id: operationId, officer_badge: "KSP-BLR-1001",
+    status: plan.status, note: "", attachment_key: `operations/${operationId}/${file.name}`,
+    attachment_name: file.name, attachment_type: file.type, created_at: new Date().toISOString(), persistence: "session" as const,
+  };
+  plan.updates.push(attachment);
+  return wrap(attachment);
+}
+
+export async function fetchOperationAssessment(operationId: string): Promise<ApiResponse<OperationAssessment>> {
+  if (USE_REAL_API) return wrap(await apiFetch<OperationAssessment>(`/api/operations/${operationId}/assessment`));
+  await delay(120);
+  const plan = MOCK_RESPONSE_PLANS.find((item) => item.operation_id === operationId);
+  if (!plan) throw new Error("Response plan not found");
+  return wrap({
+    operation_id: operationId, process_status: plan.status === "completed" ? "completed" : "in_progress",
+    task_status: plan.status, observation_days: 0, field_update_count: plan.updates.length,
+    baseline_30d_cases: null, latest_historical_30d_cases: null, historical_change_percent: null,
+    latest_data_at: null, impact_status: "pending_observation_window",
+    impact_available_after: new Date(Date.now() + 30 * 86400000).toISOString(),
+    advisory: "Historical context is not attributed to this response. A causal assessment needs a post-response window.",
+  });
+}
+
+export async function exportOperationDebrief(operationId: string): Promise<Blob> {
+  if (USE_REAL_API) return apiBlob(`/api/operations/${operationId}/debrief`);
+  await delay(120);
+  return new Blob([`Garuda operation debrief: ${operationId}`], { type: "application/pdf" });
 }

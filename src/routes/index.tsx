@@ -1,6 +1,6 @@
 import { useState, useEffect, lazy, Suspense } from "react";
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { Network, MapPin, TrendingDown, ShieldCheck, ClipboardCheck, Clock3, type LucideIcon } from "lucide-react";
+import { Network, MapPin, TrendingDown, ShieldCheck, type LucideIcon } from "lucide-react";
 import { Toaster } from "@/components/ui/sonner";
 import { Sidebar, type ViewKey } from "@/components/dashboard/Sidebar";
 import { TopBar } from "@/components/dashboard/TopBar";
@@ -8,9 +8,11 @@ import { KpiCard } from "@/components/dashboard/KpiCard";
 import { Simulator } from "@/components/dashboard/Simulator";
 import { AlertsFeed } from "@/components/dashboard/AlertsFeed";
 import { ActionBrief, type ActionBriefDecision } from "@/components/dashboard/ActionBrief";
+import { FieldMode } from "@/components/dashboard/FieldMode";
+import { OperationsBoard } from "@/components/dashboard/OperationsBoard";
 import { ReportsView } from "@/components/dashboard/ReportsView";
 import { SettingsView } from "@/components/dashboard/SettingsView";
-import { fetchKpiMetrics } from "@/lib/mock-api";
+import { createResponsePlan, fetchKpiMetrics } from "@/lib/mock-api";
 import type { KpiMetric, StationAnomaly } from "@/lib/types";
 import { getSession, isAuthenticated, type Officer } from "@/lib/auth";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -35,60 +37,6 @@ const GeoMap = lazy(() =>
 const LinkGraph = lazy(() =>
   import("@/components/dashboard/LinkGraph").then((m) => ({ default: m.LinkGraph }))
 );
-
-interface OperationEvent {
-  id: string;
-  stationName: string;
-  decision: ActionBriefDecision;
-  note: string;
-  createdAt: string;
-}
-
-const OPERATION_TIMELINE_KEY = "garuda-operation-timeline";
-
-function OperationsTimeline({ events }: { events: OperationEvent[] }) {
-  const { locale } = useLanguage();
-
-  return (
-    <section className="rounded-xl border border-foreground/5 bg-card">
-      <div className="flex items-start justify-between gap-4 border-b border-foreground/5 px-5 py-3.5">
-        <div>
-          <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
-            <Clock3 className="h-3.5 w-3.5 text-primary" />
-            {t("operations_timeline_title", locale)}
-          </div>
-          <div className="mt-0.5 text-sm font-medium">{t("operations_timeline_subtitle", locale)}</div>
-        </div>
-        <span className="rounded-full border border-foreground/10 px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
-          {t("operations_timeline_prototype", locale)}
-        </span>
-      </div>
-      <div className="px-5 py-3">
-        {events.length === 0 ? (
-          <p className="py-3 text-xs text-muted-foreground">{t("operations_timeline_empty", locale)}</p>
-        ) : (
-          <div className="space-y-3">
-            {events.map((event) => (
-              <div key={event.id} className="flex gap-3">
-                <div className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                  <ClipboardCheck className="h-3.5 w-3.5" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
-                    <span className="font-medium">{t(`action_brief_${event.decision}` as TranslationKey, locale)}</span>
-                    <span className="text-muted-foreground">{event.stationName}</span>
-                    <span className="font-mono text-[10px] text-muted-foreground">{new Date(event.createdAt).toLocaleTimeString(locale === "kn" ? "kn-IN" : "en-IN", { hour: "2-digit", minute: "2-digit" })}</span>
-                  </div>
-                  <p className="mt-0.5 text-xs text-muted-foreground">{event.note || t("operations_timeline_no_note", locale)}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </section>
-  );
-}
 
 function MapPlaceholder({ compact = false }: { compact?: boolean }) {
   return (
@@ -165,14 +113,7 @@ function Dashboard() {
   const [selectedAnomaly, setSelectedAnomaly] = useState<StationAnomaly | null>(null);
   const [briefOpen, setBriefOpen] = useState(false);
   const [simulationImpact, setSimulationImpact] = useState<number | null>(null);
-  const [operationEvents, setOperationEvents] = useState<OperationEvent[]>(() => {
-    try {
-      const savedEvents = localStorage.getItem(OPERATION_TIMELINE_KEY);
-      return savedEvents ? JSON.parse(savedEvents) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [operationsVersion, setOperationsVersion] = useState(0);
 
   useEffect(() => {
     setKpisLoading(true);
@@ -182,32 +123,38 @@ function Dashboard() {
     });
   }, [districtId]);
 
-  useEffect(() => {
-    localStorage.setItem(OPERATION_TIMELINE_KEY, JSON.stringify(operationEvents));
-  }, [operationEvents]);
-
   const openBrief = (anomaly: StationAnomaly) => {
     setSelectedAnomaly(anomaly);
     setBriefOpen(true);
   };
 
-  const recordDecision = (decision: ActionBriefDecision, note: string, anomaly: StationAnomaly) => {
-    setOperationEvents((events) => [
-      { id: crypto.randomUUID(), stationName: anomaly.station_name, decision, note, createdAt: new Date().toISOString() },
-      ...events,
-    ].slice(0, 8));
+  const recordDecision = async (decision: ActionBriefDecision, note: string, anomaly: StationAnomaly, assignedTo: string) => {
+    await createResponsePlan({
+      alert_id: `station-${anomaly.station_id}-${anomaly.current_count}`,
+      station_id: anomaly.station_id,
+      station_name: anomaly.station_name,
+      current_count: anomaly.current_count,
+      usual_count: anomaly.mean_count,
+      z_score: anomaly.z_score,
+      decision,
+      note,
+      assigned_to: assignedTo,
+    });
+    setOperationsVersion((version) => version + 1);
   };
 
   return (
     <SimulatorProvider>
       <div className="flex min-h-screen bg-background text-foreground">
         <Toaster theme={theme} position="bottom-right" />
-        <Sidebar active={view} onChange={setView} />
+        <Sidebar active={view} onChange={setView} fieldMode={officer.designation === "Constable"} />
         <div className="flex min-w-0 flex-1 flex-col">
           <TopBar officer={officer} kpis={kpis} onNavigate={setView} />
-          <main className="min-w-0 flex-1 space-y-4 p-5">
+          <main className="min-w-0 flex-1 space-y-4 p-4 pb-24 sm:p-5">
             {view === "dashboard" && (
-              <>
+              officer.designation === "Constable" ? (
+                <FieldMode officer={officer} onNavigate={setView} />
+              ) : <>
                 <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
                   {kpisLoading ? (
                     Array.from({ length: 4 }).map((_, i) => (
@@ -279,7 +226,7 @@ function Dashboard() {
                   <RbacBlock labelKey="rbac_locked_simulator" minRoleKey="rbac_requires_si" />
                 )}
 
-                <OperationsTimeline events={operationEvents} />
+                <OperationsBoard refreshKey={operationsVersion} />
               </>
             )}
 

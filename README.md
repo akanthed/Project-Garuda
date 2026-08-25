@@ -61,6 +61,10 @@ where to focus patrols. Garuda collapses that into one Catalyst-hosted workspace
   clearance-gated modules, and an agent audit trail persisted to Catalyst NoSQL.
 - **Incident intake, OCR-assisted FIR scan, and PDF brief export** — every figure in the
   exported brief is computed server-side from live scoped data at export time.
+- **ActionLoop field workflow** — supervisors turn anomaly evidence into assigned response
+  tasks; constables use a plain-language mobile view to start work, attach a photo/PDF,
+  record observations, and complete the task. Structured field history, conservative
+  outcome assessment, and a reviewed operation debrief close the loop.
 - **Bilingual UI** (English/Kannada, including district names) and full light/dark themes.
 
 ---
@@ -72,7 +76,9 @@ flowchart TD
     U["Officer browser"] -->|HTTPS| WC["Catalyst Web Client Hosting<br/>React + Vite SPA"]
     WC -->|REST /api/*| AS["Catalyst AppSail<br/>FastAPI + NetworkX"]
     AS --> DS["Data Store / ZCQL<br/>cases, accused, officers"]
-    AS --> NS["NoSQL<br/>AgentAuditEvents"]
+    AS --> OP["Data Store<br/>ResponsePlans, FieldUpdates, Assessments"]
+    AS --> NS["NoSQL<br/>agent + operation audit events"]
+    AS --> ST["Stratus<br/>encrypted field attachments"]
     AS --> CA["Cache<br/>network analytics"]
     AS --> CN["Connections"] --> QM["QuickML<br/>GLM-4.7-Flash"]
     AS --> ZA["Zia AutoML<br/>case risk"]
@@ -90,15 +96,15 @@ and is exercised by the test suite.
 | --- | --- |
 | **Web Client Hosting** | Serves the built React SPA under `/app/`, with a custom `404.html` deep-link shim |
 | **AppSail** | Hosts the FastAPI backend (Python 3.11, vendored Linux wheels) |
-| **Data Store / ZCQL** | Officer credential lookup and bulk case data, paginated via ZCQL |
-| **NoSQL** | `AgentAuditEvents` — append-only audit trail of every agent action |
+| **Data Store / ZCQL** | Case data plus durable `ResponsePlans`, `FieldUpdates`, and assessment snapshots |
+| **NoSQL** | Append-only audit trails for agent actions and operation lifecycle events |
 | **Cache** | Persists the network-analytics blob across restarts (6-hour TTL) |
 | **Connections** | Auto-refreshed OAuth for QuickML, replacing a manual 1-hour token |
 | **QuickML (LLM Serving)** | GLM-4.7-Flash powers the Ask Garuda natural-language planner |
 | **Zia AutoML** | Structured case-risk classification |
 | **Zia OCR** | Scanned/photographed FIR → draft incident form (never auto-submits) |
 | **SmartBrowz** | PDF intelligence-brief generation |
-| **Stratus** | Staging bucket for CLI-based Data Store imports |
+| **Stratus** | Encrypted, versioned `garuda-operations` evidence bucket plus import staging |
 
 Catalyst API Gateway cannot front an AppSail app directly (only Basic/Advanced I/O
 Functions and Web Client are valid targets) — CORS origin restriction (`ALLOWED_ORIGINS`)

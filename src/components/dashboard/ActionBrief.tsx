@@ -13,7 +13,7 @@ interface ActionBriefProps {
   anomaly: StationAnomaly | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onRecordDecision: (decision: ActionBriefDecision, note: string, anomaly: StationAnomaly) => void;
+  onRecordDecision: (decision: ActionBriefDecision, note: string, anomaly: StationAnomaly, assignedTo: string) => Promise<void>;
 }
 
 export type ActionBriefDecision = "approve" | "modify" | "escalate";
@@ -22,6 +22,8 @@ export function ActionBrief({ anomaly, open, onOpenChange, onRecordDecision }: A
   const { locale } = useLanguage();
   const [decision, setDecision] = useState<ActionBriefDecision>("approve");
   const [note, setNote] = useState("");
+  const [assignedTo, setAssignedTo] = useState("KSP-BLR-1001");
+  const [saving, setSaving] = useState(false);
 
   if (!anomaly) return null;
 
@@ -32,11 +34,18 @@ export function ActionBrief({ anomaly, open, onOpenChange, onRecordDecision }: A
     { icon: FileText, text: t("action_brief_case_review", locale) },
   ];
 
-  const markReady = () => {
-    onRecordDecision(decision, note.trim(), anomaly);
-    toast.success(t("action_brief_ready", locale), { description: t("action_brief_ready_desc", locale) });
-    setNote("");
-    onOpenChange(false);
+  const markReady = async () => {
+    setSaving(true);
+    try {
+      await onRecordDecision(decision, note.trim(), anomaly, assignedTo);
+      toast.success(t("action_brief_ready", locale), { description: t("action_brief_ready_desc", locale) });
+      setNote("");
+      onOpenChange(false);
+    } catch {
+      toast.error(t("action_brief_failed", locale));
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -113,13 +122,18 @@ export function ActionBrief({ anomaly, open, onOpenChange, onRecordDecision }: A
                 </button>
               ))}
             </div>
+            <label className="mt-3 block text-sm text-muted-foreground">{t("action_brief_assign", locale)}
+              <select value={assignedTo} onChange={(event) => setAssignedTo(event.target.value)} className="mt-1.5 min-h-11 w-full rounded-md border border-foreground/10 bg-card px-3 text-sm text-foreground outline-none focus:border-primary/50">
+                <option value="KSP-BLR-1001">{t("action_brief_constable", locale)}</option>
+              </select>
+            </label>
             <label className="mt-3 block text-[11px] text-muted-foreground">{t("action_brief_note", locale)}
               <textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder={t("action_brief_note_hint", locale)} className="mt-1.5 min-h-20 w-full resize-y rounded-md border border-foreground/10 bg-card px-3 py-2 text-xs leading-relaxed text-foreground outline-none placeholder:text-muted-foreground/60 focus:border-primary/50" />
             </label>
           </section>
 
           <p className="border-l-2 border-amber-400/70 bg-amber-400/5 px-3 py-2 text-[11px] leading-relaxed text-amber-100/80">{t("action_brief_disclaimer", locale)}</p>
-          <button type="button" onClick={markReady} className="flex w-full items-center justify-center gap-2 rounded-md bg-primary/15 px-4 py-2.5 text-sm font-medium text-primary transition hover:bg-primary/25"><CheckCircle2 className="h-4 w-4" />{t("action_brief_record_decision", locale)}</button>
+          <button type="button" onClick={markReady} disabled={saving} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-md bg-primary/15 px-4 text-sm font-medium text-primary transition hover:bg-primary/25 disabled:opacity-50"><CheckCircle2 className="h-4 w-4" />{t(saving ? "action_brief_saving" : "action_brief_record_decision", locale)}</button>
         </div>
       </SheetContent>
     </Sheet>

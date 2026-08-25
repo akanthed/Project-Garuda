@@ -18,16 +18,21 @@ const nav: { key: ViewKey; icon: typeof Shield; labelKey: TranslationKey }[] = [
 interface SidebarProps {
   active: ViewKey;
   onChange: (v: ViewKey) => void;
+  fieldMode?: boolean;
 }
 
-export function Sidebar({ active, onChange }: SidebarProps) {
+export function Sidebar({ active, onChange, fieldMode = false }: SidebarProps) {
   const { locale } = useLanguage();
   const [collapsed, setCollapsed] = useState(true);
+  const visibleNav = fieldMode
+    ? nav.filter(({ key }) => ["dashboard", "geospatial", "reports", "settings"].includes(key))
+    : nav;
 
   return (
+    <>
     <aside
       className={cn(
-        "relative flex h-screen flex-col justify-between border-r border-foreground/5 bg-sidebar py-4 transition-[width] duration-200",
+        "relative hidden h-screen flex-col justify-between border-r border-foreground/5 bg-sidebar py-4 transition-[width] duration-200 sm:flex",
         collapsed ? "w-14 items-center" : "w-48 items-stretch"
       )}
     >
@@ -63,7 +68,7 @@ export function Sidebar({ active, onChange }: SidebarProps) {
 
         {/* Nav items */}
         <nav className={cn("flex flex-col gap-1", collapsed ? "items-center" : "items-stretch")}>
-          {nav.map(({ key, icon: Icon, labelKey }) => {
+          {visibleNav.map(({ key, icon: Icon, labelKey }) => {
             const label = t(labelKey, locale);
             const isActive = key === active;
             return (
@@ -94,6 +99,19 @@ export function Sidebar({ active, onChange }: SidebarProps) {
       </div>
 
     </aside>
+    <nav className="fixed inset-x-0 bottom-0 z-50 grid h-16 grid-cols-4 border-t border-foreground/10 bg-sidebar/95 px-2 backdrop-blur sm:hidden">
+      {visibleNav.map(({ key, icon: Icon, labelKey }) => {
+        const label = t(labelKey, locale);
+        const isActive = key === active;
+        return (
+          <button key={key} type="button" onClick={() => onChange(key)} aria-label={label} aria-current={isActive ? "page" : undefined} className={cn("flex min-h-12 flex-col items-center justify-center gap-1 text-[11px]", isActive ? "text-primary" : "text-muted-foreground")}>
+            <Icon className="h-5 w-5" />
+            <span>{label}</span>
+          </button>
+        );
+      })}
+    </nav>
+    </>
   );
 }
 

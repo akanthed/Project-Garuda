@@ -1,17 +1,22 @@
 {
-  "command": "sh -c 'python3 -m uvicorn main:app --host 0.0.0.0 --port ${X_ZOHO_CATALYST_LISTEN_PORT}'",
-  "buildPath": "./",
-  "stack": "python_3_11",
-  "env_variables": {
-    "PYTHONUNBUFFERED": "1",
-    "LOG_LEVEL": "info",
-    "PYTHONPATH": "vendor",
-    "ZIA_RISK_MODEL_ID": "52319000000096025",
-    "ALLOWED_ORIGINS": "https://garuda-60078749238.development.catalystserverless.in",
-    "QUICKML_LLM_ENDPOINT": "https://api.catalyst.zoho.in/quickml/v1/project/52319000000013050/glm/chat",
-    "QUICKML_MODEL": "crm-di-glm47b_30b_it",
-    "QUICKML_ORG_ID": "60078749238",
-    "QUICKML_CONNECTION_LINK_NAME": "garudaquickml"
-  },
-  "memory": 512
+    "command":  "sh -c \u0027python3 -m uvicorn main:app --host 0.0.0.0 --port ${X_ZOHO_CATALYST_LISTEN_PORT}\u0027",
+    "buildPath":  "./",
+    "stack":  "python_3_11",
+    "env_variables":  {
+                          "PYTHONUNBUFFERED":  "1",
+                          "LOG_LEVEL":  "info",
+                          "PYTHONPATH":  "vendor",
+                          "ZIA_RISK_MODEL_ID":  "52319000000096025",
+                          "ALLOWED_ORIGINS":  "https://garuda-60078749238.development.catalystserverless.in",
+                          "QUICKML_LLM_ENDPOINT":  "https://api.catalyst.zoho.in/quickml/v1/project/52319000000013050/glm/chat",
+                          "QUICKML_MODEL":  "crm-di-glm47b_30b_it",
+                          "QUICKML_ORG_ID":  "60078749238",
+                          "QUICKML_CONNECTION_LINK_NAME":  "garudaquickml",
+                          "SESSION_SECRET":  "47e04d45e3715babfb0ebc8e9e20909db9eb71b30d0b0394cd1f11dd03299f83ac3f8be022f375d64b4204868d5ec07e",
+                          "SEED_TOKEN":  "7fe0f8a2457eba60f09159834dd271f2c94dc01c42d499f906ddd0c51b7f1ba7",
+                          "JOB_SCHEDULER_TOKEN":  "52a7691cbe662d7a13b53ffbc69b9a72ecc6f25fcc16628d1f1ff3becc3550f0",
+                          "SIGNALS_WEBHOOK_TOKEN":  "a093305ba99ac5cf749caa53372b8bbaec2197a71b2715180e7cd784ced14844",
+                          "OPERATION_STRATUS_BUCKET":  "garuda-operations"
+                      },
+    "memory":  512
 }

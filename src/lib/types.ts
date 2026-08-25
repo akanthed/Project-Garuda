@@ -408,6 +408,77 @@ export interface IncidentScanResult {
   advisory: string;
 }
 
+// ─── ActionLoop response plans ──────────────────────────────────────────────
+
+export type ResponsePlanStatus = "assigned" | "acknowledged" | "in_progress" | "completed";
+
+export interface FieldUpdate {
+  update_id: string;
+  operation_id: string;
+  officer_badge: string;
+  status: string;
+  note: string;
+  attachment_key: string;
+  attachment_name: string;
+  attachment_type: string;
+  created_at: string;
+  persistence: "datastore" | "session";
+}
+
+export interface ResponsePlan {
+  operation_id: string;
+  alert_id: string;
+  station_id: number;
+  station_name: string;
+  current_count: number;
+  usual_count: number;
+  z_score: number;
+  decision: "approve" | "modify" | "escalate";
+  note: string;
+  assigned_to: string;
+  status: ResponsePlanStatus;
+  created_by: string;
+  created_at: string;
+  due_at?: string | null;
+  updated_at: string;
+  outcome_note: string;
+  persistence: "datastore" | "session";
+  updates: FieldUpdate[];
+}
+
+export interface ResponsePlanCreate {
+  alert_id: string;
+  station_id: number;
+  station_name?: string;
+  current_count: number;
+  usual_count: number;
+  z_score: number;
+  decision: ResponsePlan["decision"];
+  note: string;
+  assigned_to: string;
+  due_at?: string;
+}
+
+export interface ResponsePlansPage {
+  items: ResponsePlan[];
+  total: number;
+}
+
+export interface OperationAssessment {
+  operation_id: string;
+  process_status: "completed" | "in_progress";
+  task_status: ResponsePlanStatus;
+  observation_days: number;
+  field_update_count: number;
+  baseline_30d_cases: number | null;
+  latest_historical_30d_cases: number | null;
+  historical_change_percent: number | null;
+  latest_data_at: string | null;
+  impact_status: "ready" | "pending_observation_window";
+  impact_available_after: string;
+  advisory: string;
+}
+
 // ─── Site analytics (self-instrumented visit tracking) ───────────────────────
 
 export interface AnalyticsSummary {
