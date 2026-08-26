@@ -107,8 +107,9 @@ measured single-instance ceiling in §2, not an invented dollar figure.
 - Request-ID correlated, internals-free error responses.
 - Deep network analytics precomputed once per graph build (not per-request).
 - Per-scope response caching with TTL (Phase 2).
-- Production build fails without `VITE_API_URL`; dev credential registry dead-code-
-  eliminated from production bundles.
+- Production build fails without `VITE_API_URL`; dev fallback authentication is
+   dead-code-eliminated from production bundles. Public sandbox credentials remain in
+   the evaluator quick-fill UI and are always verified server-side.
 - Measured load test evidence (this document) instead of assumed capacity.
 
 **Proposed roadmap (not implemented — would need dedicated scoping, real Catalyst

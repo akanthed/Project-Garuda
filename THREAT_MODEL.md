@@ -14,7 +14,7 @@ context: controls are proportionate to a prototype, not a certified production s
 | `SESSION_SECRET` | AppSail env var | High — compromise lets an attacker forge any officer session |
 | `SEED_TOKEN` | AppSail env var | High — gates bulk data-store writes/reloads |
 | Case/accused/arrest data | CSV on AppSail disk + optional Catalyst Data Store | Low (synthetic) in this deployment; would be High with real data |
-| Demo login credentials | `src/lib/auth.ts` dev-only fallback | Low — dev/demo only, now excluded from production bundles (§3) |
+| Demo login credentials | Public README and login quick-fill controls | Low — public sandbox accounts over synthetic data; server-side RBAC still applies (§2) |
 
 Trust boundary: browser (untrusted) → Catalyst API Gateway/AppSail (backend, trusted
 compute) → local CSV / Catalyst Data Store (trusted storage). All authorization
@@ -55,16 +55,16 @@ beyond what each endpoint already returns.
   `backend/data/scale_manifest.json`), so a load balancer or operator can distinguish
   "up but not serving real data yet" from "fully ready", and confirm which data
   generation the running instance is on.
-- **Client-side demo credentials shipped to production bundles**: `src/lib/auth.ts`'s
+- **Client-side fallback authentication shipped to production bundles**: `src/lib/auth.ts`'s
   `DEV_FALLBACK_REGISTRY` (4 plaintext demo badge/password pairs) previously existed in
   every build unconditionally, only *conditionally used* at runtime based on
   `VITE_API_URL`. If a production build were ever deployed without `VITE_API_URL` set,
   the app would silently accept those demo logins as if legitimate. Fixed two ways:
   1. `DEV_FALLBACK_REGISTRY` is now gated behind `import.meta.env.DEV`, a compile-time
      constant Vite/Rollup replaces with `false` in production builds — the entire
-     object (including the passwords) is dead-code-eliminated, not just skipped at
-     runtime. **Verified**: grepped the built `dist/assets/*.js` for all 4 demo
-     passwords after `npm run build` — zero matches.
+    fallback object is dead-code-eliminated, not just skipped at runtime. The production
+    login page intentionally contains the same public sandbox credentials for evaluator
+    quick-fill; they are not secrets and never bypass the server-side login endpoint.
   2. `vite.config.ts` now hard-fails `vite build --mode production` if `VITE_API_URL`
      is unset, so a misconfigured production build cannot ship at all.
      **Verified**: temporarily removed `.env.production` and confirmed
@@ -136,9 +136,9 @@ Ran `git ls-files` + `git log --all --diff-filter=A --name-only` filtered for
   disclosure (confirms which Zoho org owns this deployment) but are not credentials and
   cannot be used to authenticate. Left as-is: `catalyst.json`/`.catalystrc` are needed
   for `catalyst deploy` to work from a fresh clone.
-- No AWS-style keys, PEM private key blocks, or hardcoded `password=`/`secret=` literals
-  found anywhere in the tracked tree (`.py`, `.ts`, `.tsx`, `.json`) outside the
-  already-known and now-gated `DEV_FALLBACK_REGISTRY` demo passwords in `src/lib/auth.ts`.
+- No AWS-style keys, PEM private key blocks, or non-demo hardcoded
+  `password=`/`secret=` literals found anywhere in the tracked tree (`.py`, `.ts`,
+  `.tsx`, `.json`). The public sandbox passwords remain in the login quick-fill UI.
 - `backend/vendor/`, `backend/.venv-test/`, `.venv-gen/` — confirmed **not tracked**
   (`git ls-files` returns zero matches for any of the three).
 

@@ -1,12 +1,13 @@
 import { useState } from "react";
-import { LayoutDashboard, Globe2, Share2, FileText, Settings, Shield, ChevronRight, SlidersHorizontal } from "lucide-react";
+import { LayoutDashboard, Globe2, Share2, FileText, Settings, ChevronRight, SlidersHorizontal, type LucideIcon } from "lucide-react";
+import { GarudaLogo } from "@/components/GarudaLogo";
 import { cn } from "@/lib/utils";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { t, type TranslationKey } from "@/lib/i18n";
 
 export type ViewKey = "dashboard" | "geospatial" | "network" | "simulator" | "reports" | "settings";
 
-const nav: { key: ViewKey; icon: typeof Shield; labelKey: TranslationKey }[] = [
+const nav: { key: ViewKey; icon: LucideIcon; labelKey: TranslationKey }[] = [
   { key: "dashboard", icon: LayoutDashboard, labelKey: "nav_dashboard" },
   { key: "geospatial", icon: Globe2,          labelKey: "nav_geospatial" },
   { key: "network",    icon: Share2,           labelKey: "nav_network" },
@@ -39,9 +40,7 @@ export function Sidebar({ active, onChange, fieldMode = false }: SidebarProps) {
       {/* Logo + collapse toggle */}
       <div className={cn("flex flex-col gap-5", collapsed ? "items-center" : "px-3")}>
         <div className={cn("flex items-center", collapsed ? "justify-center" : "justify-between")}>
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 ring-1 ring-primary/30">
-            <Shield className="h-4 w-4 text-primary" />
-          </div>
+          <GarudaLogo className="h-9 w-9 shrink-0 rounded-md shadow-sm ring-1 ring-primary/20" />
           {!collapsed && (
             <div className="ml-2 flex-1 min-w-0">
               <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-primary truncate">

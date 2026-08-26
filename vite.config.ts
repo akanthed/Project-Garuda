@@ -5,8 +5,7 @@ import { TanStackRouterVite } from "@tanstack/router-plugin/vite";
 
 export default defineConfig(({ command, mode }) => {
   // Fail the build rather than silently shipping a production bundle that
-  // falls back to the local demo-credential registry (src/lib/auth.ts) —
-  // a real backend URL is required whenever we're building for production.
+  // cannot verify credentials server-side. The local fallback is dev-only.
   if (command === "build" && mode === "production") {
     const env = loadEnv(mode, process.cwd(), "VITE_");
     if (!env.VITE_API_URL) {

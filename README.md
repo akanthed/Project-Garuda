@@ -20,7 +20,7 @@ Built for the Karnataka State Police (KSP) Datathon 2026, entirely on Zoho Catal
 | **Backend** | https://garuda-api-50044100457.development.catalystappsail.in |
 | **API health** | https://garuda-api-50044100457.development.catalystappsail.in/health |
 
-**Demo accounts** (fixed credentials — no Zoho account needed, verified server-side, never shipped in the production bundle):
+**Demo accounts** (public sandbox credentials — no Zoho account needed; authentication and RBAC are enforced server-side):
 
 | Badge | Password | Role | Clearance | Shows |
 | --- | --- | --- | --- | --- |
@@ -190,8 +190,8 @@ not made because the simple model already beat every baseline.
 | Check | Result |
 | --- | --- |
 | `npx tsc --noEmit` | 0 errors |
-| `npx vitest run` | 73/73 passing, including real Connections canvas interactions |
-| `pytest test_agent.py test_operations.py test_risk_prediction.py` | 76/76 passing |
+| `npx vitest run` | 73/73 passing, including Connections canvas interaction-handler coverage |
+| `pytest test_agent.py test_operations.py test_risk_prediction.py` | 75/76 in the latest combined Windows run; the sole timing-threshold test passed when rerun alone |
 | `npm run build` | Succeeds |
 
 Full methodology and regeneration commands: [HACKATHON_SUBMISSION.md](HACKATHON_SUBMISSION.md).
@@ -229,7 +229,7 @@ find them regardless:
 # Backend
 cd backend
 python -m venv .venv-test
-.\.venv-test\Scripts\pip install fastapi uvicorn pydantic networkx pandas fpdf2
+.\.venv-test\Scripts\pip install -r requirements.txt
 .\.venv-test\Scripts\python.exe main.py        # http://localhost:8000
 
 # Frontend (separate terminal, from repo root)
@@ -243,13 +243,16 @@ mode, which is what you want for local testing anyway.
 ### Deploying to Zoho Catalyst
 
 ```powershell
-npm run build                                  # frontend
+npm run build
+catalyst deploy --only client                  # safe frontend-only deploy
+
+# Backend release preparation (do not deploy until the secret-preservation
+# requirement below is satisfied)
 cd backend
 python -m pip install -r requirements.txt --target vendor `
   --platform manylinux2014_x86_64 --python-version 3.11 `
   --implementation cp --abi cp311 --only-binary=:all:
 cd ..
-catalyst deploy
 ```
 
 Key gotchas (full detail in [DEPLOY.md](DEPLOY.md)):
@@ -260,8 +263,11 @@ Key gotchas (full detail in [DEPLOY.md](DEPLOY.md)):
 3. `zcatalyst_sdk.initialize(req=request)` must run fresh **inside every request
    handler**, never once at startup.
 4. `catalyst deploy --only appsail` **replaces** live AppSail env vars with exactly what's
-   in `app-config.json` — `SESSION_SECRET`/`SEED_TOKEN` are Console-only by design and must
-   be re-checked in Console → AppSail → Configuration after every such deploy.
+  in `app-config.json`. Do not run it until every Console-only secret, including
+  `SESSION_SECRET`, `SEED_TOKEN`, `JOB_SCHEDULER_TOKEN`, and
+  `SIGNALS_WEBHOOK_TOKEN`, is preserved through an untracked release configuration.
+  Never commit those values. Re-check the complete environment in Console → AppSail →
+  Configuration immediately after deployment and verify `/health` before proceeding.
 
 ---
 
@@ -295,7 +301,8 @@ MapLibre GL (`react-map-gl`) + deck.gl + `react-force-graph-2d`
 
 **Backend:** Python 3.11 + FastAPI + Uvicorn + Pydantic + NetworkX + pandas + NumPy + fpdf2 + zcatalyst-sdk
 
-**Testing:** Vitest + Testing Library (frontend, 73 tests), pytest (backend, 76 tests)
+**Testing:** Vitest + Testing Library (frontend, 73 tests), pytest (backend, 76 collected tests)
 
 **Infrastructure:** Zoho Catalyst — AppSail, Web Client Hosting, Data Store, NoSQL, Cache,
-Connections, QuickML, Zia AutoML/OCR, SmartBrowz, Stratus
+Connections, QuickML LLM Serving and RAG/Knowledge Base, Zia AutoML/OCR, SmartBrowz,
+Stratus, Job Scheduling, and Signals

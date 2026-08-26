@@ -157,8 +157,8 @@ Cold start 6.84 s; server memory stayed between 232–274 MB RSS throughout.
 | Check | Result |
 | --- | --- |
 | `npx tsc --noEmit` | 0 errors |
-| `npx vitest run` | 69/69 passing |
-| `pytest` (backend) | 32/33 (1 known-flaky timing assert) |
+| `npx vitest run` | 73/73 passing |
+| `pytest test_agent.py test_operations.py test_risk_prediction.py` | 75/76 in the latest combined Windows run; the sole timing-threshold test passed when rerun alone |
 | `npm run build` | Succeeds |
 
 ---
@@ -235,7 +235,8 @@ demonstrate role-based access control:
 | `KSP-BLR-1001` | `constable123` | Constable | CLR-1 | Most modules gated |
 
 These are deliberately fixed demo credentials so evaluators never need their own Zoho
-account. Credentials are verified server-side and never shipped in the production bundle.
+account. They are public sandbox credentials exposed by the login quick-fill controls;
+authentication and role permissions are still enforced server-side.
 
 **Local run**
 

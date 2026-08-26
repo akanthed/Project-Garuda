@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Shield, Eye, EyeOff, AlertCircle, Loader2, Sun, Moon } from "lucide-react";
+import { LogIn, Eye, EyeOff, AlertCircle, Loader2, Sun, Moon } from "lucide-react";
+import { GarudaLogo } from "@/components/GarudaLogo";
 import { login } from "@/lib/auth";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -82,9 +83,7 @@ function LoginPage() {
 
         {/* Logo + branding */}
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10 ring-1 ring-primary/30">
-            <Shield className="h-7 w-7 text-primary" />
-          </div>
+          <GarudaLogo className="mx-auto mb-4 h-14 w-14 rounded-xl shadow-lg shadow-primary/10 ring-1 ring-primary/20" />
           <div className="font-mono text-[11px] uppercase tracking-[0.3em] text-muted-foreground">
             {t("login_org", locale)}
           </div>
@@ -167,7 +166,7 @@ function LoginPage() {
                 </>
               ) : (
                 <>
-                  <Shield className="h-4 w-4" />
+                  <LogIn className="h-4 w-4" />
                   {t("login_button", locale)}
                 </>
               )}

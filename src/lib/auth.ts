@@ -3,7 +3,8 @@
  *
  * Credentials are verified server-side via POST /api/auth/login (backend/main.py),
  * which validates against a Catalyst Data Store "Officers" table when deployed,
- * or a local registry otherwise. Passwords are never shipped in this bundle.
+ * or a local registry otherwise. The login page separately exposes public sandbox
+ * credentials in its evaluator quick-fill controls.
  *
  * If VITE_API_URL is not set (frontend-only local dev with no backend running),
  * a small demo registry below is used instead — for local development only.
