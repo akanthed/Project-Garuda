@@ -13,6 +13,7 @@ import { useSimulator } from "@/contexts/SimulatorContext";
 import { useScope } from "@/contexts/ScopeContext";
 import { t, districtName, type TranslationKey } from "@/lib/i18n";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { SectionHelp } from "@/components/dashboard/SectionHelp";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -308,6 +309,7 @@ export function GeoMap({ compact = false }: GeoMapProps) {
           </div>
         </div>
         <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+          <SectionHelp title={t("help_map_title", locale)} description={t("help_map_desc", locale)} />
           {!compact && (
             <span className="hidden rounded-full border border-foreground/10 px-2 py-0.5 font-mono text-[9px] lg:inline">
               {t("map_data_source", locale)}

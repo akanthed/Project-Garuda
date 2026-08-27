@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils";
 import { ArrowDownRight, ArrowUpRight, type LucideIcon } from "lucide-react";
+import { SectionHelp } from "@/components/dashboard/SectionHelp";
 
 interface KpiCardProps {
   label: string;
@@ -10,6 +11,7 @@ interface KpiCardProps {
   icon: LucideIcon;
   data: number[];
   accent?: "electric" | "danger" | "default";
+  helpText?: string;
 }
 
 function Sparkline({ data, accent = "electric" }: { data: number[]; accent?: KpiCardProps["accent"] }) {
@@ -44,7 +46,7 @@ function Sparkline({ data, accent = "electric" }: { data: number[]; accent?: Kpi
   );
 }
 
-export function KpiCard({ label, value, delta, trend, positive = true, icon: Icon, data, accent = "electric" }: KpiCardProps) {
+export function KpiCard({ label, value, delta, trend, positive = true, icon: Icon, data, accent = "electric", helpText }: KpiCardProps) {
   const good = (trend === "up" && positive) || (trend === "down" && !positive);
   const TrendIcon = trend === "up" ? ArrowUpRight : ArrowDownRight;
   return (
@@ -54,14 +56,17 @@ export function KpiCard({ label, value, delta, trend, positive = true, icon: Ico
           <Icon className="h-3.5 w-3.5" strokeWidth={1.75} />
           {label}
         </div>
-        <div
-          className={cn(
-            "flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium tabular-nums",
-            good ? "bg-emerald-500/10 text-emerald-400" : "bg-rose-500/10 text-rose-400"
-          )}
-        >
-          <TrendIcon className="h-3 w-3" />
-          {delta}
+        <div className="flex items-center gap-1.5">
+          {helpText && <SectionHelp title={label} description={helpText} />}
+          <div
+            className={cn(
+              "flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium tabular-nums",
+              good ? "bg-emerald-500/10 text-emerald-400" : "bg-rose-500/10 text-rose-400"
+            )}
+          >
+            <TrendIcon className="h-3 w-3" />
+            {delta}
+          </div>
         </div>
       </div>
       <div className="mt-4 flex items-end justify-between">

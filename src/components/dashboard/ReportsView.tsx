@@ -11,6 +11,7 @@ import type { CaseReport, CaseSeverity, CaseStatus, IncidentIntake, IncidentScan
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { RiskAssessment } from "./RiskAssessment";
+import { SectionHelp } from "@/components/dashboard/SectionHelp";
 
 // ─── Badge helpers ─────────────────────────────────────────────────────────────
 
@@ -384,8 +385,9 @@ export function ReportsView() {
               {t("reports_workflow_hint", locale)}
             </div>
           </div>
+          <SectionHelp title={t("help_reports_title", locale)} description={t("help_reports_desc", locale)} />
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp,application/pdf" capture="environment" className="hidden" onChange={handleScanFile} />
           <button onClick={() => fileInputRef.current?.click()} disabled={scanning} className="flex items-center gap-2 rounded-md border border-primary/20 bg-primary/[0.06] px-3 py-1.5 text-xs text-primary transition hover:bg-primary/15 disabled:opacity-60">{scanning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ScanLine className="h-3.5 w-3.5" />}{scanning ? t("reports_scanning", locale) : t("reports_scan_fir", locale)}</button>
           <button onClick={() => { setScanDraft(undefined); setIntakeOpen((open) => !open); }} className="flex items-center gap-2 rounded-md bg-primary/15 px-3 py-1.5 text-xs text-primary transition hover:bg-primary/25"><Plus className="h-3.5 w-3.5" />{t("reports_add_incident", locale)}</button>

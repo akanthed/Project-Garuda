@@ -5,6 +5,7 @@ import { exportOperationDebrief, fetchOperationAssessment, fetchResponsePlans } 
 import type { OperationAssessment, ResponsePlan } from "@/lib/types";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { t } from "@/lib/i18n";
+import { SectionHelp } from "@/components/dashboard/SectionHelp";
 
 const STATUS_KEYS = {
   assigned: "status_assigned",
@@ -57,7 +58,7 @@ export function OperationsBoard({ refreshKey }: { refreshKey: number }) {
     <section className="border-t border-foreground/10 pt-4">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="flex items-center gap-2 text-lg font-semibold"><ClipboardCheck className="h-5 w-5 text-primary" />{t("operations_board_title", locale)}</h2>
+          <h2 className="flex items-center gap-2 text-lg font-semibold"><ClipboardCheck className="h-5 w-5 text-primary" />{t("operations_board_title", locale)}<SectionHelp title={t("help_operations_title", locale)} description={t("help_operations_desc", locale)} /></h2>
           <p className="mt-1 text-sm text-muted-foreground">{t("operations_board_subtitle", locale)}</p>
         </div>
         <button type="button" onClick={() => void load()} aria-label={t("reports_refresh", locale)} className="flex h-11 w-11 items-center justify-center rounded-md border border-foreground/10"><RefreshCw className="h-4 w-4" /></button>

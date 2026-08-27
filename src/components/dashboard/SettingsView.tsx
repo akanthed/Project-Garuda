@@ -11,6 +11,7 @@ import { t, type TranslationKey } from "@/lib/i18n";
 import { getSession, logout } from "@/lib/auth";
 import { fetchAnalyticsSummary } from "@/lib/mock-api";
 import type { AnalyticsSummary } from "@/lib/types";
+import { SectionHelp } from "@/components/dashboard/SectionHelp";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -340,14 +341,15 @@ export function SettingsView() {
   };
 
   return (
-    <div className="flex gap-6">
+    <div className="flex flex-col gap-6 sm:flex-row">
       {/* Sidebar nav */}
-      <div className="w-52 shrink-0">
+      <div className="w-full shrink-0 sm:w-52">
         <div className="flex items-center gap-2 mb-4">
           <Settings className="h-4 w-4 text-primary" />
           <div className="text-sm font-medium">{t("settings_title", locale)}</div>
+          <SectionHelp title={t("help_settings_title", locale)} description={t("help_settings_desc", locale)} />
         </div>
-        <nav className="space-y-0.5">
+        <nav className="grid grid-cols-2 gap-1 sm:block sm:space-y-0.5">
           {NAV_ITEMS.map(({ id, labelKey, icon: Icon }) => (
             <button
               key={id}

@@ -30,6 +30,13 @@ const KPI_META: Record<string, { icon: LucideIcon; labelKey: TranslationKey }> =
   "resource-readiness":  { icon: ShieldCheck,   labelKey: "kpi_readiness" },
 };
 
+const KPI_HELP: Record<string, TranslationKey> = {
+  "criminal-nodes": "help_kpi_cases",
+  "hotspot-alerts": "help_kpi_hotspots",
+  "risk-volatility": "help_kpi_risk",
+  "resource-readiness": "help_kpi_arrests",
+};
+
 // Lazy-load heavy canvas components — keeps login/dashboard first paint instant
 const GeoMap = lazy(() =>
   import("@/components/dashboard/GeoMap").then((m) => ({ default: m.GeoMap }))
@@ -177,6 +184,7 @@ function Dashboard() {
                           icon={meta?.icon ?? Network}
                           data={k.sparkline}
                           accent={k.accent}
+                          helpText={t(KPI_HELP[k.id] ?? "help_kpi_default", locale)}
                         />
                       );
                     })

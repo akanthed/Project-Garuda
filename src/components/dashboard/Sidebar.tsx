@@ -98,14 +98,17 @@ export function Sidebar({ active, onChange, fieldMode = false }: SidebarProps) {
       </div>
 
     </aside>
-    <nav className="fixed inset-x-0 bottom-0 z-50 grid h-16 grid-cols-4 border-t border-foreground/10 bg-sidebar/95 px-2 backdrop-blur sm:hidden">
+    <nav className={cn(
+      "fixed inset-x-0 bottom-0 z-50 grid h-16 border-t border-foreground/10 bg-sidebar/95 px-1 backdrop-blur sm:hidden",
+      fieldMode ? "grid-cols-4" : "grid-cols-6"
+    )}>
       {visibleNav.map(({ key, icon: Icon, labelKey }) => {
         const label = t(labelKey, locale);
         const isActive = key === active;
         return (
-          <button key={key} type="button" onClick={() => onChange(key)} aria-label={label} aria-current={isActive ? "page" : undefined} className={cn("flex min-h-12 flex-col items-center justify-center gap-1 text-[11px]", isActive ? "text-primary" : "text-muted-foreground")}>
+          <button key={key} type="button" onClick={() => onChange(key)} aria-label={label} aria-current={isActive ? "page" : undefined} className={cn("flex min-w-0 min-h-12 flex-col items-center justify-center gap-1 px-0.5 text-[10px]", isActive ? "text-primary" : "text-muted-foreground")}>
             <Icon className="h-5 w-5" />
-            <span>{label}</span>
+            <span className="w-full truncate text-center">{label}</span>
           </button>
         );
       })}

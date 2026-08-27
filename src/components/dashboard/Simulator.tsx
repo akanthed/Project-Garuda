@@ -8,6 +8,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useScope } from "@/contexts/ScopeContext";
 import { useSimulator } from "@/contexts/SimulatorContext";
 import { t, districtName, type TranslationKey } from "@/lib/i18n";
+import { SectionHelp } from "@/components/dashboard/SectionHelp";
 
 const VARIABLE_TRANSLATIONS: Record<string, { labelKey: TranslationKey; hintKey: TranslationKey }> = {
   "patrol-density": { labelKey: "sim_patrol_density", hintKey: "sim_patrol_hint" },
@@ -93,6 +94,7 @@ export function Simulator({ onComplete }: SimulatorProps) {
           <span className="ml-2 rounded-full border border-foreground/10 px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
             scenario-model-v1
           </span>
+          <SectionHelp title={t("help_simulator_title", locale)} description={t("help_simulator_desc", locale)} />
         </div>
         <div className="font-mono text-[10px] text-muted-foreground">
           {lastResult ? `${t("sim_last_run", locale)} · −${lastResult.impact}%` : t("sim_baseline", locale)}

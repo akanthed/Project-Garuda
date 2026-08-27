@@ -134,9 +134,9 @@ export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
   };
 
   return (
-    <header className="flex min-w-0 items-center justify-between border-b border-foreground/5 px-3 py-3 sm:px-6">
-      <div className="flex min-w-0 items-center gap-3">
-        <div className="text-[11px] font-mono uppercase tracking-[0.2em] text-muted-foreground">
+    <header className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-b border-foreground/5 px-3 py-3 sm:flex-nowrap sm:px-6">
+      <div className="flex w-full min-w-0 items-center justify-between gap-2 sm:w-auto sm:justify-start sm:gap-3">
+        <div className="shrink-0 text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground sm:text-[11px] sm:tracking-[0.2em]">
           {t("topbar_intel", locale)}
         </div>
         {officer.designation !== "Constable" && districts.length > 0 && (
@@ -145,7 +145,7 @@ export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
             onChange={(e) => setDistrictId(e.target.value ? Number(e.target.value) : null)}
             aria-label={t("topbar_scope_label", locale)}
             title={t("topbar_scope_label", locale)}
-            className="h-7 shrink-0 rounded-md border border-border bg-background/60 px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
+            className="h-9 min-w-0 max-w-[65vw] rounded-md border border-border bg-background/60 px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 sm:h-7 sm:max-w-none sm:shrink-0"
           >
             <option value="">{t("topbar_scope_statewide", locale)}</option>
             {districts.map((d) => (
@@ -157,7 +157,7 @@ export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
         )}
       </div>
 
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="flex w-full min-w-0 items-center justify-between gap-1.5 sm:w-auto sm:shrink-0 sm:justify-start sm:gap-2">
         <button
           onClick={() => setChatOpen(true)}
           aria-haspopup="dialog"

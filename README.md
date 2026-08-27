@@ -24,18 +24,19 @@ Built for the Karnataka State Police (KSP) Datathon 2026, entirely on Zoho Catal
 
 | Badge | Password | Role | Clearance | Shows |
 | --- | --- | --- | --- | --- |
-| `KSP-BLR-1001` | `constable123` | Constable | CLR-1 | Most modules gated (RBAC floor) |
+| `KSP-BLR-1001` | `constable123` | Constable | CLR-1 | Mobile Field Mode: assigned tasks, nearby map, reports, and evidence updates |
 | `KSP-BLR-4412` | `garuda2026` | Sub-Inspector | CLR-4 | Partial gating (planner unlocked) |
 | `KSP-BLR-7741` | `sentinel2026` | Circle Inspector | CLR-7 | Network graph + planner + export |
 | `KSP-DGP-0001` | `dgp2026` | DGP | CLR-7 | Full statewide access |
 
-**3-minute evaluator path:** log in as `KSP-BLR-1001` (note the gated modules) → log out,
-log in as `KSP-DGP-0001` (same screens unlock — RBAC is real, not cosmetic) → open the map,
-toggle Historical → Predicted, click a hotspot → drill from statewide into one district →
-open Network, run Kingpins, then trace a path between two suspects → ask Ask Garuda a
-question in Kannada and show plan -> execute -> answer trace → open the planner, move a slider,
-run a scenario, create an operation, then open ActionLoop to acknowledge/update with a field note
-and attachment → show status + audit evidence, then export the PDF brief.
+**3-minute evaluator path:** log in as `KSP-BLR-1001` on a phone-sized viewport to see the
+dedicated Field Mode and four-item navigation → open an assigned task, add a field note or
+attachment, and update its status → log out and sign in as `KSP-DGP-0001` to see the full
+six-module command interface → select a district, open the map, toggle Historical → Predicted,
+and inspect a hotspot → open Connections and trace a suspect path → ask Garuda how to use a
+feature, then use its result button to navigate there → run a planner scenario and export the
+server-computed PDF brief. The visible info buttons beside each major section provide the same
+guidance in English and Kannada without leaving the current view.
 
 ---
 
@@ -51,9 +52,11 @@ where to focus patrols. Garuda collapses that into one Catalyst-hosted workspace
   "kingpins" (degree/betweenness/eigenvector), community detection, shortest-path
   connection tracing with hop-by-hop explanations, and labelled (non-evidentiary) link
   prediction.
-- **Ask Garuda** — natural-language querying in English or Kannada, backed by an 8-action
-  planner with a visible plan → execute → observe → answer reasoning trace, and a QuickML
-  (GLM-4.7-Flash) LLM path with a deterministic rules-based fallback.
+- **Ask Garuda** — natural-language querying in English or Kannada across a 14-tool surface,
+  including case search, network analysis, forecasts, operational guidance, and app help.
+  It can explain a workflow and route the user to the relevant view, shows a visible plan →
+  execute → observe → answer trace, and uses QuickML (GLM-4.7-Flash) with a deterministic
+  rules-based fallback.
 - **Predictive rigor** — 4 forecasting models backtested against each other with MAE/MAPE
   plus the criminology-standard PAI/PEI metrics; the simplest model is deployed because it
   measurably won, not by default.
@@ -67,6 +70,12 @@ where to focus patrols. Garuda collapses that into one Catalyst-hosted workspace
   tasks; constables use a plain-language mobile view to start work, attach a photo/PDF,
   record observations, and complete the task. Structured field history, conservative
   outcome assessment, and a reviewed operation debrief close the loop.
+- **Role-aware responsive interface** — constables receive a focused four-item mobile Field
+  Mode, while senior roles receive a responsive six-module command interface with stacked
+  phone layouts and no horizontal overflow.
+- **In-context help** — touch-friendly info popovers explain KPI cards, map controls,
+  connection graphs, reports, planning, operations, and settings. All help text is available
+  in English and Kannada; Ask Garuda provides conversational help and navigation.
 - **Bilingual UI** (English/Kannada, including district names) and full light/dark themes.
 
 ---
@@ -75,7 +84,7 @@ where to focus patrols. Garuda collapses that into one Catalyst-hosted workspace
 
 ```mermaid
 flowchart TD
-    U["Officer browser"] -->|HTTPS| WC["Catalyst Web Client Hosting<br/>React + Vite SPA"]
+    U["Officer browser<br/>role-aware mobile/desktop UI"] -->|HTTPS| WC["Catalyst Web Client Hosting<br/>React + Vite SPA"]
     WC -->|REST /api/*| AS["Catalyst AppSail<br/>FastAPI + NetworkX"]
     AS --> DS["Data Store / ZCQL<br/>cases, accused, officers"]
     AS --> OP["Data Store<br/>ResponsePlans, FieldUpdates, Assessments"]
@@ -90,7 +99,10 @@ flowchart TD
     OP --> SG["Signals<br/>ResponsePlans row insert"] -->|X-Signals-Token| AS
 ```
 
-The frontend is fully stateless (all data via REST). The backend wraps every Catalyst SDK
+The frontend is fully stateless (all data via REST). Client-side session data selects either
+the constable Field Mode or the senior command interface; server-side RBAC remains authoritative.
+Reusable Radix popovers provide contextual help, while Ask Garuda's `app_help` tool returns
+workflow guidance and a suggested destination view. The backend wraps every Catalyst SDK
 call in try/except with a local CSV/in-memory fallback, so it degrades gracefully instead
 of hard-failing when a service is unavailable — this is deliberate, not defensive filler,
 and is exercised by the test suite.
