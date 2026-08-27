@@ -1,6 +1,6 @@
 /**
  * Dynamic text translation via the backend's /api/translate endpoint, which
- * proxies to Catalyst Zia Services (see backend/main.py::translate()).
+ * proxies to Catalyst QuickML Text Translation (see backend/main.py::translate()).
  *
  * This is for translating *dynamic* content (e.g. case narratives) — static
  * UI chrome (nav labels, buttons) stays in the hand-curated dictionary in
@@ -16,8 +16,8 @@ const API_BASE = import.meta.env.VITE_API_URL as string | undefined;
 
 export interface TranslateResult {
   texts: string[];
-  /** "zia" when Catalyst Zia Services performed the translation, "fallback" otherwise */
-  source: "zia" | "fallback";
+  /** "quickml_translation" when Catalyst performed the translation, "fallback" otherwise */
+  source: "quickml_translation" | "fallback";
 }
 
 export async function translateTexts(texts: string[], targetLanguage = "kn"): Promise<TranslateResult> {
@@ -25,9 +25,13 @@ export async function translateTexts(texts: string[], targetLanguage = "kn"): Pr
     return { texts, source: "fallback" };
   }
   try {
+    const token = sessionStorage.getItem("ksp_token");
     const res = await fetch(`${API_BASE}/api/translate`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       body: JSON.stringify({ texts, target_language: targetLanguage }),
     });
     if (!res.ok) throw new Error(`translate failed: ${res.status}`);

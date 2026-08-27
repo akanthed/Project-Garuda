@@ -10,6 +10,7 @@ import { AlertsFeed } from "@/components/dashboard/AlertsFeed";
 import { ActionBrief, type ActionBriefDecision } from "@/components/dashboard/ActionBrief";
 import { FieldMode } from "@/components/dashboard/FieldMode";
 import { OperationsBoard } from "@/components/dashboard/OperationsBoard";
+import { CommandOverview } from "@/components/dashboard/CommandOverview";
 import { ReportsView } from "@/components/dashboard/ReportsView";
 import { SettingsView } from "@/components/dashboard/SettingsView";
 import { createResponsePlan, fetchKpiMetrics } from "@/lib/mock-api";
@@ -164,6 +165,8 @@ function Dashboard() {
             {view === "dashboard" && (
               officer.designation === "Constable" ? (
                 <FieldMode officer={officer} onNavigate={setView} />
+              ) : officer.designation === "DGP" || officer.designation === "ACP" ? (
+                <CommandOverview onNavigate={setView} />
               ) : <>
                 <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
                   {kpisLoading ? (

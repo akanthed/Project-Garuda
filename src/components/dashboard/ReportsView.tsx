@@ -90,7 +90,7 @@ function CaseDetailDrawer({ report, onClose, onWorkflowUpdated }: { report: Case
   const { locale } = useLanguage();
   const [translated, setTranslated] = useState<string | null>(null);
   const [translating, setTranslating] = useState(false);
-  const [translateSource, setTranslateSource] = useState<"zia" | "fallback" | null>(null);
+  const [translateSource, setTranslateSource] = useState<"quickml_translation" | "fallback" | null>(null);
   const [status, setStatus] = useState<CaseStatus>(report.status);
   const [assignedOfficer, setAssignedOfficer] = useState(report.assigned_officer === "Unassigned" ? "" : report.assigned_officer);
   const [savingWorkflow, setSavingWorkflow] = useState(false);
@@ -133,7 +133,7 @@ function CaseDetailDrawer({ report, onClose, onWorkflowUpdated }: { report: Case
           <div className="mt-1 text-base font-medium leading-snug">{translated ?? report.title}</div>
           {translateSource && (
             <div className="mt-1 font-mono text-[9px] uppercase tracking-widest text-muted-foreground/60">
-              {translateSource === "zia" ? t("reports_translate_zia", locale) : t("reports_translate_fallback", locale)}
+              {translateSource === "quickml_translation" ? t("reports_translate_quickml", locale) : t("reports_translate_fallback", locale)}
             </div>
           )}
         </div>

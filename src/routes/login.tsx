@@ -179,6 +179,7 @@ function LoginPage() {
             </div>
             {([
               { badge: "KSP-DGP-0001", pass: "dgp2026",       role: "DGP",        access: "login_access_full" },
+              { badge: "KSP-ACP-0001", pass: "acp2026",       role: "ACP",        access: "login_access_district" },
               { badge: "KSP-BLR-7741", pass: "sentinel2026",  role: "CI",         access: "login_access_full" },
               { badge: "KSP-BLR-4412", pass: "garuda2026",    role: "SI",         access: "login_access_simulate" },
               { badge: "KSP-BLR-1001", pass: "constable123",  role: "Constable",  access: "login_access_map" },

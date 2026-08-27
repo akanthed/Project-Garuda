@@ -49,7 +49,7 @@ Garuda combines spatial intelligence, relationship analysis, and scenario planni
 | One view for everyone | Role-based access for sensitive network and planning modules |
 | Separate deployment services | Catalyst Web Client Hosting, AppSail, and Data Store in one platform |
 
-**Responsible intelligence:** Current forecast and planner outputs are clearly labelled as trend/scenario estimates. They support human decision-making; they do not automate enforcement decisions.
+**Responsible intelligence:** Forecast and planner outputs identify their QuickML or fallback source and remain advisory. They support human decision-making; they do not automate enforcement decisions.
 
 ## Slide 5 - Key Features
 
@@ -152,7 +152,9 @@ Garuda uses a **QuickML Random Forest pipeline** to estimate case-level risk as 
 - KPI, hotspot, and anomaly results use a 30-second cache to avoid repeated computation for common views.
 - The health endpoint reports loaded case and graph-node counts, enabling simple deployment smoke checks.
 
-**Important evaluation note:** This is a synthetic-data prototype. The forecasting and what-if planner are transparent statistical/scenario models, not validated crime prediction claims. A field pilot with approved historical data is the next benchmarking step.
+**Important evaluation note:** The QuickML station forecast improved six-month temporal-holdout MAE from 3.129 to 2.998 and PAI from 1.297 to 1.313 versus the local trend baseline. This remains a synthetic-data prototype, not a validated crime-prediction claim. A field pilot with approved historical data is the next benchmarking step.
+
+The QuickML station anomaly classifier detected 43 of 45 anomalies in the untouched January-June 2026 holdout (95.6% recall, 79.6% precision). Alerts remain advisory and show the observed count, trailing mean, and z-score for human review.
 
 **Visual:** Use a screenshot of the live KPI/map view plus a small “5,001 cases | 13,722 graph nodes” callout.
 

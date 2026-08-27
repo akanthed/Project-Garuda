@@ -86,3 +86,25 @@ def test_quickml_synthesis_uses_kannada_voice_and_returns_wav():
     }
     assert audio.startswith(b"RIFF")
     assert audio_info == '{"language":"kn","speaker":"Anu"}'
+
+
+def test_quickml_translation_sends_language_pair_and_reads_text():
+    response = _response({
+        "status": "success",
+        "src_lang": "en",
+        "tgt_lang": "kn",
+        "translated_text": "ಹೆಚ್ಚಿನ ಅಪಾಯದ ಕಳ್ಳತನ ಪ್ರದೇಶಗಳು",
+        "processing_time_ms": 45,
+    })
+    with (
+        patch.object(main, "_quickml_connection_headers", return_value={
+            "Authorization": "Zoho-oauthtoken test",
+            "CATALYST-ORG": "123",
+        }),
+        patch.object(main.urllib.request, "urlopen", return_value=response) as urlopen,
+    ):
+        translated = main._quickml_translate_sync("High-risk theft areas", "en", "kn", Mock())
+
+    payload = json.loads(urlopen.call_args.args[0].data.decode())
+    assert payload == {"text": "High-risk theft areas", "src_lang": "en", "tgt_lang": "kn"}
+    assert translated == "ಹೆಚ್ಚಿನ ಅಪಾಯದ ಕಳ್ಳತನ ಪ್ರದೇಶಗಳು"

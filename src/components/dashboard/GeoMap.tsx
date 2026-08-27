@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { useEffect, useMemo, useState } from "react";
+import { type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Map, Marker, Popup, useControl } from "react-map-gl/maplibre";
 import { MapboxOverlay } from "@deck.gl/mapbox";
 import { HexagonLayer } from "@deck.gl/aggregation-layers";
@@ -22,6 +22,18 @@ import "maplibre-gl/dist/maplibre-gl.css";
 const MAP_STYLE = "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json";
 
 const BENGALURU_CENTER: [number, number] = [77.5946, 12.9716];
+
+type PopupAnchor = "top" | "top-left" | "top-right" | "bottom" | "bottom-left" | "bottom-right";
+
+function popupAnchorForMarker(marker: DOMRect, map: DOMRect): PopupAnchor {
+  const markerX = marker.left + marker.width / 2;
+  const markerY = marker.top + marker.height / 2;
+  const popupWidth = Math.min(320, map.width - 32);
+  const vertical = markerY < map.top + map.height / 2 ? "top" : "bottom";
+  if (markerX - map.left < popupWidth / 2 + 16) return `${vertical}-left`;
+  if (map.right - markerX < popupWidth / 2 + 16) return `${vertical}-right`;
+  return vertical;
+}
 
 const RISK_COLOR: Record<string, string> = {
   high: "var(--danger)",
@@ -98,7 +110,7 @@ function HotspotMarker({
 }: {
   hotspot: Hotspot;
   selected: boolean;
-  onClick: () => void;
+  onClick: (event: ReactMouseEvent<HTMLDivElement>) => void;
 }) {
   const color = RISK_COLOR[hotspot.risk];
   const size = RISK_SIZE[hotspot.risk];
@@ -143,7 +155,7 @@ function HotspotPopupContent({
   const color = RISK_COLOR[hotspot.risk];
   const etaMin = nearestPatrol ? Math.max(1, Math.round((nearestPatrol.km / 30) * 60)) : null;
   return (
-    <div className="min-w-[260px] rounded-lg border border-foreground/10 bg-background/95 p-4 backdrop-blur-sm">
+    <div className="w-full min-w-0 rounded-lg border border-foreground/10 bg-background/95 p-4 backdrop-blur-sm">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
           <AlertTriangle className="h-3.5 w-3.5 shrink-0" style={{ color }} />
@@ -229,8 +241,10 @@ export function GeoMap({ compact = false }: GeoMapProps) {
   const [layers, setLayers] = useState(INITIAL_LAYERS);
   const [expanded, setExpanded] = useState(false);
   const [selected, setSelected] = useState<Hotspot | null>(null);
+  const [selectedAnchor, setSelectedAnchor] = useState<PopupAnchor>("top");
   const [predictedMode, setPredictedMode] = useState(false);
   const [backtest, setBacktest] = useState<ForecastBacktest | null>(null);
+  const mapShellRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchHotspots({ districtId }).then(({ data }) => setHotspots(data));
@@ -328,7 +342,8 @@ export function GeoMap({ compact = false }: GeoMapProps) {
 
       {/* MapLibre canvas */}
       <div
-        className={`relative transition-[height] duration-300 ${
+        ref={mapShellRef}
+        className={`garuda-map-shell relative transition-[height] duration-300 ${
           compact ? "min-h-[220px] flex-1" : expanded ? "h-[640px]" : "h-[460px]"
         }`}
       >
@@ -389,7 +404,17 @@ export function GeoMap({ compact = false }: GeoMapProps) {
                 <HotspotMarker
                   hotspot={h}
                   selected={selected?.id === h.id}
-                  onClick={() => setSelected(selected?.id === h.id ? null : h)}
+                  onClick={(event) => {
+                    if (selected?.id === h.id) {
+                      setSelected(null);
+                      return;
+                    }
+                    const mapBounds = mapShellRef.current?.getBoundingClientRect();
+                    if (mapBounds) {
+                      setSelectedAnchor(popupAnchorForMarker(event.currentTarget.getBoundingClientRect(), mapBounds));
+                    }
+                    setSelected(h);
+                  }}
                 />
               </Marker>
             ))}
@@ -412,7 +437,7 @@ export function GeoMap({ compact = false }: GeoMapProps) {
             <Popup
               longitude={selected.lng}
               latitude={selected.lat}
-              anchor="right"
+              anchor={selectedAnchor}
               offset={16}
               closeButton={false}
               closeOnClick={false}

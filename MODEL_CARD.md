@@ -45,22 +45,29 @@ Garuda is a **decision-support prototype**. Every score, ranking, or forecast it
 - **Bias audit:** see §4.
 
 ### 3.2 Hotspot forecast (`GET /api/hotspots/forecast`)
-- **Deployed model:** `linear_trend` (per-station `numpy.polyfit` over monthly incident counts).
-- **This was chosen by measurement, not default.** A rolling-origin backtest (`GET /api/hotspots/forecast/backtest`, 6 held-out months, 164 stations) compared it against naive, seasonal-naive, and EWMA baselines:
+- **Deployed model:** QuickML Gradient Boosting Regression model `6441000000007104`, pipeline `6441000000007101`, published through endpoint `6441000000007141`. The API reports `source=quickml_pipeline`; if QuickML is unavailable it reports `source=local_fallback` and uses the prior per-station linear trend.
+- **Features:** station and district IDs, target month, prior month number, lag-1/2/3/12 incident counts, and trailing 3/6-month means. Training uses 5,740 station-month rows ending December 2025.
+- **This was chosen by temporal measurement, not training metrics alone.** QuickML never received the 984-row January-June 2026 holdout. Both models were scored on those same six months across all 164 stations:
 
   | Model | MAE | MAPE | PAI | PEI |
   |---|---|---|---|---|
-  | **linear_trend (deployed)** | **2.99** | **29.4%** | 1.31 | 0.79 |
-  | ewma | 3.10 | 30.1% | 1.33 | 0.80 |
-  | seasonal_naive | 4.04 | 38.0% | 1.35 | 0.82 |
-  | naive | 4.11 | 38.1% | 1.32 | 0.80 |
+  | **QuickML gradient boosting (deployed)** | **2.998** | **28.5%** | **1.313** | **0.791** |
+  | linear trend (fallback) | 3.129 | 29.7% | 1.297 | 0.782 |
 
   PAI (Prediction Accuracy Index) and PEI (Predictive Efficiency Index) are the standard hotspot-prediction metrics from the criminology literature (Chainey, Tompson & Uhlig, 2008), adapted here from a spatial grid to station units (see `_backtest_forecast_models()` docstring for the exact adaptation).
-- **Decision:** linear_trend beats every simpler baseline by a real margin, so gradient boosting / any heavier model was deliberately **not** added — see the plan note "upgrade only if it beats baselines." Adding one would also have required vendoring new ML wheels for the AppSail deployment, an infra cost not justified by the backtest.
-- **Confidence interval:** each forecast now returns a `confidence_interval` derived from one-step-ahead in-sample residual std (`_residual_std()`), and `training_window_months` so the reader can see how much history backs a given station's number.
+- **Decision:** QuickML lowers MAE by 4.2% and also improves PAI/PEI. This is a modest improvement, not a claim of operational validity, but it meets the predeclared rule to switch only when the external holdout beats the local baseline.
+- **QuickML internal metrics:** MAE 2.8866, RMSE 3.7331, and R2 0.6996. QuickML's displayed MAPE is invalid because percentage error is undefined for zero targets; the reported 28.5% holdout MAPE is computed only where the actual count is nonzero.
+- **Confidence interval:** each forecast returns a heuristic interval derived from the local trend model's one-step-ahead residual standard deviation around the QuickML point prediction, plus `training_window_months`. It is not a calibrated QuickML prediction interval.
 - **Feedback-loop risk:** predicted hotspots can influence patrol allocation, which can change where future crime is recorded — a genuine feedback loop. Mitigation: predictions are advisory only, never automated dispatch, and this backtest should be periodically rerun against realized outcomes as new data arrives.
 
-### 3.3 Network analytics (`/api/network/kingpins`, `/communities`, `/path`, `/predict-links`)
+### 3.3 Station anomaly classifier (`GET /api/anomalies`)
+- **Deployed model:** QuickML Embedded XGBoost Classification model `6441000000007163`, pipeline `6441000000007160`, published through endpoint `6441000000007190`. The API reports `source=quickml_pipeline`; if QuickML is unavailable it reports `source=local_fallback` and uses the prior z-score threshold.
+- **Target and features:** `anomaly_class=1` means the station-month count is at least two trailing-12-month standard deviations above its prior mean. Inputs include station/district, month, current count, lag-1/2/3/12, trailing 6/12-month means, and trailing-12-month standard deviation. This predicts a transparent statistical proxy, not independently adjudicated operational harm.
+- **Training:** 1,268 pre-2026 rows, sampled to 25% positive examples so the learner cannot succeed by predicting the majority class. QuickML internal metrics: AUC 0.9895, precision 0.9706, recall 0.9895, F1 0.9799, accuracy 0.9842.
+- **Untouched temporal holdout:** 984 natural-prevalence station-months from January-June 2026, including 45 anomalies. Results: 43 true positives, 11 false positives, 928 true negatives, 2 false negatives; precision 79.6%, recall 95.6%, F1 86.9%, specificity 98.8%.
+- **Decision:** high recall is appropriate for an advisory review queue, but every alert still requires human review. The response retains the z-score and current-versus-mean context so officers can inspect why a station was flagged.
+
+### 3.4 Network analytics (`/api/network/kingpins`, `/communities`, `/path`, `/predict-links`)
 - **Kingpin ranking:** `0.4×degree + 0.35×betweenness + 0.25×eigenvector` centrality over a suspect-suspect co-offender graph (5,000 nodes / 6,820 edges on this dataset). Betweenness is sampled (k=300, seed=42) above 300 nodes — exact computation took 92.6s on this graph, sampled takes ~5s; this is disclosed as an approximation, not exact.
 - **Syndicate detection:** greedy modularity communities (networkx built-in). Cohesion (internal edge density) and a `likely_synthetic_artifact` flag are returned per community so a reviewer can distinguish a real, tight-knit group from a data-generation artifact (§2).
 - **Link prediction:** Adamic-Adar coefficient over the top-300-by-degree suspects. Every result is labelled `"label": "predicted_lead"` with an explicit advisory string — **this is a statistical association, never asserted as a real-world connection.**

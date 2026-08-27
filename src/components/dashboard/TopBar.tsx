@@ -258,11 +258,12 @@ export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
           <select
             value={districtId ?? ""}
             onChange={(e) => setDistrictId(e.target.value ? Number(e.target.value) : null)}
+            disabled={officer.designation === "ACP"}
             aria-label={t("topbar_scope_label", locale)}
             title={t("topbar_scope_label", locale)}
             className="h-9 min-w-0 max-w-[65vw] rounded-md border border-border bg-background/60 px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 sm:h-7 sm:max-w-none sm:shrink-0"
           >
-            <option value="">{t("topbar_scope_statewide", locale)}</option>
+            {officer.designation !== "ACP" && <option value="">{t("topbar_scope_statewide", locale)}</option>}
             {districts.map((d) => (
               <option key={d.district_id} value={d.district_id}>
                 {districtName(d, locale)}

@@ -151,6 +151,18 @@ QUICKML_RISK_ENDPOINT = os.environ.get(
     "https://api.catalyst.zoho.in/quickml/v1/project/52319000000013050/endpoints/predict?explainModel=true",
 ).strip()
 QUICKML_RISK_ENDPOINT_KEY = os.environ.get("QUICKML_RISK_ENDPOINT_KEY", "").strip()
+QUICKML_FORECAST_MODEL_ID = os.environ.get("QUICKML_FORECAST_MODEL_ID", "6441000000007104").strip()
+QUICKML_FORECAST_ENDPOINT = os.environ.get(
+    "QUICKML_FORECAST_ENDPOINT",
+    "https://api.catalyst.zoho.in/quickml/v1/project/52319000000013050/endpoints/predict?explainModel=false",
+).strip()
+QUICKML_FORECAST_ENDPOINT_KEY = os.environ.get("QUICKML_FORECAST_ENDPOINT_KEY", "").strip()
+QUICKML_ANOMALY_MODEL_ID = os.environ.get("QUICKML_ANOMALY_MODEL_ID", "6441000000007163").strip()
+QUICKML_ANOMALY_ENDPOINT = os.environ.get(
+    "QUICKML_ANOMALY_ENDPOINT",
+    "https://api.catalyst.zoho.in/quickml/v1/project/52319000000013050/endpoints/predict?explainModel=false",
+).strip()
+QUICKML_ANOMALY_ENDPOINT_KEY = os.environ.get("QUICKML_ANOMALY_ENDPOINT_KEY", "").strip()
 _RISK_CLASS_LABELS = {0: "low", 1: "medium", 2: "high"}
 
 def cache_get(capp, key: str):
@@ -362,6 +374,12 @@ _OFFICER_REGISTRY: dict[str, dict] = {
         "password_hash": hash_password("dgp2026", _OFFICER_SALT),
         "name": "DGP S. Rao", "designation": "DGP",
         "station": "KSP State HQ", "clearance": "CLR-7", "node": "KSP-HQ",
+    },
+    "KSP-ACP-0001": {
+        "password_hash": hash_password("acp2026", _OFFICER_SALT),
+        "name": "ACP M. Iyer", "designation": "ACP",
+        "station": "Bengaluru City Police HQ", "clearance": "CLR-6", "node": "BLR-ACP",
+        "district_id": 1,
     },
 }
 
@@ -925,6 +943,75 @@ def _compute_anomalies(df: Optional[pd.DataFrame] = None) -> list[dict]:
             })
     return sorted(out, key=lambda a: a["z_score"], reverse=True)
 
+def _quickml_anomaly_features(station_id: int, series: pd.Series) -> tuple[dict, float]:
+    all_months = pd.period_range(series.index.min(), series.index.max(), freq="M")
+    history = series.reindex(all_months, fill_value=0).astype(float)
+    if len(history) < 13:
+        raise ValueError("QuickML anomaly detection requires at least 13 months of history")
+    prior_12 = history.iloc[-13:-1]
+    rolling_mean_12 = float(prior_12.mean())
+    rolling_std_12 = float(prior_12.std()) or 1.0
+    current_count = float(history.iloc[-1])
+    latest_month = history.index[-1]
+    return ({
+        "target_month": latest_month.to_timestamp().strftime("%Y-%m-%d"),
+        "station_id": int(station_id),
+        "district_id": int(district_of_station(int(station_id)).district_id),
+        "month_number": int(latest_month.month),
+        "current_count": int(current_count),
+        "lag_1": int(history.iloc[-2]),
+        "lag_2": int(history.iloc[-3]),
+        "lag_3": int(history.iloc[-4]),
+        "lag_12": int(history.iloc[-13]),
+        "rolling_mean_6": round(float(history.iloc[-7:-1].mean()), 3),
+        "rolling_mean_12": round(rolling_mean_12, 3),
+        "rolling_std_12": round(rolling_std_12, 3),
+    }, round((current_count - rolling_mean_12) / rolling_std_12, 2))
+
+def _quickml_anomaly_predictions(capp, station_features: list[tuple[int, dict]]) -> dict[int, int]:
+    if not QUICKML_ANOMALY_ENDPOINT or not QUICKML_ANOMALY_ENDPOINT_KEY:
+        raise RuntimeError("QuickML anomaly endpoint is unavailable")
+    connection_headers = _quickml_connection_headers(capp)
+    if not connection_headers and not (QUICKML_ACCESS_TOKEN and QUICKML_ORG_ID):
+        raise RuntimeError("QuickML anomaly credentials are unavailable")
+
+    headers = {
+        "Content-Type": "application/json",
+        "X-QUICKML-ENDPOINT-KEY": QUICKML_ANOMALY_ENDPOINT_KEY,
+        "Environment": "Development",
+    }
+    if connection_headers:
+        headers.update(connection_headers)
+    else:
+        headers["Authorization"] = f"Zoho-oauthtoken {QUICKML_ACCESS_TOKEN}"
+        headers["CATALYST-ORG"] = QUICKML_ORG_ID
+    request = urllib.request.Request(
+        QUICKML_ANOMALY_ENDPOINT,
+        data=json.dumps({"data": [features for _, features in station_features]}).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=QUICKML_TIMEOUT_SECONDS) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")[:500]
+        raise RuntimeError(f"QuickML anomaly endpoint returned HTTP {exc.code}: {detail}") from exc
+
+    results = payload.get("result") if isinstance(payload, dict) else None
+    if not isinstance(results, list) or len(results) != len(station_features):
+        raise RuntimeError("QuickML anomaly endpoint returned an invalid result count")
+    try:
+        predictions = [int(result) for result in results]
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("QuickML anomaly endpoint returned a non-numeric result") from exc
+    if any(prediction not in (0, 1) for prediction in predictions):
+        raise RuntimeError("QuickML anomaly endpoint returned an invalid class")
+    return {
+        station_id: prediction
+        for (station_id, _), prediction in zip(station_features, predictions)
+    }
+
 # ─── Forecast model backtest (Phase 4) ────────────────────────────────────────
 # The deployed forecast is a simple per-station linear trend. Rather than
 # assert it is "accurate," we backtest it against three standard time-series
@@ -949,6 +1036,66 @@ def _forecast_linear_trend(y: np.ndarray) -> float:
     slope, intercept = np.polyfit(x, y, 1)
     return max(0.0, float(slope * len(y) + intercept))
 
+def _quickml_forecast_features(station_id: int, series: pd.Series) -> dict:
+    all_months = pd.period_range(series.index.min(), series.index.max(), freq="M")
+    history = series.reindex(all_months, fill_value=0).astype(float)
+    if len(history) < 12:
+        raise ValueError("QuickML forecast requires at least 12 months of history")
+    latest_month = history.index[-1]
+    return {
+        "target_month": (latest_month + 1).to_timestamp().strftime("%Y-%m-%d"),
+        "station_id": int(station_id),
+        "district_id": int(district_of_station(int(station_id)).district_id),
+        "month_number": int(latest_month.month),
+        "lag_1": int(history.iloc[-1]),
+        "lag_2": int(history.iloc[-2]),
+        "lag_3": int(history.iloc[-3]),
+        "lag_12": int(history.iloc[-12]),
+        "rolling_3": round(float(history.iloc[-3:].mean()), 3),
+        "rolling_6": round(float(history.iloc[-6:].mean()), 3),
+    }
+
+def _quickml_forecast_predictions(capp, station_features: list[tuple[int, dict]]) -> dict[int, float]:
+    if not QUICKML_FORECAST_ENDPOINT or not QUICKML_FORECAST_ENDPOINT_KEY:
+        raise RuntimeError("QuickML forecast endpoint is unavailable")
+    connection_headers = _quickml_connection_headers(capp)
+    if not connection_headers and not (QUICKML_ACCESS_TOKEN and QUICKML_ORG_ID):
+        raise RuntimeError("QuickML forecast credentials are unavailable")
+
+    headers = {
+        "Content-Type": "application/json",
+        "X-QUICKML-ENDPOINT-KEY": QUICKML_FORECAST_ENDPOINT_KEY,
+        "Environment": "Development",
+    }
+    if connection_headers:
+        headers.update(connection_headers)
+    else:
+        headers["Authorization"] = f"Zoho-oauthtoken {QUICKML_ACCESS_TOKEN}"
+        headers["CATALYST-ORG"] = QUICKML_ORG_ID
+    request = urllib.request.Request(
+        QUICKML_FORECAST_ENDPOINT,
+        data=json.dumps({"data": [features for _, features in station_features]}).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=QUICKML_TIMEOUT_SECONDS) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")[:500]
+        raise RuntimeError(f"QuickML forecast endpoint returned HTTP {exc.code}: {detail}") from exc
+
+    results = payload.get("result") if isinstance(payload, dict) else None
+    if not isinstance(results, list) or len(results) != len(station_features):
+        raise RuntimeError("QuickML forecast endpoint returned an invalid result count")
+    try:
+        return {
+            station_id: max(0.0, float(prediction))
+            for (station_id, _), prediction in zip(station_features, results)
+        }
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("QuickML forecast endpoint returned a non-numeric result") from exc
+
 def _residual_std(model_fn, y: np.ndarray) -> float:
     """One-step-ahead in-sample residual std for a forecast function, used to
     build a rough confidence interval around its next-period prediction."""
@@ -968,6 +1115,14 @@ FORECAST_MODELS = {
 # this is a one-line switch driven by /api/hotspots/forecast/backtest results
 # — see the Phase 4 notes for the measured comparison before changing it.
 DEPLOYED_FORECAST_MODEL = os.environ.get("DEPLOYED_FORECAST_MODEL", "linear_trend")
+
+QUICKML_FORECAST_HOLDOUT_SCORE = {
+    "model": "quickml_gb_regression",
+    "mae": 2.998,
+    "mape_percent": 28.5,
+    "pai": 1.313,
+    "pei": 0.791,
+}
 
 FEEDBACK_LOOP_CAUTION = (
     "Predicted hotspots can influence where patrols are sent, which can change where "
@@ -1061,6 +1216,11 @@ def _backtest_forecast_models(df: Optional[pd.DataFrame] = None, test_months: in
         })
     summary.sort(key=lambda r: r["mae"])
 
+    is_statewide_source = df is None or len(df) == len(DB.cases)
+    if test_months == 6 and is_statewide_source:
+        summary.append(QUICKML_FORECAST_HOLDOUT_SCORE.copy())
+        summary.sort(key=lambda r: r["mae"])
+
     return {
         "models": summary,
         "test_months": evaluated_months,
@@ -1068,11 +1228,11 @@ def _backtest_forecast_models(df: Optional[pd.DataFrame] = None, test_months: in
         "k_stations": k,
         "k_fraction": k_fraction,
         "best_model_by_mae": summary[0]["model"] if summary else None,
-        "deployed_model": DEPLOYED_FORECAST_MODEL,
+        "deployed_model": "quickml_gb_regression" if QUICKML_FORECAST_ENDPOINT_KEY else DEPLOYED_FORECAST_MODEL,
         "methodology": (
             "Rolling-origin backtest: each held-out month is predicted using only prior "
-            "months, per station, then compared against naive (last value), seasonal-naive "
-            "(same month last year), and exponentially-weighted moving average baselines."
+            "months, per station. The QuickML score uses the untouched Jan-Jun 2026 holdout "
+            "and is compared against linear-trend, naive, seasonal-naive, and EWMA baselines."
         ),
         "feedback_loop_caution": FEEDBACK_LOOP_CAUTION,
     }
@@ -1789,30 +1949,35 @@ async def auth_login(body: LoginRequest, request: Request):
         "station":     officer.get("station") or officer.get("Station"),
         "clearance":   clearance,
         "node":        officer.get("node") or officer.get("Node"),
+        "district_id": int(officer.get("district_id") or officer.get("DistrictID")) if (officer.get("district_id") or officer.get("DistrictID")) else None,
         **_permissions_for(clearance),
     }
-    token = sign_session({"badge": badge, "clearance": clearance})
+    token = sign_session({
+        "badge": badge,
+        "clearance": clearance,
+        "designation": profile["designation"],
+        "district_id": profile["district_id"],
+    })
     return {"officer": profile, "token": token}
 
 # ─── POST /api/translate (Zia Translate) ──────────────────────────────────────
 
 @app.post("/api/translate")
 async def translate(body: TranslateRequest, request: Request):
-    """
-    Translates dynamic case narrative text (not static UI chrome, which is
-    already hand-translated in the frontend's i18n dictionary).
-
-    NOTE: verified against zcatalyst-sdk 1.4.0 (the latest on PyPI) — the
-    `Zia` component has NO `translate()` method at all (confirmed by reading
-    the installed package's zia.py and by the Catalyst console's own Zia
-    page, which lists only Face Analytics/OCR/Identity Scanner/Image
-    Moderation/Object Recognition/Barcode Scanner/AutoML/Text Analytics —
-    no Translate). Zia Translate is not a real capability of this SDK/plan,
-    so this always falls back to passthrough (untranslated) text. A working
-    translation would need a different service entirely (e.g. an external
-    translation API), not a code fix here.
-    """
-    return {"translations": body.texts, "source": "fallback"}
+    require_session(request)
+    if body.target_language not in {"en", "kn"}:
+        raise HTTPException(422, "Unsupported target language")
+    capp = _try_catalyst_app(request)
+    source_language = "kn" if body.target_language == "en" else "en"
+    try:
+        translations = await asyncio.gather(*[
+            asyncio.to_thread(_quickml_translate_sync, text, source_language, body.target_language, capp)
+            for text in body.texts[:20]
+        ])
+        return {"translations": translations, "source": "quickml_translation"}
+    except Exception as exc:
+        log.info(f"QuickML translation unavailable: {exc}")
+        return {"translations": body.texts, "source": "fallback"}
 
 # ─── GET /api/kpis ────────────────────────────────────────────────────────────
 
@@ -1880,16 +2045,16 @@ async def get_kpis(
     result = [
         {"id": "criminal-nodes", "label": "Criminal Nodes Analyzed",
          "value": f"{total:,}", "delta": nodes_delta, "trend": nodes_trend,
-         "positive": nodes_trend == "down",
+         "positive": False,
          "sparkline": nodes_spark, "accent": "electric"},
         {"id": "hotspot-alerts", "label": "Spatio-Temporal Hotspot Alerts",
          "value": str(high_risk), "delta": hotspot_delta, "trend": hotspot_trend,
-         "positive": hotspot_trend == "down",
+         "positive": False,
          "sparkline": hotspot_spark,
          "accent": "danger"},
         {"id": "risk-volatility", "label": "Causal Risk Volatility Index",
          "value": str(volatility), "delta": f"{len(anomalies)} active",
-         "trend": "up" if anomalies else "down", "positive": not anomalies,
+         "trend": "up" if anomalies else "down", "positive": False,
          "sparkline": ([round(a["z_score"] * 10) for a in anomalies[:12]] or [0] * 12),
          "accent": "danger" if anomalies else "electric"},
         {"id": "resource-readiness", "label": "Case Arrest Rate",
@@ -1898,6 +2063,225 @@ async def get_kpis(
          "sparkline": arrest_spark,
          "accent": "electric"},
     ]
+    cache_set(capp, cache_key, result)
+    return result
+
+def _resource_allocation_recommendations(scoped: pd.DataFrame, capp=None) -> dict:
+    monthly = _monthly_counts_by_station(scoped)
+    if not monthly:
+        return {"available_units": 0, "allocated_units": 0, "recommendations": [], "advisory": "human_review_required"}
+
+    forecast_features = []
+    anomaly_features = []
+    anomaly_context = {}
+    for sid, series in monthly.items():
+        try:
+            forecast_features.append((sid, _quickml_forecast_features(sid, series)))
+            features, z_score = _quickml_anomaly_features(sid, series)
+            anomaly_features.append((sid, features))
+            anomaly_context[sid] = (features, z_score)
+        except ValueError:
+            continue
+
+    try:
+        forecasts = _quickml_forecast_predictions(capp, forecast_features)
+        forecast_source = "quickml_pipeline"
+    except Exception:
+        forecasts = {
+            sid: _forecast_linear_trend(monthly[sid].values.astype(float))
+            for sid, _ in forecast_features
+        }
+        forecast_source = "local_fallback"
+    try:
+        anomalies = _quickml_anomaly_predictions(capp, anomaly_features)
+        anomaly_source = "quickml_pipeline"
+    except Exception:
+        fallback_ids = {int(anomaly["station_id"]) for anomaly in _compute_anomalies(scoped)}
+        anomalies = {sid: int(sid in fallback_ids) for sid, _ in anomaly_features}
+        anomaly_source = "local_fallback"
+
+    max_forecast = max(forecasts.values(), default=1.0) or 1.0
+    ranked = []
+    for sid, prediction in forecasts.items():
+        features, z_score = anomaly_context[sid]
+        baseline = float(features["rolling_mean_12"]) or 1.0
+        ratio = float(features["current_count"]) / baseline
+        score = 60 * prediction / max_forecast + 30 * anomalies.get(sid, 0) + 10 * min(1.0, ratio / 2)
+        ranked.append({
+            "station_id": int(sid),
+            "station_name": station_name(int(sid)),
+            "priority_score": round(score, 1),
+            "predicted_count": round(float(prediction), 1),
+            "current_count": int(features["current_count"]),
+            "baseline_count": round(baseline, 1),
+            "is_anomaly": bool(anomalies.get(sid, 0)),
+            "z_score": z_score,
+            "forecast_source": forecast_source,
+            "anomaly_source": anomaly_source,
+        })
+    ranked.sort(key=lambda row: row["priority_score"], reverse=True)
+
+    statewide_station_count = max(1, DB.cases["PoliceStationID"].nunique())
+    available_units = len(_PATROL_BASE)
+    if len(monthly) < statewide_station_count:
+        available_units = max(1, round(available_units * len(monthly) / statewide_station_count))
+    selected = ranked[:min(len(ranked), available_units, 10)]
+    for recommendation in selected:
+        recommendation["recommended_units"] = 1
+    remaining = available_units - len(selected)
+    for recommendation in selected:
+        if remaining <= 0:
+            break
+        recommendation["recommended_units"] += 1
+        remaining -= 1
+
+    return {
+        "available_units": available_units,
+        "allocated_units": sum(row["recommended_units"] for row in selected),
+        "recommendations": selected,
+        "advisory": "human_review_required",
+    }
+
+def _command_change_summary(window_days: int, district_id: Optional[int], capp=None) -> dict:
+    scoped = _scope_filter(DB.cases, district_id, None).copy()
+    dates = pd.to_datetime(scoped["CrimeRegisteredDate"], errors="coerce")
+    latest = dates.max()
+    if pd.isna(latest):
+        raise HTTPException(503, "No dated case records are available")
+    current_start = latest - pd.Timedelta(days=window_days - 1)
+    prior_end = current_start - pd.Timedelta(days=1)
+    prior_start = prior_end - pd.Timedelta(days=window_days - 1)
+    pre_prior_end = prior_start - pd.Timedelta(days=1)
+    pre_prior_start = pre_prior_end - pd.Timedelta(days=window_days - 1)
+    current = scoped[(dates >= current_start) & (dates <= latest)]
+    prior = scoped[(dates >= prior_start) & (dates <= prior_end)]
+    pre_prior = scoped[(dates >= pre_prior_start) & (dates <= pre_prior_end)]
+
+    def change(current_value: float, prior_value: float) -> tuple[float, Optional[float]]:
+        absolute = round(current_value - prior_value, 1)
+        percent = round(absolute / prior_value * 100, 1) if prior_value else None
+        return absolute, percent
+
+    def metric(metric_id: str, current_value: float, prior_value: float, unit: str, up_is_good: bool) -> dict:
+        absolute, percent = change(current_value, prior_value)
+        movement = 0 if abs(absolute) < 0.05 else (1 if absolute > 0 else -1)
+        status = "stable" if movement == 0 else ("improving" if (movement > 0) == up_is_good else "worsening")
+        return {
+            "id": metric_id,
+            "current": round(current_value, 1),
+            "previous": round(prior_value, 1),
+            "absolute_change": absolute,
+            "percent_change": percent,
+            "unit": unit,
+            "status": status,
+        }
+
+    current_ids = set(current["CaseMasterID"].astype(int))
+    prior_ids = set(prior["CaseMasterID"].astype(int))
+    arrested_ids = set(DB.arrests["CaseMasterID"].astype(int)) if not DB.arrests.empty else set()
+    current_arrest_rate = len(current_ids & arrested_ids) / max(len(current_ids), 1) * 100
+    prior_arrest_rate = len(prior_ids & arrested_ids) / max(len(prior_ids), 1) * 100
+
+    def spike_count(period: pd.DataFrame, baseline: pd.DataFrame) -> int:
+        period_counts = period.groupby("PoliceStationID").size()
+        baseline_counts = baseline.groupby("PoliceStationID").size()
+        stations = period_counts.index.union(baseline_counts.index)
+        current_values = period_counts.reindex(stations, fill_value=0)
+        baseline_values = baseline_counts.reindex(stations, fill_value=0)
+        return int(((current_values - baseline_values >= 3) & (current_values >= baseline_values * 1.5)).sum())
+
+    metrics = [
+        metric("cases", len(current), len(prior), "cases", False),
+        metric("serious_cases", int((current["GravityOffenceID"] >= 4).sum()), int((prior["GravityOffenceID"] >= 4).sum()), "cases", False),
+        metric("arrest_rate", current_arrest_rate, prior_arrest_rate, "percent", True),
+        metric("station_spikes", spike_count(current, prior), spike_count(prior, pre_prior), "stations", False),
+    ]
+
+    area_rows = []
+    if district_id is None:
+        areas = [(district.district_id, district.name, current[current["DistrictID"] == district.district_id], prior[prior["DistrictID"] == district.district_id]) for district in KARNATAKA_DISTRICTS]
+    else:
+        station_ids = sorted(set(current["PoliceStationID"].astype(int)) | set(prior["PoliceStationID"].astype(int)))
+        areas = [(station_id, station_name(station_id), current[current["PoliceStationID"].astype(int) == station_id], prior[prior["PoliceStationID"].astype(int) == station_id]) for station_id in station_ids]
+    for area_id, name, current_area, prior_area in areas:
+        absolute, percent = change(len(current_area), len(prior_area))
+        area_rows.append({
+            "id": int(area_id), "name": name,
+            "current": len(current_area), "previous": len(prior_area),
+            "absolute_change": absolute, "percent_change": percent,
+        })
+    area_rows.sort(key=lambda row: (abs(row["percent_change"] or 0), abs(row["absolute_change"])), reverse=True)
+
+    crime_lookup = DB.crime_heads.set_index("CrimeHeadID")["CrimeGroupName"].to_dict()
+    combined_crimes = pd.concat([current["CrimeMajorHeadID"], prior["CrimeMajorHeadID"]]).value_counts().head(5).index.tolist()
+    matrix = []
+    matrix_areas = areas if district_id is None else [(district_id, district_by_id(district_id).name, current, prior)]
+    for area_id, name, current_area, prior_area in matrix_areas:
+        cells = []
+        for crime_id in combined_crimes:
+            current_count = int((current_area["CrimeMajorHeadID"] == crime_id).sum())
+            prior_count = int((prior_area["CrimeMajorHeadID"] == crime_id).sum())
+            absolute, percent = change(current_count, prior_count)
+            cells.append({
+                "crime_id": int(crime_id), "crime_type": str(crime_lookup.get(crime_id, crime_id)),
+                "current": current_count, "previous": prior_count,
+                "absolute_change": absolute, "percent_change": percent,
+            })
+        matrix.append({"area_id": int(area_id), "area_name": name, "cells": cells})
+
+    _hydrate_response_plans(capp)
+    plans = list(_LOCAL_RESPONSE_PLANS.values())
+    now = pd.Timestamp.now(tz="UTC")
+    overdue = 0
+    for plan in plans:
+        due = pd.to_datetime(plan.get("due_at"), errors="coerce", utc=True)
+        if plan.get("status") != "completed" and pd.notna(due) and due < now:
+            overdue += 1
+    active_station_ids = {int(plan["station_id"]) for plan in plans if plan.get("status") != "completed"}
+    active_anomalies = _compute_anomalies(scoped)
+    decision_queue = {
+        "needs_assignment": sum(1 for anomaly in active_anomalies if int(anomaly["station_id"]) not in active_station_ids),
+        "overdue": overdue,
+        "assigned": sum(1 for plan in plans if plan.get("status") == "assigned"),
+        "in_progress": sum(1 for plan in plans if plan.get("status") in {"acknowledged", "in_progress"}),
+        "completed": sum(1 for plan in plans if plan.get("status") == "completed"),
+    }
+    return {
+        "as_of": latest.date().isoformat(),
+        "window_days": window_days,
+        "scope": district_by_id(district_id).name if district_id is not None else "Karnataka",
+        "current_period": {"start": current_start.date().isoformat(), "end": latest.date().isoformat()},
+        "previous_period": {"start": prior_start.date().isoformat(), "end": prior_end.date().isoformat()},
+        "metrics": metrics,
+        "area_level": "station" if district_id is not None else "district",
+        "area_changes": area_rows[:12],
+        "crime_changes": matrix,
+        "decision_queue": decision_queue,
+        "resource_allocation": _resource_allocation_recommendations(scoped, capp),
+        "provenance": "synthetic_prototype",
+    }
+
+@app.get("/api/command/change-summary")
+async def get_command_change_summary(
+    request: Request,
+    window_days: int = Query(30),
+    district_id: Optional[int] = Query(None),
+):
+    session = require_session(request)
+    if not ensure_data_loaded(request):
+        raise HTTPException(503, "Data not loaded")
+    if window_days not in {7, 30, 90}:
+        raise HTTPException(422, "window_days must be 7, 30, or 90")
+    if session.get("designation") == "ACP":
+        district_id = int(session["district_id"])
+    if district_id is not None and not any(d.district_id == district_id for d in KARNATAKA_DISTRICTS):
+        raise HTTPException(404, "District not found")
+    capp = _try_catalyst_app(request)
+    cache_key = f"command_change:{window_days}:{district_id}"
+    cached = cache_get(capp, cache_key)
+    if cached is not None:
+        return cached
+    result = _command_change_summary(window_days, district_id, capp)
     cache_set(capp, cache_key, result)
     return result
 
@@ -1975,12 +2359,8 @@ async def get_hotspots_forecast(
     station_id: Optional[int] = Query(None),
 ):
     """
-    Per-station forecast using DEPLOYED_FORECAST_MODEL (default: linear trend
-    over monthly incident counts, via numpy.polyfit), projected forward
-    `horizon_days`. This is a simple trend model, not a full time-series/ML
-    forecast — labeled as such via the `model` field, and backed by a
-    measured backtest against baselines at /api/hotspots/forecast/backtest
-    rather than an unverified claim of accuracy.
+    Per-station forecast using the QuickML Gradient Boosting regression model.
+    The local linear-trend model remains the explicit service-failure fallback.
     """
     if not ensure_data_loaded(request):
         raise HTTPException(503, "Data not loaded")
@@ -1988,14 +2368,30 @@ async def get_hotspots_forecast(
     monthly = _monthly_counts_by_station(df)
     if not monthly:
         return []
+    capp = _try_catalyst_app(request)
     model_fn = FORECAST_MODELS.get(DEPLOYED_FORECAST_MODEL, _forecast_linear_trend)
+    station_features = []
+    for sid, series in monthly.items():
+        try:
+            station_features.append((sid, _quickml_forecast_features(sid, series)))
+        except ValueError:
+            continue
+    try:
+        quickml_predictions = _quickml_forecast_predictions(capp, station_features)
+        forecast_source = "quickml_pipeline"
+        forecast_model = "quickml_gb_regression"
+    except Exception as exc:
+        log.warning("QuickML forecast unavailable; using linear trend fallback: %s", exc)
+        quickml_predictions = {}
+        forecast_source = "local_fallback"
+        forecast_model = DEPLOYED_FORECAST_MODEL
     max_hist = float(max((s.values.max() for s in monthly.values()), default=1)) or 1.0
     results = []
     for sid, series in monthly.items():
         if len(series) < 3:
             continue
         y = series.values.astype(float)
-        next_val = model_fn(y)
+        next_val = quickml_predictions.get(sid, model_fn(y))
         baseline = float(y[-3:].mean()) or 1.0
         trend_pct = round(((next_val - baseline) / baseline) * 100, 1)
         std = _residual_std(model_fn, y)
@@ -2015,7 +2411,9 @@ async def get_hotspots_forecast(
             "trend_pct":           trend_pct,
             "horizon_days":        horizon_days,
             "training_window_months": len(series),
-            "model":               DEPLOYED_FORECAST_MODEL,
+            "model":               forecast_model,
+            "model_id":            QUICKML_FORECAST_MODEL_ID if forecast_source == "quickml_pipeline" else None,
+            "source":              forecast_source,
         })
     return sorted(results, key=lambda r: r["predicted_intensity"], reverse=True)[:100]
 
@@ -2040,7 +2438,7 @@ async def get_forecast_backtest(
     cache_set(capp, cache_key, result, ttl=300)
     return result
 
-# ─── GET /api/anomalies (Zia-style anomaly detection) ────────────────
+# ─── GET /api/anomalies (QuickML anomaly detection) ─────────────────
 
 @app.get("/api/anomalies")
 async def get_anomalies(
@@ -2055,7 +2453,41 @@ async def get_anomalies(
     cached = cache_get(capp, cache_key)
     if cached is not None:
         return cached
-    result = _compute_anomalies(_scope_filter(DB.cases, district_id, station_id))
+    scoped = _scope_filter(DB.cases, district_id, station_id)
+    monthly = _monthly_counts_by_station(scoped)
+    station_features = []
+    z_scores = {}
+    for sid, series in monthly.items():
+        try:
+            features, z_score = _quickml_anomaly_features(sid, series)
+        except ValueError:
+            continue
+        station_features.append((sid, features))
+        z_scores[sid] = z_score
+    try:
+        predictions = _quickml_anomaly_predictions(capp, station_features)
+        result = []
+        for sid, features in station_features:
+            if predictions[sid] != 1:
+                continue
+            z_score = z_scores[sid]
+            result.append({
+                "station_id": int(sid),
+                "station_name": station_name(int(sid)),
+                "z_score": z_score,
+                "current_count": features["current_count"],
+                "mean_count": round(features["rolling_mean_12"], 1),
+                "severity": "critical" if z_score >= 3.5 else "high",
+                "source": "quickml_pipeline",
+                "model_id": QUICKML_ANOMALY_MODEL_ID,
+            })
+        result.sort(key=lambda anomaly: anomaly["z_score"], reverse=True)
+    except Exception as exc:
+        log.warning("QuickML anomaly detection unavailable; using z-score fallback: %s", exc)
+        result = [
+            {**anomaly, "source": "local_fallback", "model_id": None}
+            for anomaly in _compute_anomalies(scoped)
+        ]
     cache_set(capp, cache_key, result)
     return result
 
@@ -2129,6 +2561,10 @@ QUICKML_TTS_ENDPOINT = os.environ.get(
     "https://api.catalyst.zoho.in/quickml/api/v1/models/zia/tts/synthesize",
 ).strip()
 QUICKML_TTS_TIMEOUT_SECONDS = float(os.environ.get("QUICKML_TTS_TIMEOUT_SECONDS", "90"))
+QUICKML_TRANSLATE_ENDPOINT = os.environ.get(
+    "QUICKML_TRANSLATE_ENDPOINT",
+    "https://api.catalyst.zoho.in/quickml/api/v1/models/zia/translate",
+).strip()
 _OPERATIONAL_PLAYBOOK_PATH = Path(__file__).parent / "data" / "garuda_operational_playbook.txt"
 
 def _normalize_connection_headers(response: dict) -> Optional[dict]:
@@ -2274,6 +2710,35 @@ def _quickml_synthesize_sync(text: str, language: str, capp=None) -> tuple[bytes
     if not audio.startswith(b"RIFF"):
         raise RuntimeError("QuickML speech synthesis returned invalid audio")
     return audio, audio_info
+
+def _quickml_translate_sync(text: str, source_language: str, target_language: str, capp=None) -> str:
+    if not QUICKML_TRANSLATE_ENDPOINT:
+        raise RuntimeError("QuickML translation endpoint is unavailable")
+    connection_headers = _quickml_connection_headers(capp)
+    if not connection_headers and not (QUICKML_ACCESS_TOKEN and QUICKML_ORG_ID):
+        raise RuntimeError("QuickML translation credentials are unavailable")
+    headers = {"Content-Type": "application/json", "Environment": "Development"}
+    if connection_headers:
+        headers.update(connection_headers)
+    else:
+        headers["Authorization"] = f"Zoho-oauthtoken {QUICKML_ACCESS_TOKEN}"
+        headers["CATALYST-ORG"] = QUICKML_ORG_ID
+    request = urllib.request.Request(
+        QUICKML_TRANSLATE_ENDPOINT,
+        data=json.dumps({"text": text, "src_lang": source_language, "tgt_lang": target_language}, ensure_ascii=False).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=QUICKML_TIMEOUT_SECONDS) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")[:500]
+        raise RuntimeError(f"QuickML translation returned HTTP {exc.code}: {detail}") from exc
+    translated = str(payload.get("translated_text") or "").strip() if isinstance(payload, dict) else ""
+    if not translated:
+        raise RuntimeError("QuickML translation returned no text")
+    return translated
 
 def _extract_quickml_text(payload) -> str:
     if isinstance(payload, str):

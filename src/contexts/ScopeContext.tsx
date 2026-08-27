@@ -1,6 +1,7 @@
 ﻿import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { fetchDistricts } from "@/lib/mock-api";
 import type { DistrictInfo, GeoBounds } from "@/lib/types";
+import { getSession } from "@/lib/auth";
 
 interface ScopeContextValue {
   /** null means statewide (no drilldown applied) */
@@ -20,7 +21,10 @@ const ScopeContext = createContext<ScopeContextValue>({
 });
 
 export function ScopeProvider({ children }: { children: ReactNode }) {
+  const officer = getSession();
+  const lockedDistrictId = officer?.designation === "ACP" ? officer.district_id ?? null : null;
   const [districtId, setDistrictIdState] = useState<number | null>(() => {
+    if (lockedDistrictId != null) return lockedDistrictId;
     const stored = localStorage.getItem("garuda_district_id");
     return stored ? Number(stored) : null;
   });
@@ -40,6 +44,10 @@ export function ScopeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setDistrictId = (id: number | null) => {
+    if (lockedDistrictId != null) {
+      setDistrictIdState(lockedDistrictId);
+      return;
+    }
     setDistrictIdState(id);
     if (id === null) localStorage.removeItem("garuda_district_id");
     else localStorage.setItem("garuda_district_id", String(id));

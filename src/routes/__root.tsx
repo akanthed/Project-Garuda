@@ -4,11 +4,13 @@ import {
   Link,
   createRootRouteWithContext,
   useRouter,
+  useRouterState,
 } from "@tanstack/react-router";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { ScopeProvider } from "@/contexts/ScopeContext";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { getSession } from "@/lib/auth";
 import { t } from "@/lib/i18n";
 
 function NotFoundComponent() {
@@ -78,11 +80,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const scopeKey = pathname === "/login" ? "anonymous" : getSession()?.badge ?? "anonymous";
 
   return (
     <ThemeProvider>
       <LanguageProvider>
-        <ScopeProvider>
+        <ScopeProvider key={scopeKey}>
           <QueryClientProvider client={queryClient}>
             <Outlet />
           </QueryClientProvider>

@@ -11,7 +11,7 @@
  */
 
 export type ClearanceLevel = "CLR-1" | "CLR-2" | "CLR-3" | "CLR-4" | "CLR-5" | "CLR-6" | "CLR-7";
-export type OfficerRole = "Constable" | "Head Constable" | "ASI" | "SI" | "Inspector" | "CI" | "DySP" | "SP" | "DGP";
+export type OfficerRole = "Constable" | "Head Constable" | "ASI" | "SI" | "Inspector" | "CI" | "ACP" | "DySP" | "SP" | "DGP";
 
 export interface Officer {
   badge:       string;
@@ -20,6 +20,7 @@ export interface Officer {
   station:     string;
   clearance:   ClearanceLevel;
   node:        string;
+  district_id?: number | null;
   /** Derived from clearance — controls which features are visible */
   canExport:   boolean;
   canSimulate: boolean;
@@ -88,6 +89,14 @@ const DEV_FALLBACK_REGISTRY: Record<string, { password: string; profile: Omit<Of
       badge: "KSP-DGP-0001", name: "DGP S. Rao",
       designation: "DGP", station: "KSP State HQ",
       clearance: "CLR-7", node: "KSP-HQ",
+    },
+  },
+  "KSP-ACP-0001": {
+    password: "acp2026",
+    profile: {
+      badge: "KSP-ACP-0001", name: "ACP M. Iyer",
+      designation: "ACP", station: "Bengaluru City Police HQ",
+      clearance: "CLR-6", node: "BLR-ACP", district_id: 1,
     },
   },
 } : {};
