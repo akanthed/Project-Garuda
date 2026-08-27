@@ -1,10 +1,12 @@
 """
-Test suite for Garuda Zia AutoML risk prediction endpoints and logic.
+Test suite for Garuda QuickML risk prediction endpoints and logic.
 Run from backend directory: 
   export PYTHONPATH=vendor && pytest test_risk_prediction.py -v
 Or:
   .venv-test/Scripts/python -m pytest test_risk_prediction.py -v --tb=short
 """
+
+import json
 
 import pytest
 import pandas as pd
@@ -151,20 +153,10 @@ class TestLocalRiskPrediction:
         assert result1["risk_class"] == result2["risk_class"]
 
 
-class TestZiaRiskPrediction:
-    """Test Zia AutoML integration with mocked responses."""
+class TestQuickMLRiskPrediction:
+    """Test QuickML pipeline prediction with mocked responses."""
 
-    def test_zia_prediction_valid_response(self):
-        """Parse a valid Zia classification_result response."""
-        mock_capp = Mock()
-        mock_capp.zia().auto_ml.return_value = {
-            "classification_result": {
-                "low": 81.51,
-                "medium": 18.49,
-                "high": 0.0
-            }
-        }
-        
+    def test_quickml_prediction_valid_response(self):
         features = {
             "gravity_level": 2,
             "repeat_accused_count": 1,
@@ -175,54 +167,49 @@ class TestZiaRiskPrediction:
             "crime_type_volume": 5000,
             "days_since_latest": 100,
         }
-        result = main._zia_risk_prediction(mock_capp, features)
-        
-        assert result["risk_class"] in ["low", "medium", "high"]
-        assert "scores" in result
-        assert isinstance(result["scores"], dict)
+        response = Mock()
+        response.read.return_value = json.dumps({"result": [2], "likelihood_score": [0.94]}).encode()
+        response.__enter__ = Mock(return_value=response)
+        response.__exit__ = Mock(return_value=False)
+        with (
+            patch.object(main, "QUICKML_RISK_ENDPOINT_KEY", "test-key"),
+            patch.object(main, "_quickml_connection_headers", return_value={
+                "Authorization": "Zoho-oauthtoken test",
+                "CATALYST-ORG": "123",
+            }),
+            patch.object(main.urllib.request, "urlopen", return_value=response) as urlopen,
+        ):
+            result = main._quickml_risk_prediction(Mock(), features)
 
-    def test_zia_prediction_no_catalyst_app(self):
-        """Raise RuntimeError if capp is None."""
-        features = {"gravity_level": 2, "repeat_accused_count": 1}
-        with pytest.raises(RuntimeError, match="unavailable"):
-            main._zia_risk_prediction(None, features)
+        request = urlopen.call_args.args[0]
+        assert json.loads(request.data) == {"data": features}
+        assert result == {"risk_class": "high", "scores": {"high": 94.0}}
 
-    def test_zia_prediction_no_model_id(self):
-        """Raise RuntimeError if ZIA_RISK_MODEL_ID is not set."""
-        mock_capp = Mock()
-        features = {"gravity_level": 2}
-        
-        with patch.object(main, "ZIA_RISK_MODEL_ID", ""):
+    def test_quickml_prediction_requires_endpoint_key(self):
+        with patch.object(main, "QUICKML_RISK_ENDPOINT_KEY", ""):
             with pytest.raises(RuntimeError, match="unavailable"):
-                main._zia_risk_prediction(mock_capp, features)
+                main._quickml_risk_prediction(Mock(), {"gravity_level": 2})
 
-    def test_zia_prediction_empty_response(self):
-        """Raise RuntimeError if classification_result is empty or missing."""
-        mock_capp = Mock()
-        mock_capp.zia().auto_ml.return_value = {"classification_result": {}}
-        
-        features = {"gravity_level": 2, "repeat_accused_count": 1}
-        with pytest.raises(RuntimeError, match="no classification result"):
-            main._zia_risk_prediction(mock_capp, features)
-
-    def test_zia_prediction_numeric_strings(self):
-        """Handle numeric scores as strings (common in REST APIs)."""
-        mock_capp = Mock()
-        mock_capp.zia().auto_ml.return_value = {
-            "classification_result": {
-                "low": "81.51",
-                "medium": "18.49",
-                "high": "0.0"
-            }
-        }
-        
-        features = {"gravity_level": 2, "repeat_accused_count": 1}
-        result = main._zia_risk_prediction(mock_capp, features)
-        
-        assert result["risk_class"] in ["low", "medium", "high"]
-        # Scores should be normalized to float
-        for score in result["scores"].values():
-            assert isinstance(score, float)
+    @pytest.mark.parametrize("payload", [
+        {},
+        {"result": []},
+        {"result": [9], "likelihood_score": [0.5]},
+    ])
+    def test_quickml_prediction_rejects_invalid_response(self, payload):
+        response = Mock()
+        response.read.return_value = json.dumps(payload).encode()
+        response.__enter__ = Mock(return_value=response)
+        response.__exit__ = Mock(return_value=False)
+        with (
+            patch.object(main, "QUICKML_RISK_ENDPOINT_KEY", "test-key"),
+            patch.object(main, "_quickml_connection_headers", return_value={
+                "Authorization": "Zoho-oauthtoken test",
+                "CATALYST-ORG": "123",
+            }),
+            patch.object(main.urllib.request, "urlopen", return_value=response),
+            pytest.raises(RuntimeError, match="classification result"),
+        ):
+            main._quickml_risk_prediction(Mock(), {"gravity_level": 2})
 
 
 class TestEndpointIntegration:
@@ -250,7 +237,7 @@ class TestEndpointIntegration:
         
         response = {
             "case_master_id": case_id,
-            "model_id": main.ZIA_RISK_MODEL_ID,
+            "model_id": main.QUICKML_RISK_MODEL_ID,
             "model_name": "Garuda Case Risk Classifier",
             "source": "local_fallback",
             "features": features,

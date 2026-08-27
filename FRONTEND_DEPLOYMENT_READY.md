@@ -10,10 +10,10 @@
 
 ## What Was Completed
 
-### 1. **Backend Risk Endpoint** (Already Deployed)
-- ✅ `GET /api/risk/{case_master_id}` deployed to Zoho AppSail
-- ✅ Integrates with Zia AutoML Model ID: `52319000000096025`
-- ✅ Falls back to local rule-based scoring if Zia unavailable
+### 1. **Backend Risk Endpoint**
+- ✅ `GET /api/risk/{case_master_id}` implemented for Zoho AppSail
+- ✅ Integrates with QuickML Model ID: `6441000000007053`
+- ✅ Falls back to local rule-based scoring if QuickML is unavailable
 - ✅ Returns case risk predictions with 8 feature signals
 - ✅ Protected with officer session authentication
 - ✅ All 19 backend tests passing

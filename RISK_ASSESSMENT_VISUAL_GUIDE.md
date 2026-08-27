@@ -11,7 +11,7 @@
 │                                                              │
 │  CASE-12345                            [ಕನ್ನಡ]  [CLOSE]     │
 │  Theft at Whitefield Market                                │
-│  Model ID: 52319000000096025                               │
+│  Model ID: 6441000000007053                               │
 │                                                              │
 ├─────────────────────────────────────────────────────────────┤
 │  CASE DETAILS                                               │
@@ -37,7 +37,7 @@
 │    • Arrest Rate: 75% (3 of 4 arrested)                    │
 │    • Station Case Volume: 245 cases                        │
 │                                                              │
-│  🤖 Zia AutoML prediction (Model ID: 52319000000096025)    │
+│  🤖 QuickML trained model (ID: 6441000000007053)           │
 │     Confidence in ML scoring: High                         │
 │                                                              │
 │  ⚠️  Model prediction for investigation support only.       │
@@ -97,8 +97,8 @@
 │    • Arrest Rate: 67%                │
 │    • Station Case Volume: 89         │
 │                                      │
-│  🤖 Zia AutoML prediction           │
-│     (Model ID: 52319000000096025)    │
+│  🤖 QuickML trained model            │
+│     (Model ID: 6441000000007053)    │
 └──────────────────────────────────────┘
 ```
 
@@ -115,8 +115,8 @@
 │    • Arrest Rate: 40%                │
 │    • Station Case Volume: 156        │
 │                                      │
-│  🤖 Zia AutoML prediction           │
-│     (Model ID: 52319000000096025)    │
+│  🤖 QuickML trained model            │
+│     (Model ID: 6441000000007053)    │
 │                                      │
 │  ⚠️  Alert: High-risk case. Ensure   │
 │      proper escalation procedures.   │
@@ -223,18 +223,18 @@ Each risk factor contributes to the final score:
 
 ## 🔄 Data Source Indicators
 
-### When Zia AutoML Model is Available ✅
+### When QuickML Model is Available ✅
 
 ```
-🤖 Zia AutoML prediction (Model ID: 52319000000096025)
+🤖 QuickML trained model (Model ID: 6441000000007053)
 ```
 
 **Shows when**:
-- Catalyst backend has initialized Zia SDK
-- Model ID environment variable set
-- Zia returns valid response
+- QuickML endpoint key is configured in AppSail
+- Catalyst Connections supplies valid OAuth headers
+- QuickML returns a valid response
 
-**Confidence**: High (trained on 100k synthetic cases, 94.1% accuracy)
+**Evaluation**: 94.53% accuracy and 91.81% F1 on the synthetic evaluation split
 
 ### When Local Fallback is Active ⚡
 

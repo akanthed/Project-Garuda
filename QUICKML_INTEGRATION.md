@@ -28,13 +28,13 @@ The default output columns are `example_id`, `query`, `action`, `crime_type`, `a
 
 This dataset is optional for the current Qwen LLM Serving adapter. LLM Serving uses the pre-trained model and does not train on this CSV.
 
-### Legacy Zia AutoML Wizard
+### QuickML Case Risk Pipeline
 
 Do not upload `quickml_training.csv` on **Zia > AutoML > Create Model**. Its natural-language `query` column is a String, and Zia AutoML does not allow String columns as training inputs or targets.
 
 The earlier `Garuda Intent Classifier` experiment should not be used. Zia produced near-random accuracy with all inputs and rejected the term-only retraining because it considered those columns insufficiently contributive. AutoML is not the right component for natural-language intent routing.
 
-For a meaningful Zia AutoML integration, upload:
+The deployed case-risk classifier uses:
 
 ```text
 backend/data/zia_risk_training.csv
@@ -46,13 +46,17 @@ Regenerate it with:
 backend\.venv-gen\Scripts\python.exe backend\generate_zia_risk_training.py
 ```
 
-The dataset contains 100,000 balanced synthetic case records and relational features derived from cases, accused, arrests, station volume, and recency. It is ASCII, has no BOM or missing values, and contains numeric/categorical features only. In the wizard:
+The generator produces 100,000 balanced synthetic case records with the exact eight features sent by `/api/risk/{case_master_id}`. The numeric target is `risk_class_id`, mapped as `0=low`, `1=medium`, and `2=high`. In QuickML:
 
-1. Use model name `Garuda Case Risk Classifier`.
-2. Select `risk_class` as the target.
-3. Confirm the model type is **Multi-Class Classification**.
-4. Select all 13 remaining columns as inputs. If Catalyst limits the selection, prioritize `gravity_level`, `repeat_accused_count`, `accused_count`, `arrest_count`, `arrest_rate_percent`, `station_case_volume`, `crime_type_volume`, and `days_since_latest`.
-5. Train and retain the model only if its held-out evaluation is materially above the 33.3% random baseline.
+1. Dataset: `garuda_case_risk_numeric_v1` (`6441000000008009`).
+2. Prediction pipeline: `Garuda Case Risk Prediction v2` (`6441000000007050`).
+3. Target: `risk_class_id`; algorithm: Random Forest Classification with 100 estimators and model explanations enabled.
+4. Model: `Garuda Case Risk Prediction v2 model` (`6441000000007053`).
+5. Published endpoint: `garuda-case-risk-v1` (`6441000000007074`).
+
+Catalyst evaluation for V1: accuracy 94.53%, precision/recall/F1 91.81%, AUC 93.85%. The built-in endpoint tester returned HTTP 200 using the documented `{"data": {...features}}` request and `{"result":[1],"likelihood_score":[1]}` response shape.
+
+The backend uses `QUICKML_RISK_ENDPOINT_KEY` for the endpoint-specific key and the existing Catalyst Connection for OAuth and organization headers. The key is environment-only and must never be committed.
 
 This model estimates a synthetic case-priority class for supervisor review. It must be described as prototype decision support, not validated crime prediction or an automated enforcement decision.
 
@@ -63,7 +67,7 @@ For reference, the deprecated compatibility file used these settings:
 3. Select `crime_type_id`, `area_id`, `time_window_id`, `language_id`, `has_case_terms`, `has_hotspot_terms`, and `has_network_terms` as inputs.
 4. Do not integrate that model or use its score in the presentation.
 
-Zoho documents Zia AutoML as unavailable in the IN data center. If `zia_automl_training.csv` still produces **Invalid Input: You cannot perform this action**, the blocker is regional/service entitlement rather than CSV formatting. Continue with QuickML LLM Serving, which Zoho documents as available in IN.
+The older `capp.zia().auto_ml(...)` integration is not used; the trained classifier is a QuickML pipeline endpoint.
 
 ## Console Setup
 

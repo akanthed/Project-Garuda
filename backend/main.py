@@ -145,7 +145,13 @@ def zcql_query(capp, sql: str) -> list[dict]:
 _LOCAL_CACHE: dict[str, tuple[float, object]] = {}
 _ACCUSED_IDENTITY_COUNTS: Optional[pd.Series] = None
 CACHE_TTL_SECONDS = 30
-ZIA_RISK_MODEL_ID = os.environ.get("ZIA_RISK_MODEL_ID", "52319000000096025").strip()
+QUICKML_RISK_MODEL_ID = os.environ.get("QUICKML_RISK_MODEL_ID", "6441000000007053").strip()
+QUICKML_RISK_ENDPOINT = os.environ.get(
+    "QUICKML_RISK_ENDPOINT",
+    "https://api.catalyst.zoho.in/quickml/v1/project/52319000000013050/endpoints/predict?explainModel=true",
+).strip()
+QUICKML_RISK_ENDPOINT_KEY = os.environ.get("QUICKML_RISK_ENDPOINT_KEY", "").strip()
+_RISK_CLASS_LABELS = {0: "low", 1: "medium", 2: "high"}
 
 def cache_get(capp, key: str):
     if capp is not None:
@@ -232,15 +238,48 @@ def _local_risk_prediction(features: dict[str, int]) -> dict:
     risk_class = "high" if score >= 14 else ("medium" if score >= 10 else "low")
     return {"risk_class": risk_class, "scores": {risk_class: 100.0}}
 
-def _zia_risk_prediction(capp, features: dict[str, int]) -> dict:
-    if capp is None or not ZIA_RISK_MODEL_ID:
-        raise RuntimeError("Zia AutoML is unavailable")
-    result = capp.zia().auto_ml(int(ZIA_RISK_MODEL_ID), features)
-    scores = result.get("classification_result", result) if isinstance(result, dict) else {}
-    if not isinstance(scores, dict) or not scores:
-        raise RuntimeError("Zia AutoML returned no classification result")
-    normalized_scores = {str(label): float(score) for label, score in scores.items()}
-    return {"risk_class": max(normalized_scores, key=normalized_scores.get), "scores": normalized_scores}
+def _quickml_risk_prediction(capp, features: dict[str, int]) -> dict:
+    if not QUICKML_RISK_ENDPOINT or not QUICKML_RISK_ENDPOINT_KEY:
+        raise RuntimeError("QuickML risk endpoint is unavailable")
+    connection_headers = _quickml_connection_headers(capp)
+    if not connection_headers and not (QUICKML_ACCESS_TOKEN and QUICKML_ORG_ID):
+        raise RuntimeError("QuickML risk credentials are unavailable")
+
+    headers = {
+        "Content-Type": "application/json",
+        "X-QUICKML-ENDPOINT-KEY": QUICKML_RISK_ENDPOINT_KEY,
+        "Environment": "Development",
+    }
+    if connection_headers:
+        headers.update(connection_headers)
+    else:
+        headers["Authorization"] = f"Zoho-oauthtoken {QUICKML_ACCESS_TOKEN}"
+        headers["CATALYST-ORG"] = QUICKML_ORG_ID
+    request = urllib.request.Request(
+        QUICKML_RISK_ENDPOINT,
+        data=json.dumps({"data": features}).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=QUICKML_TIMEOUT_SECONDS) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")[:500]
+        raise RuntimeError(f"QuickML risk endpoint returned HTTP {exc.code}: {detail}") from exc
+
+    results = payload.get("result") if isinstance(payload, dict) else None
+    likelihoods = payload.get("likelihood_score") if isinstance(payload, dict) else None
+    if not isinstance(results, list) or not results:
+        raise RuntimeError("QuickML risk endpoint returned no classification result")
+    try:
+        class_id = int(results[0])
+        risk_class = _RISK_CLASS_LABELS[class_id]
+        likelihood = float(likelihoods[0]) if isinstance(likelihoods, list) and likelihoods else 1.0
+    except (KeyError, TypeError, ValueError) as exc:
+        raise RuntimeError("QuickML risk endpoint returned an invalid classification result") from exc
+    confidence_percent = likelihood * 100 if likelihood <= 1 else likelihood
+    return {"risk_class": risk_class, "scores": {risk_class: confidence_percent}}
 
 # ─── Session tokens (HMAC-signed, no external deps) ──────────────────────────
 
@@ -2081,6 +2120,15 @@ QUICKML_RAG_DOCUMENT_IDS = [
     value.strip() for value in os.environ.get("QUICKML_RAG_DOCUMENT_IDS", "6441000000004002").split(",")
     if value.strip()
 ]
+QUICKML_STT_ENDPOINT = os.environ.get(
+    "QUICKML_STT_ENDPOINT",
+    "https://api.catalyst.zoho.in/quickml/api/v1/models/zia/audio/transcribe",
+).strip()
+QUICKML_TTS_ENDPOINT = os.environ.get(
+    "QUICKML_TTS_ENDPOINT",
+    "https://api.catalyst.zoho.in/quickml/api/v1/models/zia/tts/synthesize",
+).strip()
+QUICKML_TTS_TIMEOUT_SECONDS = float(os.environ.get("QUICKML_TTS_TIMEOUT_SECONDS", "90"))
 _OPERATIONAL_PLAYBOOK_PATH = Path(__file__).parent / "data" / "garuda_operational_playbook.txt"
 
 def _normalize_connection_headers(response: dict) -> Optional[dict]:
@@ -2138,6 +2186,94 @@ def _quickml_connection_headers(capp) -> Optional[dict]:
         # debug-level messages never reach Catalyst's Application logs.
         log.info(f"QuickML Connections lookup unavailable, falling back to static token: {exc}")
         return None
+
+def _quickml_transcribe_sync(
+    audio: bytes,
+    filename: str,
+    content_type: str,
+    language: str,
+    capp=None,
+) -> dict:
+    if not QUICKML_STT_ENDPOINT:
+        raise RuntimeError("QuickML transcription endpoint is unavailable")
+    connection_headers = _quickml_connection_headers(capp)
+    if not connection_headers and not (QUICKML_ACCESS_TOKEN and QUICKML_ORG_ID):
+        raise RuntimeError("QuickML transcription credentials are unavailable")
+
+    boundary = f"garuda-{uuid.uuid4().hex}"
+    safe_filename = re.sub(r"[^A-Za-z0-9._-]", "_", filename) or "voice.wav"
+    body = b"".join([
+        f"--{boundary}\r\n".encode(),
+        f'Content-Disposition: form-data; name="file"; filename="{safe_filename}"\r\n'.encode(),
+        f"Content-Type: {content_type}\r\n\r\n".encode(),
+        audio,
+        f"\r\n--{boundary}\r\n".encode(),
+        b'Content-Disposition: form-data; name="language"\r\n\r\n',
+        language.encode("ascii"),
+        f"\r\n--{boundary}--\r\n".encode(),
+    ])
+    headers = {
+        "Content-Type": f"multipart/form-data; boundary={boundary}",
+        "Environment": "Development",
+    }
+    if connection_headers:
+        headers.update(connection_headers)
+    else:
+        headers["Authorization"] = f"Zoho-oauthtoken {QUICKML_ACCESS_TOKEN}"
+        headers["CATALYST-ORG"] = QUICKML_ORG_ID
+    request = urllib.request.Request(QUICKML_STT_ENDPOINT, data=body, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(request, timeout=QUICKML_TIMEOUT_SECONDS) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")[:500]
+        raise RuntimeError(f"QuickML transcription returned HTTP {exc.code}: {detail}") from exc
+    text = str(payload.get("text") or "").strip() if isinstance(payload, dict) else ""
+    if not text:
+        raise RuntimeError("QuickML transcription returned no text")
+    return {
+        "text": text,
+        "language": str(payload.get("language") or language),
+        "processing_time_ms": payload.get("processing_time_ms"),
+        "source": "quickml_stt",
+    }
+
+def _quickml_synthesize_sync(text: str, language: str, capp=None) -> tuple[bytes, Optional[str]]:
+    if not QUICKML_TTS_ENDPOINT:
+        raise RuntimeError("QuickML speech synthesis endpoint is unavailable")
+    connection_headers = _quickml_connection_headers(capp)
+    if not connection_headers and not (QUICKML_ACCESS_TOKEN and QUICKML_ORG_ID):
+        raise RuntimeError("QuickML speech synthesis credentials are unavailable")
+    body = {
+        "text": text,
+        "language": language,
+        "speaker": "Anu" if language == "kn" else "Mary",
+        "pitch": "moderate",
+        "speed": "moderate",
+        "emotion": "neutral",
+    }
+    headers = {"Content-Type": "application/json", "Environment": "Development"}
+    if connection_headers:
+        headers.update(connection_headers)
+    else:
+        headers["Authorization"] = f"Zoho-oauthtoken {QUICKML_ACCESS_TOKEN}"
+        headers["CATALYST-ORG"] = QUICKML_ORG_ID
+    request = urllib.request.Request(
+        QUICKML_TTS_ENDPOINT,
+        data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=QUICKML_TTS_TIMEOUT_SECONDS) as response:
+            audio = response.read()
+            audio_info = response.headers.get("X-Audio-Info")
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")[:500]
+        raise RuntimeError(f"QuickML speech synthesis returned HTTP {exc.code}: {detail}") from exc
+    if not audio.startswith(b"RIFF"):
+        raise RuntimeError("QuickML speech synthesis returned invalid audio")
+    return audio, audio_info
 
 def _extract_quickml_text(payload) -> str:
     if isinstance(payload, str):
@@ -3076,6 +3212,59 @@ async def ask_garuda(body: AskRequest, request: Request):
             plan = _rule_plan(body.query)
     return _run_agent(body.query, plan, source, officer.get("badge"), capp)
 
+@app.post("/api/voice/transcribe")
+async def transcribe_voice(
+    request: Request,
+    file: UploadFile = File(...),
+    language: Literal["en", "kn", "hi"] = "en",
+):
+    require_session(request)
+    allowed_types = {
+        "audio/wav", "audio/x-wav", "audio/mpeg", "audio/mp3",
+        "audio/webm", "audio/ogg", "audio/mp4",
+    }
+    content_type = (file.content_type or "").lower().split(";", 1)[0]
+    if content_type not in allowed_types:
+        raise HTTPException(415, "Unsupported audio format")
+    audio = await file.read(10 * 1024 * 1024 + 1)
+    if not audio:
+        raise HTTPException(400, "Audio file is empty")
+    if len(audio) > 10 * 1024 * 1024:
+        raise HTTPException(413, "Audio file exceeds 10 MB")
+    capp = _try_catalyst_app(request)
+    try:
+        return await asyncio.to_thread(
+            _quickml_transcribe_sync,
+            audio,
+            file.filename or "voice.wav",
+            content_type,
+            language,
+            capp,
+        )
+    except Exception as exc:
+        log.info(f"QuickML transcription unavailable: {exc}")
+        raise HTTPException(502, "Voice transcription is temporarily unavailable")
+
+class VoiceSynthesisRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=100)
+    language: Literal["en", "kn"] = "en"
+
+@app.post("/api/voice/synthesize")
+async def synthesize_voice(body: VoiceSynthesisRequest, request: Request):
+    require_session(request)
+    capp = _try_catalyst_app(request)
+    try:
+        audio, audio_info = await asyncio.to_thread(
+            _quickml_synthesize_sync, body.text.strip(), body.language, capp
+        )
+    except Exception as exc:
+        log.info(f"QuickML speech synthesis unavailable: {exc}")
+        raise HTTPException(502, "Speech synthesis is temporarily unavailable")
+    headers = {"Cache-Control": "no-store", "Content-Disposition": "inline; filename=garuda-answer.wav"}
+    if audio_info:
+        headers["X-Audio-Info"] = audio_info
+    return StreamingResponse(BytesIO(audio), media_type="audio/wav", headers=headers)
+
 @app.get("/api/agent/quickml-status")
 async def get_quickml_status(request: Request):
     require_session(request)
@@ -3139,8 +3328,8 @@ async def get_case_brief(case_master_id: int, request: Request):
         features = _risk_features(case_master_id)
         capp = _try_catalyst_app(request)
         try:
-            risk = _zia_risk_prediction(capp, features)
-            risk_source = "zia_automl"
+            risk = _quickml_risk_prediction(capp, features)
+            risk_source = "quickml_pipeline"
         except Exception:
             risk = _local_risk_prediction(features)
             risk_source = "local_fallback"
@@ -3945,16 +4134,16 @@ async def predict_case_risk(case_master_id: int, request: Request):
         raise HTTPException(404, "Case not found")
 
     capp = _try_catalyst_app(request)
-    source = "zia_automl"
+    source = "quickml_pipeline"
     try:
-        prediction = _zia_risk_prediction(capp, features)
+        prediction = _quickml_risk_prediction(capp, features)
     except Exception as exc:
-        log.info(f"Zia risk prediction unavailable; using transparent local fallback: {exc}")
+        log.info(f"QuickML risk prediction unavailable; using transparent local fallback: {exc}")
         prediction = _local_risk_prediction(features)
         source = "local_fallback"
     return {
         "case_master_id": case_master_id,
-        "model_id": ZIA_RISK_MODEL_ID if source == "zia_automl" else None,
+        "model_id": QUICKML_RISK_MODEL_ID if source == "quickml_pipeline" else None,
         "model_name": "Garuda Case Risk Classifier",
         "source": source,
         "features": features,

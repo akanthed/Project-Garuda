@@ -1,5 +1,5 @@
 ﻿import { useEffect, useRef, useState } from "react";
-import { Bot, LogOut, FileDown, Loader2, ArrowRight, Moon, Sun, Send, Sparkles, ShieldCheck, X } from "lucide-react";
+import { Bot, LogOut, FileDown, Loader2, ArrowRight, Mic, Moon, Square, Sun, Send, Sparkles, ShieldCheck, Volume2, X } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "@tanstack/react-router";
 import { logout, type Officer } from "@/lib/auth";
@@ -8,7 +8,8 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useScope } from "@/contexts/ScopeContext";
 import { useSimulator } from "@/contexts/SimulatorContext";
 import { t, districtName, type TranslationKey } from "@/lib/i18n";
-import { exportBrief, askGaruda } from "@/lib/mock-api";
+import { exportBrief, askGaruda, synthesizeVoice, transcribeVoice } from "@/lib/mock-api";
+import { startWavRecording, type WavRecording } from "@/lib/wav-recorder";
 import {
   Dialog,
   DialogClose,
@@ -58,6 +59,19 @@ const TRACE_STEP_LABELS: Record<string, TranslationKey> = {
   answer: "ask_trace_answer",
 };
 
+export function speechChunks(text: string, maxLength = 40): string[] {
+  const chunks: string[] = [];
+  let remaining = text.replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
+  while (remaining.length > maxLength) {
+    const space = remaining.lastIndexOf(" ", maxLength);
+    const splitAt = space > 0 ? space : maxLength;
+    chunks.push(remaining.slice(0, splitAt).trim());
+    remaining = remaining.slice(splitAt).trim();
+  }
+  if (remaining) chunks.push(remaining);
+  return chunks;
+}
+
 export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
   const navigate = useNavigate();
   const { locale, toggle } = useLanguage();
@@ -67,15 +81,116 @@ export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
   const [q, setQ] = useState("");
   const [exporting, setExporting] = useState(false);
   const [asking, setAsking] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
+  const [speechLoadingId, setSpeechLoadingId] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [conversation, setConversation] = useState<ChatMessage[]>([]);
   const [expandedTraces, setExpandedTraces] = useState<Set<string>>(new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const wavRecordingRef = useRef<WavRecording | null>(null);
+  const recordingTimerRef = useRef<number | null>(null);
+  const answerAudioRef = useRef<HTMLAudioElement | null>(null);
+  const answerAudioUrlRef = useRef<string | null>(null);
+  const speechRunRef = useRef(0);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [conversation, asking]);
+
+  useEffect(() => () => {
+    if (recordingTimerRef.current) window.clearTimeout(recordingTimerRef.current);
+    wavRecordingRef.current?.cancel();
+    answerAudioRef.current?.pause();
+    if (answerAudioUrlRef.current) URL.revokeObjectURL(answerAudioUrlRef.current);
+  }, []);
+
+  const stopSpeaking = () => {
+    speechRunRef.current += 1;
+    answerAudioRef.current?.pause();
+    answerAudioRef.current = null;
+    if (answerAudioUrlRef.current) URL.revokeObjectURL(answerAudioUrlRef.current);
+    answerAudioUrlRef.current = null;
+    setSpeakingMessageId(null);
+  };
+
+  const handleSpeak = async (message: ChatMessage) => {
+    if (speakingMessageId === message.id) {
+      stopSpeaking();
+      return;
+    }
+    stopSpeaking();
+    const speechRun = speechRunRef.current;
+    setSpeechLoadingId(message.id);
+    try {
+      const language = message.result?.language === "kn" ? "kn" : "en";
+      for (const chunk of speechChunks(message.text)) {
+        const audioBlob = await synthesizeVoice(chunk, language);
+        if (speechRun !== speechRunRef.current) return;
+        setSpeakingMessageId(message.id);
+        setSpeechLoadingId(null);
+        const url = URL.createObjectURL(audioBlob);
+        const audio = new Audio(url);
+        answerAudioRef.current = audio;
+        answerAudioUrlRef.current = url;
+        await new Promise<void>((resolve, reject) => {
+          audio.onended = () => resolve();
+          audio.onerror = reject;
+          void audio.play().catch(reject);
+        });
+        URL.revokeObjectURL(url);
+        answerAudioRef.current = null;
+        answerAudioUrlRef.current = null;
+      }
+      if (speechRun === speechRunRef.current) stopSpeaking();
+    } catch {
+      stopSpeaking();
+      toast.error(t("ask_speech_failed", locale));
+    } finally {
+      setSpeechLoadingId(null);
+    }
+  };
+
+  const stopRecording = async () => {
+    if (recordingTimerRef.current) window.clearTimeout(recordingTimerRef.current);
+    recordingTimerRef.current = null;
+    const activeRecording = wavRecordingRef.current;
+    if (!activeRecording) return;
+    wavRecordingRef.current = null;
+    setRecording(false);
+    setTranscribing(true);
+    try {
+      const audio = await activeRecording.stop();
+      const transcript = await transcribeVoice(audio, locale);
+      setQ(transcript.text);
+      inputRef.current?.focus();
+      toast.success(t("ask_voice_ready", locale));
+    } catch {
+      toast.error(t("ask_voice_failed", locale));
+    } finally {
+      setTranscribing(false);
+    }
+  };
+
+  const handleVoice = async () => {
+    if (recording) {
+      void stopRecording();
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia || typeof AudioContext === "undefined") {
+      toast.error(t("ask_voice_unavailable", locale));
+      return;
+    }
+    try {
+      wavRecordingRef.current = await startWavRecording({ onSilence: () => void stopRecording() });
+      setRecording(true);
+      recordingTimerRef.current = window.setTimeout(() => void stopRecording(), 15_000);
+    } catch {
+      toast.error(t("ask_voice_permission", locale));
+    }
+  };
 
   const toggleTrace = (id: string) => {
     setExpandedTraces((prev) => {
@@ -218,7 +333,15 @@ export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
                         </span>
                       </div>
                     )}
-                    <p className="leading-5">{message.text}</p>
+                    <div className="flex items-start gap-2">
+                      <p className="min-w-0 flex-1 leading-5">{message.text}</p>
+                      {message.role === "assistant" && (
+                        <button type="button" onClick={() => void handleSpeak(message)} disabled={speechLoadingId === message.id} title={t(speakingMessageId === message.id ? "ask_stop_speaking" : "ask_speak", locale)} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground transition hover:border-primary/40 hover:text-primary disabled:opacity-50">
+                          {speechLoadingId === message.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : speakingMessageId === message.id ? <Square className="h-3 w-3 fill-current" /> : <Volume2 className="h-3.5 w-3.5" />}
+                          <span className="sr-only">{t(speakingMessageId === message.id ? "ask_stop_speaking" : "ask_speak", locale)}</span>
+                        </button>
+                      )}
+                    </div>
                     {message.result?.knowledge_source && (
                       <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[9px]">
                         <span className="rounded bg-cyan-500/10 px-1.5 py-1 font-semibold uppercase text-cyan-600 dark:text-cyan-400">
@@ -339,6 +462,10 @@ export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
               </div>
               <form onSubmit={handleAsk} className="flex shrink-0 items-center gap-2 border-t border-border bg-background/40 p-2.5">
                 <input ref={inputRef} value={q} onChange={(e) => setQ(e.target.value)} className="min-w-0 flex-1 bg-transparent px-2 py-1.5 text-sm text-foreground outline-none placeholder:text-muted-foreground" placeholder={t("ask_placeholder", locale)} />
+                <button type="button" onClick={handleVoice} disabled={transcribing || asking} aria-pressed={recording} title={t(recording ? "ask_voice_stop" : "ask_voice_start", locale)} className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md border transition disabled:opacity-50 ${recording ? "border-red-500/50 bg-red-500/10 text-red-500" : "border-border text-muted-foreground hover:border-primary/40 hover:text-primary"}`}>
+                  {transcribing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : recording ? <Square className="h-3 w-3 fill-current" /> : <Mic className="h-3.5 w-3.5" />}
+                  <span className="sr-only">{t(recording ? "ask_voice_stop" : "ask_voice_start", locale)}</span>
+                </button>
                 <button type="submit" disabled={!q.trim() || asking} title={t("ask_send", locale)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50"><Send className="h-3.5 w-3.5" /></button>
               </form>
           </DialogContent>

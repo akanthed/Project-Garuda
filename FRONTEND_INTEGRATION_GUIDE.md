@@ -12,7 +12,7 @@
     - `risk_assessment_title`: "Risk Assessment" / "ಅಪಾಯ ಮೌಲ್ಯಮಾಪನ"
     - `risk_model_name`: "Model" / "ಮಾದರಿ"
     - `risk_confidence`: "Confidence" / "ವಿಶ್ವಾಸ"
-    - `risk_source_zia`: "Zia AutoML prediction" / "Zia AutoML ಭವಿಷ್ಯದ್ವಾಣಿ"
+    - `risk_source_quickml`: "QuickML trained model" / "QuickML ತರಬೇತಿ ಪಡೆದ ಮಾದರಿ"
     - `risk_source_fallback`: "Local rule-based analysis" / "ಸ್ಥಳೀಯ ನಿಯಮ-ಆಧಾರಿತ ವಿಶ್ಲೇಷಣೆ"
     - `risk_contributing_factors`: "Contributing Factors" / "ಅವದಾನ ಅಂಶಗಳು"
     - `risk_gravity_level`: "Offence Gravity" / "ಅಪರಾಧದ ಗಂಭೀರತೆ"
@@ -27,7 +27,7 @@
 - **File**: [src/components/dashboard/RiskAssessment.tsx](src/components/dashboard/RiskAssessment.tsx)
 - **Status**: ✅ Complete
 - **Features**:
-  - Fetches Zia AutoML predictions from `/api/risk/{caseMasterId}`
+  - Fetches QuickML pipeline predictions from `/api/risk/{caseMasterId}`
   - Displays risk class (LOW/MEDIUM/HIGH) with color coding:
     - 🟢 LOW: Green indicator
     - 🟡 MEDIUM: Amber/yellow indicator
@@ -81,8 +81,8 @@
      - Arrest Rate
      - Station Case Volume
    - 🤖 **Model Source**: 
-     - ✨ "Zia AutoML prediction (Model ID: 52319000000096025)" if Zia available
-     - ⚡ "Local rule-based analysis" if Zia unavailable (fallback)
+    - ✨ "QuickML trained model (ID: 6441000000007053)" if QuickML is available
+    - ⚡ "Local rule-based analysis" if QuickML is unavailable (fallback)
    - ⚠️ **Advisory**: Disclaimer that human review is required
 
 ### Backend Integration
@@ -96,9 +96,9 @@ GET /api/risk/{case_master_id}
 ```json
 {
   "case_master_id": 12345,
-  "model_id": "52319000000096025",
-  "model_name": "Zia AutoML",
-  "source": "zia_automl",
+  "model_id": "6441000000007053",
+  "model_name": "Garuda Case Risk Classifier",
+  "source": "quickml_pipeline",
   "risk_class": "high",
   "confidence": 0.94,
   "scores": {
@@ -172,7 +172,7 @@ GET /api/risk/{case_master_id}
   "case_master_id": number,
   "model_id": string,
   "model_name": string,
-  "source": "zia_automl" | "local_fallback",
+  "source": "quickml_pipeline" | "local_fallback",
   "risk_class": "low" | "medium" | "high",
   "confidence": number (0-1),
   "scores": {
@@ -240,7 +240,8 @@ CaseDetailDrawer (contains case details)
 - ✅ i18n translations added (EN + KN)
 - ✅ Component integrated into ReportsView drawer
 - ✅ Frontend builds without errors
-- ✅ Environment variable `ZIA_RISK_MODEL_ID` set to `52319000000096025`
+- ✅ QuickML model `6441000000007053` and endpoint `6441000000007074` published
+- ⏳ Set `QUICKML_RISK_ENDPOINT_KEY` in AppSail without committing its value
 - ⏳ Frontend deployed to Web Client Hosting (ready to push)
 
 ---
@@ -272,10 +273,10 @@ CaseDetailDrawer (contains case details)
 **Likely Cause**: Feature extraction incomplete or missing data
 **Solution**: Verify accused data exists in Data Store for that case
 
-### Source Shows "Local Fallback" Instead of "Zia AutoML"
+### Source Shows "Local Fallback" Instead of "QuickML trained model"
 **Possible Reasons**:
-1. Zia model not initialized → Check `ZIA_RISK_MODEL_ID` env var
-2. Model API error → Check backend logs
+1. Endpoint key missing → Check `QUICKML_RISK_ENDPOINT_KEY` in AppSail
+2. QuickML endpoint or OAuth connection error → Check backend logs
 3. Missing features → Verify accused identity cache populated
 
 **Fallback Behavior**: Component still displays risk prediction using local rule-based scoring

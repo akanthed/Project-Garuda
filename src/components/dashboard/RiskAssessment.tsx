@@ -157,11 +157,11 @@ export function RiskAssessment({ caseMasterId }: RiskAssessmentProps) {
 
       {/* Source Attribution */}
       <div className="mb-3 flex items-center gap-2 text-xs">
-        {prediction.source === "zia_automl" ? (
+        {prediction.source === "quickml_pipeline" ? (
           <>
             <Brain className="w-4 h-4" />
             <span>
-              {t("risk_source_zia", locale)}
+              {t("risk_source_quickml", locale)}
               {prediction.model_id && ` (ID: ${prediction.model_id})`}
             </span>
           </>

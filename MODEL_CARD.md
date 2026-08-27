@@ -39,9 +39,9 @@ Garuda is a **decision-support prototype**. Every score, ranking, or forecast it
 
 ### 3.1 Case risk classifier (`GET /api/risk/{case_master_id}`)
 - **Two code paths**, both returning the same shape; the deployed response's `source` field tells you which one actually ran — that is the only trustworthy signal, not this document:
-  - `zia_automl` — Zoho Zia AutoML, model id configured via `ZIA_RISK_MODEL_ID`. Requires the model to be trained in the Catalyst Console; not independently benchmarked in this document because we cannot inspect its internals from application code.
+  - `quickml_pipeline` — QuickML Random Forest model `6441000000007053`, trained from 100,000 balanced synthetic records and published through endpoint `6441000000007074`. Catalyst evaluation: accuracy 94.53%, precision/recall/F1 91.81%, AUC 93.85%. Model explanations are enabled.
   - `local_fallback` — a transparent, auditable linear scoring rule (`_local_risk_prediction`): `score = gravity×3.0 + min(accused_count,4)×0.8 + min(repeat_accused_count,4)×1.3 − min(arrest_rate%,100)×0.006`, thresholded into low/medium/high at 10/14. Every weight and threshold is visible in this repository — there is no hidden model behind this path.
-- **Metrics:** this is a rule-based classifier, not a trained model — there is no held-out accuracy figure to report because there is no ground-truth "actually a repeat offender" label in synthetic data. Its transparency (§3.1 formula above) is the responsible-AI property that substitutes for a benchmark: an officer can recompute the score by hand from the case's own numbers.
+- **Label semantics:** QuickML predicts `0=low`, `1=medium`, `2=high`; the API converts those IDs back to user-facing labels. These labels are generated from a synthetic priority formula, not real-world outcomes, so the evaluation measures reproduction of that synthetic target rather than operational validity.
 - **Bias audit:** see §4.
 
 ### 3.2 Hotspot forecast (`GET /api/hotspots/forecast`)

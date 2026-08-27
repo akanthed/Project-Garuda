@@ -62,23 +62,18 @@ def main() -> None:
         - arrest_rate.clip(upper=1) * 0.6
         + rng.normal(0, 0.45, len(frame))
     )
-    frame["risk_class"] = pd.qcut(risk_score, q=3, labels=["low", "medium", "high"])
+    frame["risk_class_id"] = pd.qcut(risk_score, q=3, labels=[0, 1, 2]).astype(int)
 
     output = pd.DataFrame({
         "gravity_level": frame["GravityOffenceID"].astype(int),
-        "crime_type_id": frame["CrimeMajorHeadID"].astype(int),
-        "station_id": frame["PoliceStationID"].astype(int),
-        "incident_year": dates.dt.year.astype(int),
-        "incident_month": dates.dt.month.astype(int),
         "days_since_latest": (latest_date - dates).dt.days.astype(int),
         "station_case_volume": station_volume.astype(int),
         "crime_type_volume": crime_volume.astype(int),
         "accused_count": frame["accused_count"].astype(int),
         "repeat_accused_count": frame["repeat_accused_count"].astype(int),
-        "mean_accused_age": frame["mean_accused_age"].round().astype(int),
         "arrest_count": frame["arrest_count"].astype(int),
         "arrest_rate_percent": (arrest_rate.clip(upper=1) * 100).round().astype(int),
-        "risk_class": frame["risk_class"].astype(str),
+        "risk_class_id": frame["risk_class_id"],
     })
     if output.isna().any().any():
         raise RuntimeError("Generated risk dataset contains missing values")
@@ -89,7 +84,7 @@ def main() -> None:
         "output": str(args.output),
         "rows": len(output),
         "columns": len(output.columns),
-        "classes": output["risk_class"].value_counts().sort_index().to_dict(),
+        "classes": output["risk_class_id"].value_counts().sort_index().to_dict(),
     })
 
 

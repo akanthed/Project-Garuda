@@ -40,9 +40,9 @@ export type RiskLevel = "high" | "med" | "low";
 
 export interface RiskPrediction {
   case_master_id: number;
-  model_id: string;
+  model_id: string | null;
   model_name: string;
-  source: "zia_automl" | "local_fallback";
+  source: "quickml_pipeline" | "local_fallback";
   risk_class: "low" | "medium" | "high";
   scores: Record<string, number>;
   features: {

@@ -104,6 +104,43 @@ async function apiBlob(path: string): Promise<Blob> {
   return res.blob();
 }
 
+export interface VoiceTranscription {
+  text: string;
+  language: "en" | "kn" | "hi";
+  processing_time_ms: number | null;
+  source: "quickml_stt";
+}
+
+export async function transcribeVoice(audio: Blob, language: "en" | "kn"): Promise<VoiceTranscription> {
+  if (!USE_REAL_API) throw new Error("Voice transcription requires the backend");
+  const form = new FormData();
+  form.append("file", audio, "garuda-voice.wav");
+  return apiFetch<VoiceTranscription>(`/api/voice/transcribe?language=${language}`, {
+    method: "POST",
+    body: form,
+  });
+}
+
+export async function synthesizeVoice(text: string, language: "en" | "kn"): Promise<Blob> {
+  if (!USE_REAL_API) throw new Error("Speech synthesis requires the backend");
+  const token = getToken();
+  const response = await fetch(`${API_BASE}/api/voice/synthesize`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ text, language }),
+  });
+  if (response.status === 401) {
+    logout();
+    window.location.assign(`${import.meta.env.BASE_URL}login`);
+    throw new Error("Officer session expired. Please sign in again.");
+  }
+  if (!response.ok) throw new Error(`Speech synthesis failed: ${response.status}`);
+  return response.blob();
+}
+
 // ─── GET /api/districts ────────────────────────────────────────────────────────
 // Single Bengaluru Urban district in mock mode; the real backend serves the
 // full statewide Karnataka set (see backend/karnataka_districts.py).

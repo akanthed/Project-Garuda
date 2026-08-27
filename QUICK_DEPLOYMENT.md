@@ -137,7 +137,7 @@ When officer opens a case, they now see:
 │ • Arrest Rate: 67%              │
 │ • Station Case Volume: 145      │
 │                                 │
-│ 🤖 Zia AutoML prediction        │
+│ 🤖 QuickML trained model        │
 │                                 │
 │ ⚠️  Human review still required │
 └─────────────────────────────────┘
@@ -152,7 +152,7 @@ When officer opens a case, they now see:
 | Title | Risk Assessment | ಅಪಾಯ ಮೌಲ್ಯಮಾಪನ |
 | Confidence | Confidence | ವಿಶ್ವಾಸ |
 | Factors | Contributing Factors | ಅವದಾನ ಅಂಶಗಳು |
-| Source (AI) | Zia AutoML prediction | Zia AutoML ಭವಿಷ್ಯದ್ವಾಣಿ |
+| Source (AI) | QuickML trained model | QuickML ತರಬೇತಿ ಪಡೆದ ಮಾದರಿ |
 | Source (Local) | Local rule-based analysis | ಸ್ಥಳೀಯ ನಿಯಮ-ಆಧಾರಿತ ವಿಶ್ಲೇಷಣೆ |
 
 ---

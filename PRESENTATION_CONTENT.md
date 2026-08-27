@@ -119,28 +119,28 @@ flowchart TB
 | Cache | Caches KPI, hotspot, and anomaly responses with local-development fallback |
 | SmartBrowz | Generates intelligence brief PDFs when available; a local PDF fallback keeps the prototype usable |
 
-## Slide 9 - Zia AutoML Risk Classification
+## Slide 9 - QuickML Risk Classification
 
 **Structured machine learning for operational decision support**
 
-Garuda integrates **Zia AutoML**, Zoho's built-in machine learning service, to predict case-level risk as a structured classification task. Unlike traditional black-box models, this approach is interpretable and transparent.
+Garuda uses a **QuickML Random Forest pipeline** to estimate case-level risk as a structured classification task, with model explanations enabled for review.
 
 **How it works:**
 1. Garuda extracts eight structured case features: offence gravity, repeat-accused frequency, accused count, arrest count, arrest rate, station case volume, crime-type prevalence, and case age.
-2. These features are sent to a trained Zia AutoML multi-class classifier in real time.
+2. These features are sent to a published QuickML multi-class prediction endpoint in real time.
 3. The classifier returns a risk label (low, medium, high) and confidence scores.
 4. Officers see the predicted class, confidence, and the contributing feature signals—not a black-box score.
 
 **Model performance (held-out validation on 100,000 synthetic cases):**
-- Accuracy: **94.1%**
-- F1 score: **0.941**
-- Precision: **94.2%**
-- Recall: **0.941**
-- Log loss: **0.137**
+- Accuracy: **94.53%**
+- F1 score: **0.9181**
+- Precision: **0.9181**
+- Recall: **0.9181**
+- AUC: **0.9385**
 
 **Important:** This is a prototype model trained on synthetic data for demonstration. Field deployment requires validation against real, anonymised KSP historical records and approval from data governance.
 
-**Fallback behavior:** If Zia AutoML is unavailable, Garuda automatically switches to a transparent local rule-based classifier so the system remains operational.
+**Fallback behavior:** If the QuickML endpoint is unavailable, Garuda automatically switches to a transparent local rule-based classifier so the system remains operational.
 
 ## Slide 10 - Prototype Performance and Validation
 

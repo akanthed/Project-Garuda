@@ -128,7 +128,7 @@ Ran `git ls-files` + `git log --all --diff-filter=A --name-only` filtered for
 - `catalyst.json`, `.catalystrc`, `backend/app-config.json` are tracked despite being
   listed as "Sensitive Configuration Files ... may have API keys". Content-inspected all
   three: they contain only build paths, the Zoho project ID/domain ID/environment ID,
-  the AppSail start command, and non-secret env vars (`ZIA_RISK_MODEL_ID`,
+  the AppSail start command, and non-secret environment configuration,
   `ALLOWED_ORIGINS`, `LOG_LEVEL`) — **no `SESSION_SECRET`, `SEED_TOKEN`, or any API key
   is present in any tracked file**; those two are set only via the Catalyst Console UI
   (confirmed in repo memory — Console rejects reserved keywords, forcing manual entry
