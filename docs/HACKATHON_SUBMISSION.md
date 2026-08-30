@@ -163,8 +163,8 @@ Cold start 6.84 s; server memory stayed between 232–274 MB RSS throughout.
 | Check | Result |
 | --- | --- |
 | `npx tsc --noEmit` | 0 errors |
-| `npx vitest run --reporter=dot` | 79/79 passing across 9 files |
-| Affected backend integration suites | 25/25 passing (Command, voice, forecast, anomaly, FIR, and role reporting) |
+| `npx vitest run --reporter=dot` | 81/81 passing across 10 files |
+| Affected backend integration suites | 44/44 passing (Command, voice, forecast, anomaly, FIR, role reporting, and risk prediction) |
 | `npm run build` | Succeeds |
 
 ---

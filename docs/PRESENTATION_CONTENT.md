@@ -149,8 +149,8 @@ Garuda uses a **QuickML Random Forest pipeline** to estimate case-level risk as 
 
 **Prototype dataset and execution evidence**
 
-- Seeded synthetic pilot dataset: **5,000 cases**, **approximately 8,500 accused records**, **15 crime categories**, and **100 Bengaluru station IDs** across 2022-June 2026.
-- The deployed Catalyst Data Store refresh returned **5,001 cases** and a relationship graph of **13,722 nodes** in the tested live environment.
+- Seeded synthetic statewide dataset: **124,000 cases**, **217,167 accused records**, **152,139 arrest/surrender records**, and **164 station IDs across 9 Karnataka districts** through June 2026.
+- The live AppSail health endpoint reports **124,000 loaded cases** and a relationship graph of **44,799 nodes**.
 - Dashboard-heavy components are lazy-loaded so the authentication and primary view remain lightweight.
 - KPI, hotspot, and anomaly results use a 30-second cache to avoid repeated computation for common views.
 - The health endpoint reports loaded case and graph-node counts, enabling simple deployment smoke checks.
@@ -159,7 +159,7 @@ Garuda uses a **QuickML Random Forest pipeline** to estimate case-level risk as 
 
 The QuickML station anomaly classifier detected 43 of 45 anomalies in the untouched January-June 2026 holdout (95.6% recall, 79.6% precision). Alerts remain advisory and show the observed count, trailing mean, and z-score for human review.
 
-**Visual:** Use a screenshot of the live KPI/map view plus a small “5,001 cases | 13,722 graph nodes” callout.
+**Visual:** Use a screenshot of the live KPI/map view plus a small “124,000 cases | 44,799 graph nodes” callout.
 
 ## Slide 11 - Impact, Roadmap, and Cost
 
@@ -187,11 +187,13 @@ The QuickML station anomaly classifier detected 43 of 45 anomalies in the untouc
 
 ## Slide 12 - Submission and Demo
 
-**Live deployment:** `[PASTE CATALYST WEB CLIENT URL]`
+**Live deployment:** `https://garuda-60078749238.development.catalystserverless.in/app/`
 
-**Public GitHub repository:** `[PASTE PUBLIC GITHUB URL]`
+**GitHub repository:** `https://github.com/akanthed/sentinel-gleam-97` — make the repository public before submission.
 
 **Demo video:** `[PASTE PUBLIC GOOGLE DRIVE OR UNLISTED YOUTUBE URL]`
+
+**Official organizer template:** `https://docs.google.com/presentation/d/1XWKQ3Hi3yKeDAQrHzQA4_vUF9pvC43Hjh7x7pr4jBpA/export/pptx`
 
 **Demo sequence - keep it under 3 minutes**
 
@@ -215,4 +217,4 @@ The QuickML station anomaly classifier detected 43 of 45 anomalies in the untouc
 - [ ] Open all links from a device that is not logged into your accounts.
 - [ ] Use current screenshots from the deployed prototype and keep labels readable.
 - [ ] Confirm Zia AutoML risk model is active and `/api/risk/1` returns predictions.
-- [ ] Do not claim Zia translation or generative AI in the deck; Zia AutoML risk classification is the active ML capability.
+- [ ] Confirm QuickML risk, forecast, anomaly, LLM, RAG, speech, and translation paths are live before recording; describe local fallbacks honestly if any path is unavailable.

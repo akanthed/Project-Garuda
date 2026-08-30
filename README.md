@@ -225,8 +225,8 @@ current count, trailing mean, and z-score evidence.
 | Check | Result |
 | --- | --- |
 | `npx tsc --noEmit` | 0 errors |
-| `npx vitest run --reporter=dot` | 79/79 passing across 9 files |
-| Affected backend integration suites | 25/25 passing (Command, voice, forecast, anomaly, FIR, and role reporting) |
+| `npx vitest run --reporter=dot` | 81/81 passing across 10 files |
+| Affected backend integration suites | 44/44 passing (Command, voice, forecast, anomaly, FIR, role reporting, and risk prediction) |
 | `npm run build` | Succeeds |
 
 Full methodology and regeneration commands: [HACKATHON_SUBMISSION.md](docs/HACKATHON_SUBMISSION.md).
@@ -336,7 +336,7 @@ MapLibre GL (`react-map-gl`) + deck.gl + `react-force-graph-2d`
 
 **Backend:** Python 3.11 + FastAPI + Uvicorn + Pydantic + NetworkX + pandas + NumPy + fpdf2 + zcatalyst-sdk
 
-**Testing:** Vitest + Testing Library (frontend, 73 tests), pytest (backend, 76 collected tests)
+**Testing:** Vitest + Testing Library (frontend), pytest (backend)
 
 **Infrastructure:** Zoho Catalyst — AppSail, Web Client Hosting, Data Store, NoSQL, Cache,
 Connections, QuickML LLM Serving and RAG/Knowledge Base, Zia AutoML/OCR, SmartBrowz,
