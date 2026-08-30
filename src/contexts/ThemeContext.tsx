@@ -1,47 +1,25 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useLayoutEffect, type ReactNode } from "react";
 
-export type Theme = "dark" | "light";
+export type Theme = "dark";
 
 interface ThemeContextValue {
   theme: Theme;
-  toggle: () => void;
-  setTheme: (t: Theme) => void;
 }
 
 const STORAGE_KEY = "garuda-theme";
 
 const ThemeContext = createContext<ThemeContextValue>({
   theme: "dark",
-  toggle: () => {},
-  setTheme: () => {},
 });
 
-function applyTheme(theme: Theme) {
-  document.documentElement.classList.toggle("dark", theme === "dark");
-}
-
-function getInitialTheme(): Theme {
-  if (typeof window === "undefined") return "dark";
-  const stored = window.localStorage.getItem(STORAGE_KEY);
-  return stored === "light" ? "light" : "dark";
-}
-
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>(getInitialTheme);
-
-  useEffect(() => {
-    applyTheme(theme);
-  }, [theme]);
-
-  const setTheme = (t: Theme) => {
-    setThemeState(t);
-    window.localStorage.setItem(STORAGE_KEY, t);
-  };
-
-  const toggle = () => setTheme(theme === "dark" ? "light" : "dark");
+  useLayoutEffect(() => {
+    document.documentElement.classList.add("dark");
+    window.localStorage.removeItem(STORAGE_KEY);
+  }, []);
 
   return (
-    <ThemeContext.Provider value={{ theme, toggle, setTheme }}>
+    <ThemeContext.Provider value={{ theme: "dark" }}>
       {children}
     </ThemeContext.Provider>
   );

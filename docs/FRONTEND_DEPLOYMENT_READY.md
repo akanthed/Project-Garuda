@@ -1,22 +1,25 @@
-# Frontend Risk Assessment - Deployment Summary
+# Garuda Frontend - Deployment Summary
 
 ## ✅ Integration Complete
 
-**Status**: 🟢 **READY FOR PRODUCTION**  
-**Date**: 2026-07-20  
-**Version**: 1.0
+**Status**: 🟢 **DEPLOYED TO CATALYST DEVELOPMENT**
+**Updated**: 2026-08-28
+
+Current deployment includes three trained QuickML models (case risk, station forecast, station
+anomaly), DGP/ACP Command views, bounded patrol recommendations, Catalyst-native English/Kannada
+voice and translation, and backend-enforced DGP/ACP/SI/Constable report scope.
 
 ---
 
 ## What Was Completed
 
-### 1. **Backend Risk Endpoint** (Already Deployed)
-- ✅ `GET /api/risk/{case_master_id}` deployed to Zoho AppSail
-- ✅ Integrates with Zia AutoML Model ID: `52319000000096025`
-- ✅ Falls back to local rule-based scoring if Zia unavailable
+### 1. **Backend Risk Endpoint**
+- ✅ `GET /api/risk/{case_master_id}` implemented for Zoho AppSail
+- ✅ Integrates with QuickML Model ID: `6441000000007053`
+- ✅ Falls back to local rule-based scoring if QuickML is unavailable
 - ✅ Returns case risk predictions with 8 feature signals
 - ✅ Protected with officer session authentication
-- ✅ All 19 backend tests passing
+- ✅ Affected backend integration suites: 25/25 passing
 
 ### 2. **Frontend Risk Assessment Component** (Today)
 - ✅ Created React component: `src/components/dashboard/RiskAssessment.tsx`
@@ -24,7 +27,7 @@
 - ✅ Displays risk class (LOW/MEDIUM/HIGH) with color coding
 - ✅ Shows confidence percentage with progress indicator
 - ✅ Lists 8 contributing factors affecting risk score
-- ✅ Indicates data source (Zia AutoML vs local fallback)
+- ✅ Indicates data source (QuickML pipeline vs local fallback)
 - ✅ Bilingual UI (English + Kannada)
 - ✅ Handles loading and error states
 - ✅ Type-safe with full TypeScript support
@@ -33,7 +36,7 @@
 - ✅ Imported `RiskAssessment` component in `ReportsView.tsx`
 - ✅ Added to case detail drawer (below severity badges)
 - ✅ Passes `case_master_id` from selected case
-- ✅ Component displays when officer clicks any case
+- ✅ Component displays for supervisor roles; Constable reports intentionally withhold risk detail
 
 ### 4. **i18n Translations** (Today)
 - ✅ Added 13 translation keys to `src/lib/i18n.ts`
@@ -45,11 +48,12 @@
   - Source attribution (Zia vs fallback)
   - Loading and error states
 
-### 5. **Build Verification** (Today)
+### 5. **Build Verification**
 - ✅ Frontend builds clean (no TypeScript errors)
 - ✅ All imports resolved correctly
 - ✅ Component exported and available for use
 - ✅ Ready to push to Zoho Web Client Hosting
+- ✅ Full frontend suite: 79/79 passing across 9 files
 
 ---
 
@@ -269,9 +273,9 @@ Full test suite available: 58 UI tests
 ## Documentation References
 
 - **Full Integration Guide**: [FRONTEND_INTEGRATION_GUIDE.md](FRONTEND_INTEGRATION_GUIDE.md)
-- **Backend API Docs**: [backend/README.md](backend/README.md)
-- **Component Code**: [src/components/dashboard/RiskAssessment.tsx](src/components/dashboard/RiskAssessment.tsx)
-- **Test Coverage**: [backend/test_risk_prediction.py](backend/test_risk_prediction.py)
+- **Backend API Docs**: [backend/README.md](../backend/README.md)
+- **Component Code**: [src/components/dashboard/RiskAssessment.tsx](../src/components/dashboard/RiskAssessment.tsx)
+- **Test Coverage**: [backend/test_risk_prediction.py](../backend/test_risk_prediction.py)
 
 ---
 

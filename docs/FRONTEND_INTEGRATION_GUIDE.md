@@ -1,9 +1,14 @@
 # Frontend Risk Assessment Integration Guide
 
+> **Current platform note (2026-08-28):** Risk assessment is one of three deployed QuickML
+> prediction surfaces. Forecast and anomaly source/model metadata also appear in the map and
+> Command workflows. Reports are backend-scoped by role, and QuickML case-risk detail is visible
+> only to supervisor clearance (SI, ACP, DGP), not Constable.
+
 ## ✅ Completed Tasks
 
 ### 1. **Added i18n Translations** 
-- **File**: [src/lib/i18n.ts](src/lib/i18n.ts)
+- **File**: [src/lib/i18n.ts](../src/lib/i18n.ts)
 - **Status**: ✅ Complete
 - **Changes**:
   - Added 13 new translation keys for Risk Assessment component
@@ -12,7 +17,7 @@
     - `risk_assessment_title`: "Risk Assessment" / "ಅಪಾಯ ಮೌಲ್ಯಮಾಪನ"
     - `risk_model_name`: "Model" / "ಮಾದರಿ"
     - `risk_confidence`: "Confidence" / "ವಿಶ್ವಾಸ"
-    - `risk_source_zia`: "Zia AutoML prediction" / "Zia AutoML ಭವಿಷ್ಯದ್ವಾಣಿ"
+    - `risk_source_quickml`: "QuickML trained model" / "QuickML ತರಬೇತಿ ಪಡೆದ ಮಾದರಿ"
     - `risk_source_fallback`: "Local rule-based analysis" / "ಸ್ಥಳೀಯ ನಿಯಮ-ಆಧಾರಿತ ವಿಶ್ಲೇಷಣೆ"
     - `risk_contributing_factors`: "Contributing Factors" / "ಅವದಾನ ಅಂಶಗಳು"
     - `risk_gravity_level`: "Offence Gravity" / "ಅಪರಾಧದ ಗಂಭೀರತೆ"
@@ -24,30 +29,31 @@
     - `risk_unavailable`: "Risk assessment unavailable" / "ಅಪಾಯ ಮೌಲ್ಯಮಾಪನ ಲಭ್ಯವಿಲ್ಲ"
 
 ### 2. **Created Risk Assessment Component**
-- **File**: [src/components/dashboard/RiskAssessment.tsx](src/components/dashboard/RiskAssessment.tsx)
+- **File**: [src/components/dashboard/RiskAssessment.tsx](../src/components/dashboard/RiskAssessment.tsx)
 - **Status**: ✅ Complete
 - **Features**:
-  - Fetches Zia AutoML predictions from `/api/risk/{caseMasterId}`
+  - Fetches QuickML pipeline predictions from `/api/risk/{caseMasterId}`
   - Displays risk class (LOW/MEDIUM/HIGH) with color coding:
     - 🟢 LOW: Green indicator
     - 🟡 MEDIUM: Amber/yellow indicator
     - 🔴 HIGH: Red indicator
   - Shows confidence percentage with progress bar
   - Lists contributing factors (gravity, repeat accused, arrest rate, etc.)
-  - Indicates data source (Zia AutoML vs local fallback)
+  - Indicates data source (QuickML pipeline vs local fallback)
   - Bilingual UI ready with `useLanguage()` hook
   - Handles loading and error states gracefully
-  - Transparent fallback when Zia is unavailable
+  - Transparent fallback when QuickML is unavailable
 
 ### 3. **Integrated RiskAssessment into ReportsView**
-- **File**: [src/components/dashboard/ReportsView.tsx](src/components/dashboard/ReportsView.tsx)
+- **File**: [src/components/dashboard/ReportsView.tsx](../src/components/dashboard/ReportsView.tsx)
 - **Status**: ✅ Complete
 - **Changes**:
   - Imported `RiskAssessment` component
   - Added Risk Assessment section to case detail drawer
   - Positioned between severity/status badges and workflow section
   - Passes `case_master_id` prop correctly
-  - Component displays for every case opened in the detail view
+  - Component displays for supervisor roles when a case is opened
+  - Constable receives station-scoped read-only reports with risk and suspect details withheld
 
 ### 4. **Fixed Import Path**
 - **Status**: ✅ Complete
@@ -81,8 +87,8 @@
      - Arrest Rate
      - Station Case Volume
    - 🤖 **Model Source**: 
-     - ✨ "Zia AutoML prediction (Model ID: 52319000000096025)" if Zia available
-     - ⚡ "Local rule-based analysis" if Zia unavailable (fallback)
+    - ✨ "QuickML trained model (ID: 6441000000007053)" if QuickML is available
+    - ⚡ "Local rule-based analysis" if QuickML is unavailable (fallback)
    - ⚠️ **Advisory**: Disclaimer that human review is required
 
 ### Backend Integration
@@ -96,9 +102,9 @@ GET /api/risk/{case_master_id}
 ```json
 {
   "case_master_id": 12345,
-  "model_id": "52319000000096025",
-  "model_name": "Zia AutoML",
-  "source": "zia_automl",
+  "model_id": "6441000000007053",
+  "model_name": "Garuda Case Risk Classifier",
+  "source": "quickml_pipeline",
   "risk_class": "high",
   "confidence": 0.94,
   "scores": {
@@ -172,7 +178,7 @@ GET /api/risk/{case_master_id}
   "case_master_id": number,
   "model_id": string,
   "model_name": string,
-  "source": "zia_automl" | "local_fallback",
+  "source": "quickml_pipeline" | "local_fallback",
   "risk_class": "low" | "medium" | "high",
   "confidence": number (0-1),
   "scores": {
@@ -240,7 +246,8 @@ CaseDetailDrawer (contains case details)
 - ✅ i18n translations added (EN + KN)
 - ✅ Component integrated into ReportsView drawer
 - ✅ Frontend builds without errors
-- ✅ Environment variable `ZIA_RISK_MODEL_ID` set to `52319000000096025`
+- ✅ QuickML model `6441000000007053` and endpoint `6441000000007074` published
+- ⏳ Set `QUICKML_RISK_ENDPOINT_KEY` in AppSail without committing its value
 - ⏳ Frontend deployed to Web Client Hosting (ready to push)
 
 ---
@@ -272,10 +279,10 @@ CaseDetailDrawer (contains case details)
 **Likely Cause**: Feature extraction incomplete or missing data
 **Solution**: Verify accused data exists in Data Store for that case
 
-### Source Shows "Local Fallback" Instead of "Zia AutoML"
+### Source Shows "Local Fallback" Instead of "QuickML trained model"
 **Possible Reasons**:
-1. Zia model not initialized → Check `ZIA_RISK_MODEL_ID` env var
-2. Model API error → Check backend logs
+1. Endpoint key missing → Check `QUICKML_RISK_ENDPOINT_KEY` in AppSail
+2. QuickML endpoint or OAuth connection error → Check backend logs
 3. Missing features → Verify accused identity cache populated
 
 **Fallback Behavior**: Component still displays risk prediction using local rule-based scoring
@@ -284,15 +291,15 @@ CaseDetailDrawer (contains case details)
 
 ## 📚 Related Files & References
 
-- **Backend Integration**: [backend/main.py#L_risk_prediction](backend/main.py) - Risk endpoint implementation
-- **Backend Tests**: [backend/test_risk_prediction.py](backend/test_risk_prediction.py) - 19 passing tests
-- **Component Code**: [src/components/dashboard/RiskAssessment.tsx](src/components/dashboard/RiskAssessment.tsx)
-- **Integration**: [src/components/dashboard/ReportsView.tsx](src/components/dashboard/ReportsView.tsx)
-- **Translations**: [src/lib/i18n.ts](src/lib/i18n.ts)
-- **Type Definitions**: [src/lib/types.ts](src/lib/types.ts)
+- **Backend Integration**: [backend/main.py#L_risk_prediction](../backend/main.py) - Risk endpoint implementation
+- **Backend Tests**: [backend/test_risk_prediction.py](../backend/test_risk_prediction.py) - 19 passing tests
+- **Component Code**: [src/components/dashboard/RiskAssessment.tsx](../src/components/dashboard/RiskAssessment.tsx)
+- **Integration**: [src/components/dashboard/ReportsView.tsx](../src/components/dashboard/ReportsView.tsx)
+- **Translations**: [src/lib/i18n.ts](../src/lib/i18n.ts)
+- **Type Definitions**: [src/lib/types.ts](../src/lib/types.ts)
 
 ---
 
 **Last Updated**: 2026-07-20  
 **Version**: 1.0 - Frontend Integration Complete  
-**Status**: 🟢 Ready for Production Deployment
+**Status**: 🟢 Deployed to Catalyst Development

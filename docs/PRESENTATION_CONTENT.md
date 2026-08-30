@@ -49,12 +49,15 @@ Garuda combines spatial intelligence, relationship analysis, and scenario planni
 | One view for everyone | Role-based access for sensitive network and planning modules |
 | Separate deployment services | Catalyst Web Client Hosting, AppSail, and Data Store in one platform |
 
-**Responsible intelligence:** Current forecast and planner outputs are clearly labelled as trend/scenario estimates. They support human decision-making; they do not automate enforcement decisions.
+**Responsible intelligence:** Forecast and planner outputs identify their QuickML or fallback source and remain advisory. They support human decision-making; they do not automate enforcement decisions.
 
 ## Slide 5 - Key Features
 
 - **Geospatial risk canvas:** historical and predicted hotspot layers, density view, risk labels, and patrol-unit overlay.
-- **Station anomaly alerts:** z-score based flags for stations with unusual recent incident volumes.
+- **Station anomaly alerts:** QuickML Embedded XGBoost flags with observed-count, trailing-mean,
+    and z-score evidence for human review.
+- **Recommended patrol allocation:** QuickML forecast and anomaly signals ranked into a bounded
+    proposal that cannot exceed the available 15-unit demo fleet.
 - **Criminal link analysis:** visual graph of accused and FIR relationships to surface repeat and connected entities.
 - **Ask Garuda search:** natural-language-style filtering for crime type, area, and time window, returning matching cases.
 - **Zia AutoML case-risk assessment:** structured multi-class risk classification (low/medium/high) for each case, with confidence scores and explainable feature signals.
@@ -119,42 +122,44 @@ flowchart TB
 | Cache | Caches KPI, hotspot, and anomaly responses with local-development fallback |
 | SmartBrowz | Generates intelligence brief PDFs when available; a local PDF fallback keeps the prototype usable |
 
-## Slide 9 - Zia AutoML Risk Classification
+## Slide 9 - QuickML Risk Classification
 
 **Structured machine learning for operational decision support**
 
-Garuda integrates **Zia AutoML**, Zoho's built-in machine learning service, to predict case-level risk as a structured classification task. Unlike traditional black-box models, this approach is interpretable and transparent.
+Garuda uses a **QuickML Random Forest pipeline** to estimate case-level risk as a structured classification task, with model explanations enabled for review.
 
 **How it works:**
 1. Garuda extracts eight structured case features: offence gravity, repeat-accused frequency, accused count, arrest count, arrest rate, station case volume, crime-type prevalence, and case age.
-2. These features are sent to a trained Zia AutoML multi-class classifier in real time.
+2. These features are sent to a published QuickML multi-class prediction endpoint in real time.
 3. The classifier returns a risk label (low, medium, high) and confidence scores.
 4. Officers see the predicted class, confidence, and the contributing feature signals—not a black-box score.
 
 **Model performance (held-out validation on 100,000 synthetic cases):**
-- Accuracy: **94.1%**
-- F1 score: **0.941**
-- Precision: **94.2%**
-- Recall: **0.941**
-- Log loss: **0.137**
+- Accuracy: **94.53%**
+- F1 score: **0.9181**
+- Precision: **0.9181**
+- Recall: **0.9181**
+- AUC: **0.9385**
 
 **Important:** This is a prototype model trained on synthetic data for demonstration. Field deployment requires validation against real, anonymised KSP historical records and approval from data governance.
 
-**Fallback behavior:** If Zia AutoML is unavailable, Garuda automatically switches to a transparent local rule-based classifier so the system remains operational.
+**Fallback behavior:** If the QuickML endpoint is unavailable, Garuda automatically switches to a transparent local rule-based classifier so the system remains operational.
 
 ## Slide 10 - Prototype Performance and Validation
 
 **Prototype dataset and execution evidence**
 
-- Seeded synthetic pilot dataset: **5,000 cases**, **approximately 8,500 accused records**, **15 crime categories**, and **100 Bengaluru station IDs** across 2022-June 2026.
-- The deployed Catalyst Data Store refresh returned **5,001 cases** and a relationship graph of **13,722 nodes** in the tested live environment.
+- Seeded synthetic statewide dataset: **124,000 cases**, **217,167 accused records**, **152,139 arrest/surrender records**, and **164 station IDs across 9 Karnataka districts** through June 2026.
+- The live AppSail health endpoint reports **124,000 loaded cases** and a relationship graph of **44,799 nodes**.
 - Dashboard-heavy components are lazy-loaded so the authentication and primary view remain lightweight.
 - KPI, hotspot, and anomaly results use a 30-second cache to avoid repeated computation for common views.
 - The health endpoint reports loaded case and graph-node counts, enabling simple deployment smoke checks.
 
-**Important evaluation note:** This is a synthetic-data prototype. The forecasting and what-if planner are transparent statistical/scenario models, not validated crime prediction claims. A field pilot with approved historical data is the next benchmarking step.
+**Important evaluation note:** The QuickML station forecast improved six-month temporal-holdout MAE from 3.129 to 2.998 and PAI from 1.297 to 1.313 versus the local trend baseline. This remains a synthetic-data prototype, not a validated crime-prediction claim. A field pilot with approved historical data is the next benchmarking step.
 
-**Visual:** Use a screenshot of the live KPI/map view plus a small “5,001 cases | 13,722 graph nodes” callout.
+The QuickML station anomaly classifier detected 43 of 45 anomalies in the untouched January-June 2026 holdout (95.6% recall, 79.6% precision). Alerts remain advisory and show the observed count, trailing mean, and z-score for human review.
+
+**Visual:** Use a screenshot of the live KPI/map view plus a small “124,000 cases | 44,799 graph nodes” callout.
 
 ## Slide 11 - Impact, Roadmap, and Cost
 
@@ -182,11 +187,13 @@ Garuda integrates **Zia AutoML**, Zoho's built-in machine learning service, to p
 
 ## Slide 12 - Submission and Demo
 
-**Live deployment:** `[PASTE CATALYST WEB CLIENT URL]`
+**Live deployment:** `https://garuda-60078749238.development.catalystserverless.in/app/`
 
-**Public GitHub repository:** `[PASTE PUBLIC GITHUB URL]`
+**GitHub repository:** `https://github.com/akanthed/sentinel-gleam-97` — make the repository public before submission.
 
 **Demo video:** `[PASTE PUBLIC GOOGLE DRIVE OR UNLISTED YOUTUBE URL]`
+
+**Official organizer template:** `https://docs.google.com/presentation/d/1XWKQ3Hi3yKeDAQrHzQA4_vUF9pvC43Hjh7x7pr4jBpA/export/pptx`
 
 **Demo sequence - keep it under 3 minutes**
 
@@ -210,4 +217,4 @@ Garuda integrates **Zia AutoML**, Zoho's built-in machine learning service, to p
 - [ ] Open all links from a device that is not logged into your accounts.
 - [ ] Use current screenshots from the deployed prototype and keep labels readable.
 - [ ] Confirm Zia AutoML risk model is active and `/api/risk/1` returns predictions.
-- [ ] Do not claim Zia translation or generative AI in the deck; Zia AutoML risk classification is the active ML capability.
+- [ ] Confirm QuickML risk, forecast, anomaly, LLM, RAG, speech, and translation paths are live before recording; describe local fallbacks honestly if any path is unavailable.

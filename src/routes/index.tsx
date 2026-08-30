@@ -10,6 +10,7 @@ import { AlertsFeed } from "@/components/dashboard/AlertsFeed";
 import { ActionBrief, type ActionBriefDecision } from "@/components/dashboard/ActionBrief";
 import { FieldMode } from "@/components/dashboard/FieldMode";
 import { OperationsBoard } from "@/components/dashboard/OperationsBoard";
+import { CommandOverview } from "@/components/dashboard/CommandOverview";
 import { ReportsView } from "@/components/dashboard/ReportsView";
 import { SettingsView } from "@/components/dashboard/SettingsView";
 import { createResponsePlan, fetchKpiMetrics } from "@/lib/mock-api";
@@ -155,7 +156,7 @@ function Dashboard() {
 
   return (
     <SimulatorProvider>
-      <div className="flex min-h-screen bg-background text-foreground">
+      <div className="flex min-h-screen overflow-x-hidden bg-background text-foreground">
         <Toaster theme={theme} position="bottom-right" />
         <Sidebar active={view} onChange={setView} fieldMode={officer.designation === "Constable"} />
         <div className="flex min-w-0 flex-1 flex-col">
@@ -164,6 +165,8 @@ function Dashboard() {
             {view === "dashboard" && (
               officer.designation === "Constable" ? (
                 <FieldMode officer={officer} onNavigate={setView} />
+              ) : officer.designation === "DGP" || officer.designation === "ACP" ? (
+                <CommandOverview onNavigate={setView} />
               ) : <>
                 <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
                   {kpisLoading ? (
@@ -268,7 +271,7 @@ function Dashboard() {
               }} /> : <RbacBlock labelKey="rbac_locked_simulator" minRoleKey="rbac_requires_si" />
             )}
 
-            {view === "reports" && <ReportsView />}
+            {view === "reports" && <ReportsView officer={officer} />}
             {view === "settings" && <SettingsView />}
 
             <footer className="flex items-center justify-between pt-2 font-mono text-[10px] text-muted-foreground">

@@ -7,7 +7,7 @@ real dashboard usage), recording p50/p95/p99 latency, throughput, error rate,
 and server process RSS memory at each level. Tears the subprocess down at the
 end. This proves prototype-scale concurrency handling on a single AppSail-class
 instance — it does NOT certify production capacity at real scale (see
-THREAT_MODEL.md / PRODUCTION_ROADMAP.md for that distinction).
+docs/THREAT_MODEL.md / docs/PRODUCTION_ROADMAP.md for that distinction).
 
 Usage:
     python load_test.py [--levels 10,50,100] [--requests-per-user 5]

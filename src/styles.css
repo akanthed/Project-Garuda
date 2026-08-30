@@ -171,11 +171,19 @@
   background-size: 32px 32px;
 }
 
+.garuda-map-shell {
+  container-type: size;
+}
+
 .maplibregl-popup.garuda-map-popup {
-  max-width: min(320px, calc(100vw - 2rem)) !important;
+  z-index: 20;
+  width: min(320px, calc(100cqw - 2rem));
+  max-width: calc(100cqw - 2rem) !important;
 }
 
 .garuda-map-popup .maplibregl-popup-content {
+  max-height: calc(50cqh - 2rem);
+  overflow-y: auto;
   padding: 0;
   background: transparent;
   border-radius: 0;

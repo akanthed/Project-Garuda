@@ -26,15 +26,15 @@ backend\.venv-gen\Scripts\python.exe backend\generate_quickml_training.py
 
 The default output columns are `example_id`, `query`, `action`, `crime_type`, `area`, `time_window`, and `language`. For a QuickML classification pipeline, use `query` as the text input and `action` as the target. The other columns support evaluation and future entity-extraction experiments.
 
-This dataset is optional for the current Qwen LLM Serving adapter. LLM Serving uses the pre-trained model and does not train on this CSV.
+This dataset is optional for the current GLM-4.7-Flash LLM Serving adapter. LLM Serving uses the pre-trained model and does not train on this CSV.
 
-### Legacy Zia AutoML Wizard
+### QuickML Case Risk Pipeline
 
 Do not upload `quickml_training.csv` on **Zia > AutoML > Create Model**. Its natural-language `query` column is a String, and Zia AutoML does not allow String columns as training inputs or targets.
 
 The earlier `Garuda Intent Classifier` experiment should not be used. Zia produced near-random accuracy with all inputs and rejected the term-only retraining because it considered those columns insufficiently contributive. AutoML is not the right component for natural-language intent routing.
 
-For a meaningful Zia AutoML integration, upload:
+The deployed case-risk classifier uses:
 
 ```text
 backend/data/zia_risk_training.csv
@@ -46,15 +46,52 @@ Regenerate it with:
 backend\.venv-gen\Scripts\python.exe backend\generate_zia_risk_training.py
 ```
 
-The dataset contains 100,000 balanced synthetic case records and relational features derived from cases, accused, arrests, station volume, and recency. It is ASCII, has no BOM or missing values, and contains numeric/categorical features only. In the wizard:
+The generator produces 100,000 balanced synthetic case records with the exact eight features sent by `/api/risk/{case_master_id}`. The numeric target is `risk_class_id`, mapped as `0=low`, `1=medium`, and `2=high`. In QuickML:
 
-1. Use model name `Garuda Case Risk Classifier`.
-2. Select `risk_class` as the target.
-3. Confirm the model type is **Multi-Class Classification**.
-4. Select all 13 remaining columns as inputs. If Catalyst limits the selection, prioritize `gravity_level`, `repeat_accused_count`, `accused_count`, `arrest_count`, `arrest_rate_percent`, `station_case_volume`, `crime_type_volume`, and `days_since_latest`.
-5. Train and retain the model only if its held-out evaluation is materially above the 33.3% random baseline.
+1. Dataset: `garuda_case_risk_numeric_v1` (`6441000000008009`).
+2. Prediction pipeline: `Garuda Case Risk Prediction v2` (`6441000000007050`).
+3. Target: `risk_class_id`; algorithm: Random Forest Classification with 100 estimators and model explanations enabled.
+4. Model: `Garuda Case Risk Prediction v2 model` (`6441000000007053`).
+5. Published endpoint: `garuda-case-risk-v1` (`6441000000007074`).
+
+Catalyst evaluation for V1: accuracy 94.53%, precision/recall/F1 91.81%, AUC 93.85%. The built-in endpoint tester returned HTTP 200 using the documented `{"data": {...features}}` request and `{"result":[1],"likelihood_score":[1]}` response shape.
+
+The backend uses `QUICKML_RISK_ENDPOINT_KEY` for the endpoint-specific key and the existing Catalyst Connection for OAuth and organization headers. The key is environment-only and must never be committed.
 
 This model estimates a synthetic case-priority class for supervisor review. It must be described as prototype decision support, not validated crime prediction or an automated enforcement decision.
+
+### QuickML Station Forecast Pipeline
+
+QuickML's native Forecasting pipeline expects one unique timestamp series, so it cannot preserve
+164 station identities in the panel dataset. Garuda therefore uses Prediction AutoML regression
+with station/district IDs, target month, lag-1/2/3/12 counts, and trailing 3/6-month means.
+
+1. Training dataset: `quickml_station_forecast_train` (`6441000000008041`), 5,740 rows through December 2025.
+2. AutoML pipeline: `Garuda Station Forecast AutoML v1` (`6441000000007101`).
+3. Model: Gradient Boosting Regression (`6441000000007104`).
+4. Published endpoint: `garuda-station-forecast-v1` (`6441000000007141`).
+5. Untouched holdout: 984 rows, January-June 2026, all 164 stations.
+
+Holdout results: MAE 2.998, MAPE 28.5%, PAI 1.313, PEI 0.791. The local linear-trend fallback
+scored MAE 3.129, MAPE 29.7%, PAI 1.297, PEI 0.782 on the same months. Runtime responses expose
+`source`, model name, and model ID.
+
+### QuickML Station Anomaly Pipeline
+
+The native Anomaly Detection wizard has the same grouped-series limitation. Garuda uses Prediction
+AutoML classification over station-month rolling features with a transparent proxy target:
+`anomaly_class=1` when current volume is at least two trailing-12-month standard deviations above
+the prior mean.
+
+1. Training dataset: `garuda_station_anomaly_train_v1` (`6441000000007147`), 1,268 balanced rows.
+2. AutoML pipeline: `Garuda Station Anomaly AutoML v1` (`6441000000007160`).
+3. Model: Embedded XGBoost Classification (`6441000000007163`).
+4. Published endpoint: `garuda-station-anomaly-v1` (`6441000000007190`).
+5. Natural-prevalence holdout: 984 rows with 45 anomalies, January-June 2026.
+
+Holdout results: 95.6% recall, 79.6% precision, 86.9% F1, and 98.8% specificity. The API retains
+current count, trailing mean, and z-score evidence and falls back to the transparent z-score rule
+when QuickML is unavailable.
 
 For reference, the deprecated compatibility file used these settings:
 
@@ -63,7 +100,7 @@ For reference, the deprecated compatibility file used these settings:
 3. Select `crime_type_id`, `area_id`, `time_window_id`, `language_id`, `has_case_terms`, `has_hotspot_terms`, and `has_network_terms` as inputs.
 4. Do not integrate that model or use its score in the presentation.
 
-Zoho documents Zia AutoML as unavailable in the IN data center. If `zia_automl_training.csv` still produces **Invalid Input: You cannot perform this action**, the blocker is regional/service entitlement rather than CSV formatting. Continue with QuickML LLM Serving, which Zoho documents as available in IN.
+The older `capp.zia().auto_ml(...)` integration is not used; the trained classifier is a QuickML pipeline endpoint.
 
 ## Console Setup
 
@@ -166,7 +203,7 @@ Only claim active QuickML generative AI after step 5 succeeds in the deployed ap
 
 ## Safety Boundary
 
-QuickML may choose one of eight allowlisted actions:
+QuickML may choose one of 14 operational actions or the explicit `out_of_scope` result:
 
 - `search_cases`
 - `show_hotspots`
@@ -176,6 +213,13 @@ QuickML may choose one of eight allowlisted actions:
 - `find_connection`
 - `rank_offenders`
 - `explain_correlations`
+- `case_brief`
+- `assess_case_risk`
+- `summarize_kpis`
+- `forecast_hotspots`
+- `operational_guidance`
+- `app_help`
+- `out_of_scope`
 
 Pydantic rejects other actions, malformed time windows, invalid languages, invalid `district_ids`
 (silently dropped by a `field_validator` rather than trusted), and confidence outside 0-1. The model
@@ -183,3 +227,10 @@ never receives credentials and cannot issue ZCQL. The backend applies filters to
 labels every response with its source. Every `/api/ask` call also returns a `trace` array (interpret →
 execute → observe → answer), so the plan the model chose and the tool that actually ran are both
 inspectable, not just the final answer.
+
+## Optional Local Provider Later
+
+Zoho QuickML LLM Serving is the submission provider. A local or OpenAI-compatible model is not
+enabled now. To add one later, implement an adapter that returns the same `AgentPlan` JSON and
+select it before `_run_agent()`. Keep Pydantic validation, backend-only tools, signed-session RBAC,
+and NoSQL audit logging unchanged; never let a provider call operational tools directly.

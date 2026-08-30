@@ -40,9 +40,9 @@ export type RiskLevel = "high" | "med" | "low";
 
 export interface RiskPrediction {
   case_master_id: number;
-  model_id: string;
+  model_id: string | null;
   model_name: string;
-  source: "zia_automl" | "local_fallback";
+  source: "quickml_pipeline" | "local_fallback";
   risk_class: "low" | "medium" | "high";
   scores: Record<string, number>;
   features: {
@@ -101,6 +101,8 @@ export interface ForecastPoint {
   trend_pct: number;
   horizon_days: number;
   model: string;
+  model_id?: string | null;
+  source?: "quickml_pipeline" | "local_fallback" | "mock";
   confidence_interval?: [number, number];
   training_window_months?: number;
 }
@@ -136,6 +138,8 @@ export interface StationAnomaly {
   current_count: number;
   mean_count: number;
   severity: "critical" | "high";
+  source?: "quickml_pipeline" | "local_fallback" | "mock";
+  model_id?: string | null;
 }
 
 // ─── Ask Garuda (agentic NL search, Phase 5) ──────────────────────────────────
@@ -323,6 +327,72 @@ export interface KpiMetric {
   accent: "electric" | "danger" | "default";
 }
 
+export interface CommandChangeMetric {
+  id: "cases" | "serious_cases" | "arrest_rate" | "station_spikes";
+  current: number;
+  previous: number;
+  absolute_change: number;
+  percent_change: number | null;
+  unit: "cases" | "percent" | "stations";
+  status: "improving" | "worsening" | "stable";
+}
+
+export interface AreaChange {
+  id: number;
+  name: string;
+  current: number;
+  previous: number;
+  absolute_change: number;
+  percent_change: number | null;
+}
+
+export interface CrimeChangeCell {
+  crime_id: number;
+  crime_type: string;
+  current: number;
+  previous: number;
+  absolute_change: number;
+  percent_change: number | null;
+}
+
+export interface CommandChangeSummary {
+  as_of: string;
+  window_days: 7 | 30 | 90;
+  scope: string;
+  current_period: { start: string; end: string };
+  previous_period: { start: string; end: string };
+  metrics: CommandChangeMetric[];
+  area_level: "district" | "station";
+  area_changes: AreaChange[];
+  crime_changes: { area_id: number; area_name: string; cells: CrimeChangeCell[] }[];
+  decision_queue: {
+    needs_assignment: number;
+    overdue: number;
+    assigned: number;
+    in_progress: number;
+    completed: number;
+  };
+  resource_allocation: {
+    available_units: number;
+    allocated_units: number;
+    advisory: "human_review_required";
+    recommendations: {
+      station_id: number;
+      station_name: string;
+      priority_score: number;
+      predicted_count: number;
+      current_count: number;
+      baseline_count: number;
+      is_anomaly: boolean;
+      z_score: number;
+      forecast_source: "quickml_pipeline" | "local_fallback";
+      anomaly_source: "quickml_pipeline" | "local_fallback";
+      recommended_units: number;
+    }[];
+  };
+  provenance: string;
+}
+
 // ─── Simulator ───────────────────────────────────────────────────────────────
 
 export interface SimulatorVariable {
@@ -359,7 +429,8 @@ export interface CaseReport {
   assigned_officer: string;
   crime_type: string;
   ipc_section: string;
-  suspects: number;
+  suspects: number | null;
+  detail_level?: "field" | "supervisor";
 }
 
 export interface CaseReportsPage {
@@ -367,6 +438,7 @@ export interface CaseReportsPage {
   total: number;
   limit: number;
   offset: number;
+  summary: { active: number; critical: number; stations: number };
 }
 
 export interface CaseWorkflowUpdate {

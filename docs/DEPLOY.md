@@ -136,30 +136,55 @@ catalyst client:setup
 # Select client type "Basic" (or the closest match for a Vite static build) and
 # point it at the dist/ output directory.
 
-# Then deploy all resources in one shot:
-catalyst deploy
+# Deploy the client independently:
+catalyst deploy --only client
 ```
-> There is no `catalyst hosting push` command. Deploy the configured client with `catalyst deploy`, or use `catalyst deploy --only client` for the client only.
+> There is no `catalyst hosting push` command. Deploy the configured client with `catalyst deploy --only client` so AppSail and its secret-bearing environment are not touched.
 
 In Catalyst Console → Web Client Hosting, you can confirm the client named `garuda-frontend` (or whatever name you gave it during setup) and its assigned domain / `*.catalystapps.com` URL.
 
 ---
 
-## 7. Set Environment Variables in Catalyst Console
-AppSail → Environment Variables:
-```
-ALLOWED_ORIGINS=https://garuda-frontend-<id>.catalystapps.com
-SESSION_SECRET=<a long random string, generate with: openssl rand -hex 32>
-SEED_TOKEN=<a long random secret used only by protected seed and reload endpoints>
-QUICKML_LLM_ENDPOINT=<copied from QuickML Model Details>
-QUICKML_ENDPOINT_KEY=<secret endpoint key>
-QUICKML_ACCESS_TOKEN=<OAuth token with QuickML.deployment.READ>
-QUICKML_ORG_ID=<organization ID>
-QUICKML_MODEL=<model name from QuickML Model Details>
-```
-> Do not set `CATALYST_PROJECT_ID`: AppSail derives project context from request headers, and Catalyst reserves that variable name. `ALLOWED_ORIGINS` configures local-development CORS; Catalyst manages deployed Web Client origin protection. `SESSION_SECRET` signs officer login tokens and is required before production use.
+## 7. Preserve AppSail Environment Variables
 
-> Rotate `SESSION_SECRET` and `SEED_TOKEN` in the Catalyst Console before the next deployment. Earlier local configuration values were removed from `backend/app-config.json` and must not be reused.
+`catalyst deploy --only appsail` replaces the complete AppSail environment with the
+`env_variables` object in `backend/app-config.json`. Console-only values do not survive a CLI
+deployment. The tracked file contains non-secret configuration such as:
+
+```
+ALLOWED_ORIGINS=https://garuda-60078749238.development.catalystserverless.in
+QUICKML_LLM_ENDPOINT=https://api.catalyst.zoho.in/quickml/v1/project/<project-id>/glm/chat
+QUICKML_MODEL=crm-di-glm47b_30b_it
+QUICKML_CONNECTION_LINK_NAME=garudaquickml
+QUICKML_RISK_MODEL_ID=<model-id>
+QUICKML_FORECAST_MODEL_ID=<model-id>
+QUICKML_ANOMALY_MODEL_ID=<model-id>
+```
+
+The following values are secrets and must never be committed:
+
+```text
+SESSION_SECRET
+SEED_TOKEN
+QUICKML_RISK_ENDPOINT_KEY
+QUICKML_FORECAST_ENDPOINT_KEY
+QUICKML_ANOMALY_ENDPOINT_KEY
+```
+
+For every AppSail deploy, use a local guarded script that:
+
+1. Reads and retains the original `backend/app-config.json` bytes.
+2. Prompts for all three 96-character endpoint keys with `Read-Host -AsSecureString`.
+3. Generates fresh `SESSION_SECRET` and `SEED_TOKEN` values.
+4. Injects those five values only while `catalyst deploy --only appsail` packages the app.
+5. Restores the original bytes in a `finally` block and deletes itself.
+
+This invalidates existing browser sessions because `SESSION_SECRET` rotates. Re-login after each
+backend deployment. Verify that `backend/app-config.json` is secret-free before committing.
+
+Do not set `CATALYST_PROJECT_ID`; AppSail derives project context from request headers and Catalyst
+reserves that variable name. Static `QUICKML_ACCESS_TOKEN` is not required because the connected
+`garudaquickml` Catalyst Connection supplies refreshable OAuth headers.
 
 Web Client Hosting → Build Settings:
 ```

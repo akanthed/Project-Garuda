@@ -95,7 +95,7 @@ beyond what each endpoint already returns.
   invite** through which the user sets their own password — there is no admin-settable
   fixed username/password pair. This is incompatible with the evaluation model this
   project needs: judges must be able to log in instantly with a pre-set badge/password
-  (e.g. `KSP-BLR-7741` / `sentinel2026`), with no email round-trip. Migrating would have
+  (e.g. `KSP-DGP-0001` / `dgp2026`), with no email round-trip. Migrating would have
   either required evaluators to receive and act on a real email, or fabricating email
   addresses we don't control inboxes for — neither is viable for live judging. The
   hand-rolled system (HMAC sessions, PBKDF2-hashed passwords, `Officers` Data Store
@@ -128,7 +128,7 @@ Ran `git ls-files` + `git log --all --diff-filter=A --name-only` filtered for
 - `catalyst.json`, `.catalystrc`, `backend/app-config.json` are tracked despite being
   listed as "Sensitive Configuration Files ... may have API keys". Content-inspected all
   three: they contain only build paths, the Zoho project ID/domain ID/environment ID,
-  the AppSail start command, and non-secret env vars (`ZIA_RISK_MODEL_ID`,
+  the AppSail start command, and non-secret environment configuration,
   `ALLOWED_ORIGINS`, `LOG_LEVEL`) — **no `SESSION_SECRET`, `SEED_TOKEN`, or any API key
   is present in any tracked file**; those two are set only via the Catalyst Console UI
   (confirmed in repo memory — Console rejects reserved keywords, forcing manual entry

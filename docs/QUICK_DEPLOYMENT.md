@@ -1,7 +1,7 @@
-# 🚀 Quick Deployment Guide - Risk Assessment Frontend
+# 🚀 Quick Deployment Guide - Garuda
 
 **Time to Deploy**: ~5 minutes  
-**Status**: ✅ Ready Now
+**Status**: ✅ Deployed to Catalyst Development
 
 ---
 
@@ -13,7 +13,8 @@
 ✅ Fixed all TypeScript errors  
 ✅ **Frontend builds clean** (no errors)
 
-**Your backend** is already deployed with `/api/risk/{case_master_id}` endpoint working.
+The backend serves QuickML risk, forecast, anomaly, voice, translation, role-scoped reports,
+Command comparisons, and patrol recommendations.
 
 ---
 
@@ -46,37 +47,36 @@ npm run build
 
 ## 3️⃣ Deploy to Zoho Catalyst
 
-### Option A: Manual Web Client Hosting Upload
-
-1. Go to [Catalyst Console](https://www.zoho.com/catalyst/)
-2. Select your workspace
-3. **Web Client Hosting** → Upload
-4. Select `dist/` folder
-5. Deploy
-
-### Option B: Use Your CI/CD Pipeline
-
-```bash
-# If you have automated deployment:
-npm run build && npm run deploy
+```powershell
+npm run build
+catalyst deploy --only client
 ```
+
+Do not use an undocumented `npm run deploy` or `catalyst hosting push` command.
+
+### Backend Deployment Warning
+
+`catalyst deploy --only appsail` replaces the complete AppSail environment with
+`backend/app-config.json`. The tracked file intentionally excludes `SESSION_SECRET`, `SEED_TOKEN`,
+and all three QuickML endpoint keys. Use the guarded prompt/inject/deploy/restore process described
+in [DEPLOY.md](DEPLOY.md); never commit those values.
 
 ---
 
 ## 4️⃣ Verify in Production
 
 ### Test 1: Component Shows
-1. Login to deployed dashboard
-2. Reports tab
-3. Click any case
-4. ✅ Should see "Risk Assessment" section
+1. Sign in as SI, ACP, or DGP.
+2. Open Reports and select a case.
+3. Confirm QuickML Risk Assessment appears and reports its source/model ID.
+4. Sign in as Constable and confirm station-only reports omit risk, suspect, FIR, and workflow controls.
 
 ### Test 2: Data Displays
 Look for:
 - 🎯 Risk badge (LOW/MEDIUM/HIGH)
 - 📊 Confidence % with bar
 - 🔍 Contributing factors list
-- 🤖 Source indicator (Zia or local)
+- 🤖 Source indicator (QuickML pipeline or local fallback)
 
 ### Test 3: Bilingual
 1. Click language toggle (top header)
@@ -137,7 +137,7 @@ When officer opens a case, they now see:
 │ • Arrest Rate: 67%              │
 │ • Station Case Volume: 145      │
 │                                 │
-│ 🤖 Zia AutoML prediction        │
+│ 🤖 QuickML trained model        │
 │                                 │
 │ ⚠️  Human review still required │
 └─────────────────────────────────┘
@@ -152,7 +152,7 @@ When officer opens a case, they now see:
 | Title | Risk Assessment | ಅಪಾಯ ಮೌಲ್ಯಮಾಪನ |
 | Confidence | Confidence | ವಿಶ್ವಾಸ |
 | Factors | Contributing Factors | ಅವದಾನ ಅಂಶಗಳು |
-| Source (AI) | Zia AutoML prediction | Zia AutoML ಭವಿಷ್ಯದ್ವಾಣಿ |
+| Source (AI) | QuickML trained model | QuickML ತರಬೇತಿ ಪಡೆದ ಮಾದರಿ |
 | Source (Local) | Local rule-based analysis | ಸ್ಥಳೀಯ ನಿಯಮ-ಆಧಾರಿತ ವಿಶ್ಲೇಷಣೆ |
 
 ---
@@ -192,7 +192,7 @@ For detailed info:
 - **Integration Details**: [FRONTEND_INTEGRATION_GUIDE.md](FRONTEND_INTEGRATION_GUIDE.md)
 - **Deployment Status**: [FRONTEND_DEPLOYMENT_READY.md](FRONTEND_DEPLOYMENT_READY.md)
 - **Visual Guide**: [RISK_ASSESSMENT_VISUAL_GUIDE.md](RISK_ASSESSMENT_VISUAL_GUIDE.md)
-- **Component Code**: [src/components/dashboard/RiskAssessment.tsx](src/components/dashboard/RiskAssessment.tsx)
+- **Component Code**: [src/components/dashboard/RiskAssessment.tsx](../src/components/dashboard/RiskAssessment.tsx)
 
 ---
 

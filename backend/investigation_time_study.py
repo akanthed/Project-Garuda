@@ -2,7 +2,7 @@
 Investigation-time study — Phase 6 impact deliverable.
 
 Measures Garuda-assisted *system response time* for 5 realistic investigation
-tasks (see INVESTIGATION_TIME_STUDY.md for the full protocol and the manual
+tasks (see docs/INVESTIGATION_TIME_STUDY.md for the full protocol and the manual
 side of the comparison). This script only automates and times the Garuda
 side, over real HTTP calls against a running backend — it does NOT
 fabricate manual-baseline numbers. Manual timings must come from an actual
@@ -76,7 +76,7 @@ def _ensure_baseline_template() -> dict:
     template = {
         "instructions": (
             "Fill in manual_minutes for each task after a real timed session (see "
-            "INVESTIGATION_TIME_STUDY.md). Use the median across at least 3 participants. "
+            "docs/INVESTIGATION_TIME_STUDY.md). Use the median across at least 3 participants. "
             "Leave null until you have real numbers — do not guess."
         ),
         "participants": None,
@@ -89,8 +89,8 @@ def _ensure_baseline_template() -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", default="http://localhost:8000")
-    parser.add_argument("--badge", default="KSP-BLR-7741")
-    parser.add_argument("--password", default="sentinel2026")
+    parser.add_argument("--badge", default="KSP-DGP-0001")
+    parser.add_argument("--password", default="dgp2026")
     args = parser.parse_args()
 
     baseline = _ensure_baseline_template()
@@ -135,7 +135,7 @@ def main() -> None:
         print(f"{r['id']:<28}{r['garuda_avg_response_seconds']:>12}{str(manual):>14}{reduction:>12}")
     if baseline.get("participants") is None:
         print(f"\nNo manual baseline yet — fill in {BASELINE_PATH} after a real timed session "
-              "(see INVESTIGATION_TIME_STUDY.md), then re-run this script.")
+              "(see docs/INVESTIGATION_TIME_STUDY.md), then re-run this script.")
     print(f"Full report written to {REPORT_PATH}")
 
 

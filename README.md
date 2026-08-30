@@ -6,7 +6,7 @@ records into an explainable, role-aware workflow for prioritising patrol and inv
 Built for the Karnataka State Police (KSP) Datathon 2026, entirely on Zoho Catalyst.
 
 > Every number in this README is measured, not estimated. Regeneration commands are in
-> [HACKATHON_SUBMISSION.md §11](HACKATHON_SUBMISSION.md#11-how-to-regenerate-every-number-in-this-file).
+> [HACKATHON_SUBMISSION.md §11](docs/HACKATHON_SUBMISSION.md#11-how-to-regenerate-every-number-in-this-file).
 > Where a claim is a limitation instead of a result, it's stated as one — see
 > [§10 Responsible AI & limitations](#responsible-ai-and-limitations).
 
@@ -25,9 +25,20 @@ Built for the Karnataka State Police (KSP) Datathon 2026, entirely on Zoho Catal
 | Badge | Password | Role | Clearance | Shows |
 | --- | --- | --- | --- | --- |
 | `KSP-BLR-1001` | `constable123` | Constable | CLR-1 | Mobile Field Mode: assigned tasks, nearby map, reports, and evidence updates |
-| `KSP-BLR-4412` | `garuda2026` | Sub-Inspector | CLR-4 | Partial gating (planner unlocked) |
-| `KSP-BLR-7741` | `sentinel2026` | Circle Inspector | CLR-7 | Network graph + planner + export |
+| `KSP-BLR-4412` | `garuda2026` | Sub-Inspector | CLR-4 | Station reports, FIR intake, workflow, and planning |
+| `KSP-ACP-0001` | `acp2026` | ACP | CLR-6 | Bengaluru district command |
 | `KSP-DGP-0001` | `dgp2026` | DGP | CLR-7 | Full statewide access |
+
+**Reports by role:**
+
+| Role | Enforced scope | Report detail and actions |
+| --- | --- | --- |
+| DGP | Statewide or selected district/station | Supervisor detail, QuickML risk, FIR intake, assignment, workflow updates |
+| ACP | Bengaluru Urban district | District cases and station drilldown, supervisor detail and actions |
+| SI | Assigned police station | Station cases, supervisor detail, FIR intake, assignment, workflow updates |
+| Constable | Assigned police station | Read-only case summary; suspect count, QuickML risk, FIR intake, and workflow controls withheld |
+
+Scope and permissions are enforced by the backend signed session; hiding controls in the client is only the matching user experience.
 
 **3-minute evaluator path:** log in as `KSP-BLR-1001` on a phone-sized viewport to see the
 dedicated Field Mode and four-item navigation → open an assigned task, add a field note or
@@ -38,6 +49,11 @@ feature, then use its result button to navigate there → run a planner scenario
 server-computed PDF brief. The visible info buttons beside each major section provide the same
 guidance in English and Kannada without leaving the current view.
 
+### Configuration boundaries
+
+- **FIR format:** the current synthetic dataset uses `KSP/YYYY/NNNN`. Server validation reads `FIR_NUMBER_REGEX`; replace that environment value with the authoritative team-supplied expression when the official format arrives. The backend remains the source of truth, so the client does not hardcode the provisional regex. Official field mapping remains pending that team artifact.
+- **LLM provider:** Ask Garuda currently uses Zoho Catalyst QuickML LLM Serving through `_quickml_plan_sync()` and falls back to deterministic rules. Keep this for the submission. A future local/OpenAI-compatible provider should implement the same validated `AgentPlan` output boundary and be selected before `_run_agent()`; tools, authorization, and audit logging do not need to change.
+
 ---
 
 ## What it does
@@ -46,8 +62,8 @@ Police teams routinely inspect separate tables, maps, and case records before de
 where to focus patrols. Garuda collapses that into one Catalyst-hosted workspace over a
 **124,000-case statewide Karnataka dataset spanning 9 districts**.
 
-- **Geospatial risk canvas** — historical/predicted hotspot layers, hex density map, station
-  anomaly z-score alerts, statewide ↔ district ↔ station drilldown.
+- **Geospatial risk canvas** — historical/predicted hotspot layers, hex density map, QuickML
+  station anomaly alerts, statewide ↔ district ↔ station drilldown, and bounded responsive popups.
 - **Deep network analysis** — a real suspect co-offender graph with centrality-ranked
   "kingpins" (degree/betweenness/eigenvector), community detection, shortest-path
   connection tracing with hop-by-hop explanations, and labelled (non-evidentiary) link
@@ -57,9 +73,11 @@ where to focus patrols. Garuda collapses that into one Catalyst-hosted workspace
   It can explain a workflow and route the user to the relevant view, shows a visible plan →
   execute → observe → answer trace, and uses QuickML (GLM-4.7-Flash) with a deterministic
   rules-based fallback.
-- **Predictive rigor** — 4 forecasting models backtested against each other with MAE/MAPE
-  plus the criminology-standard PAI/PEI metrics; the simplest model is deployed because it
-  measurably won, not by default.
+- **Predictive rigor** — QuickML Gradient Boosting forecasting and Embedded XGBoost anomaly
+  classification are evaluated on untouched January-June 2026 temporal holdouts. Transparent
+  local trend/z-score methods remain service-failure fallbacks.
+- **Resource recommendations** — the Command dashboard combines QuickML forecast and anomaly
+  signals into a bounded, explainable patrol allocation that never exceeds the 15-unit demo fleet.
 - **What-if planner** — patrol density / infrastructure / response-time scenario modelling
   with a stated confidence range, not a bare point estimate.
 - **Secure operational workflow** — server-side badge login, HMAC-signed sessions,
@@ -70,13 +88,15 @@ where to focus patrols. Garuda collapses that into one Catalyst-hosted workspace
   tasks; constables use a plain-language mobile view to start work, attach a photo/PDF,
   record observations, and complete the task. Structured field history, conservative
   outcome assessment, and a reviewed operation debrief close the loop.
-- **Role-aware responsive interface** — constables receive a focused four-item mobile Field
-  Mode, while senior roles receive a responsive six-module command interface with stacked
-  phone layouts and no horizontal overflow.
+- **Role-aware responsive interface** — DGP receives statewide Command, ACP receives a locked
+  Bengaluru district Command view, SI receives station-scoped management, and Constable receives
+  station-scoped read-only reports plus a focused mobile Field Mode.
+- **Catalyst-native speech and translation** — QuickML English/Kannada STT, TTS, and dynamic
+  translation; browser APIs capture audio only and do not provide cloud transcription fallbacks.
 - **In-context help** — touch-friendly info popovers explain KPI cards, map controls,
   connection graphs, reports, planning, operations, and settings. All help text is available
   in English and Kannada; Ask Garuda provides conversational help and navigation.
-- **Bilingual UI** (English/Kannada, including district names) and full light/dark themes.
+- **Bilingual UI** (English/Kannada, including district names) in a consistent dark operational interface.
 
 ---
 
@@ -178,17 +198,20 @@ without headers fails delivery silently while the event log sits on "In Progress
 | 100 | 34.5 req/s | 2,934 ms | 3,276 ms | 3,352 ms | 0.0% |
 
 Cold start 6.84s; server memory 232-274 MB RSS. This proves prototype-level concurrency
-handling, not certified production capacity — see [PRODUCTION_ROADMAP.md](PRODUCTION_ROADMAP.md).
+handling, not certified production capacity — see [PRODUCTION_ROADMAP.md](docs/PRODUCTION_ROADMAP.md).
 
 **Agent evaluation** (`backend/agent_eval.py`, 64 labelled EN/KN queries, 8 actions):
 100% tool-selection accuracy, 100% parameter accuracy, 0% fallback rate on the rules
 planner. Documented honestly as a regression check against the planner it was authored
 alongside, not a blind third-party benchmark.
 
-**Forecast backtest** (`/api/hotspots/forecast/backtest`, rolling-origin, 6 months, 164 stations):
-`linear_trend` deployed because it won on MAE (2.99) and MAPE (29.4%) against `ewma`,
-`seasonal_naive`, and `naive` baselines — an upgrade to gradient boosting was deliberately
-not made because the simple model already beat every baseline.
+**Forecast backtest** (`/api/hotspots/forecast/backtest`, 6 months, 164 stations): QuickML
+Gradient Boosting is deployed after improving temporal-holdout MAE from 3.129 to 2.998 and PAI
+from 1.297 to 1.313 versus the local linear-trend fallback.
+
+**Anomaly holdout** (984 natural-prevalence station-months): QuickML Embedded XGBoost detected
+43 of 45 anomalies (95.6% recall, 79.6% precision, 86.9% F1). Alerts remain advisory and retain
+current count, trailing mean, and z-score evidence.
 
 **Performance fixes in this build**
 
@@ -202,11 +225,11 @@ not made because the simple model already beat every baseline.
 | Check | Result |
 | --- | --- |
 | `npx tsc --noEmit` | 0 errors |
-| `npx vitest run` | 73/73 passing, including Connections canvas interaction-handler coverage |
-| `pytest test_agent.py test_operations.py test_risk_prediction.py` | 75/76 in the latest combined Windows run; the sole timing-threshold test passed when rerun alone |
+| `npx vitest run --reporter=dot` | 81/81 passing across 10 files |
+| Affected backend integration suites | 44/44 passing (Command, voice, forecast, anomaly, FIR, role reporting, and risk prediction) |
 | `npm run build` | Succeeds |
 
-Full methodology and regeneration commands: [HACKATHON_SUBMISSION.md](HACKATHON_SUBMISSION.md).
+Full methodology and regeneration commands: [HACKATHON_SUBMISSION.md](docs/HACKATHON_SUBMISSION.md).
 
 ---
 
@@ -227,11 +250,11 @@ find them regardless:
 - **Forecast and planner outputs are labelled estimates with confidence ranges** — they
   support human decisions, they do not automate enforcement, and the feedback-loop risk
   (predictions shift patrols shift future recorded crime) is documented, not hidden.
-- **The investigation-time-reduction study** (`INVESTIGATION_TIME_STUDY.md`) is a real,
+- **The investigation-time-reduction study** (`docs/INVESTIGATION_TIME_STUDY.md`) is a real,
   instrumented protocol; the human-baseline timing side requires 3+ real participants and
   is not fabricated to look complete.
-- Full detail in [MODEL_CARD.md](MODEL_CARD.md), [THREAT_MODEL.md](THREAT_MODEL.md), and
-  [PRODUCTION_ROADMAP.md](PRODUCTION_ROADMAP.md).
+- Full detail in [MODEL_CARD.md](docs/MODEL_CARD.md), [THREAT_MODEL.md](docs/THREAT_MODEL.md), and
+  [PRODUCTION_ROADMAP.md](docs/PRODUCTION_ROADMAP.md).
 
 ---
 
@@ -267,7 +290,7 @@ python -m pip install -r requirements.txt --target vendor `
 cd ..
 ```
 
-Key gotchas (full detail in [DEPLOY.md](DEPLOY.md)):
+Key gotchas (full detail in [DEPLOY.md](docs/DEPLOY.md)):
 1. AppSail runs the start command with **no shell** — wrap env-var expansion in
    `sh -c '...'` or `$X_ZOHO_CATALYST_LISTEN_PORT` is passed as a literal string.
 2. AppSail does **not** install `requirements.txt` on the server — vendor Linux wheels
@@ -292,15 +315,15 @@ Key gotchas (full detail in [DEPLOY.md](DEPLOY.md)):
 | `backend/*_audit.py`, `investigation_time_study.py`, `load_test.py`, `agent_eval.py` | Runnable measurement scripts backing every number in this README |
 | `src/` | React/Vite/TanStack Router frontend |
 | `AGENTS.md` | Custom agent routing used to build this repo (frontend/backend/DevOps split) |
-| [HACKATHON_SUBMISSION.md](HACKATHON_SUBMISSION.md) | Full submission copy — canonical source for every measured claim |
-| [MODEL_CARD.md](MODEL_CARD.md) | Risk model, forecast, network analytics, agent, bias-audit documentation |
-| [THREAT_MODEL.md](THREAT_MODEL.md) | Assets, trust boundaries, fixed and open security findings |
-| [PRODUCTION_ROADMAP.md](PRODUCTION_ROADMAP.md) | Load test results, cost scaling shape, decade roadmap |
-| [INVESTIGATION_TIME_STUDY.md](INVESTIGATION_TIME_STUDY.md) | Protocol + instrumentation for the impact study |
-| [DEPLOY.md](DEPLOY.md) | Full Catalyst deployment walkthrough |
+| [HACKATHON_SUBMISSION.md](docs/HACKATHON_SUBMISSION.md) | Full submission copy — canonical source for every measured claim |
+| [MODEL_CARD.md](docs/MODEL_CARD.md) | Risk model, forecast, network analytics, agent, bias-audit documentation |
+| [THREAT_MODEL.md](docs/THREAT_MODEL.md) | Assets, trust boundaries, fixed and open security findings |
+| [PRODUCTION_ROADMAP.md](docs/PRODUCTION_ROADMAP.md) | Load test results, cost scaling shape, decade roadmap |
+| [INVESTIGATION_TIME_STUDY.md](docs/INVESTIGATION_TIME_STUDY.md) | Protocol + instrumentation for the impact study |
+| [DEPLOY.md](docs/DEPLOY.md) | Full Catalyst deployment walkthrough |
 
-`DEPLOY.md`, `QUICK_DEPLOYMENT.md`, `QUICKML_INTEGRATION.md`, `FRONTEND_INTEGRATION_GUIDE.md`,
-`RISK_ASSESSMENT_VISUAL_GUIDE.md`, and `PRESENTATION_CONTENT.md` are supplementary/how-to
+`docs/DEPLOY.md`, `docs/QUICK_DEPLOYMENT.md`, `docs/QUICKML_INTEGRATION.md`, `docs/FRONTEND_INTEGRATION_GUIDE.md`,
+`docs/RISK_ASSESSMENT_VISUAL_GUIDE.md`, and `docs/PRESENTATION_CONTENT.md` are supplementary/how-to
 docs, current as of the latest deploy; start from this README and HACKATHON_SUBMISSION.md
 for evaluator-facing claims.
 
@@ -313,7 +336,7 @@ MapLibre GL (`react-map-gl`) + deck.gl + `react-force-graph-2d`
 
 **Backend:** Python 3.11 + FastAPI + Uvicorn + Pydantic + NetworkX + pandas + NumPy + fpdf2 + zcatalyst-sdk
 
-**Testing:** Vitest + Testing Library (frontend, 73 tests), pytest (backend, 76 collected tests)
+**Testing:** Vitest + Testing Library (frontend), pytest (backend)
 
 **Infrastructure:** Zoho Catalyst — AppSail, Web Client Hosting, Data Store, NoSQL, Cache,
 Connections, QuickML LLM Serving and RAG/Knowledge Base, Zia AutoML/OCR, SmartBrowz,

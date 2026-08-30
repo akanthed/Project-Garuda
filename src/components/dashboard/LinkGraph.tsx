@@ -361,10 +361,11 @@ function CommunitiesPanel({ communities, onClose, locale }: {
   );
 }
 
-function ConnectPanel({ source, target, onSourceChange, onTargetChange, onSubmit, loading, result, onClose, locale }: {
+function ConnectPanel({ source, target, onSourceChange, onTargetChange, onSubmit, loading, result, suggestions, error, onClose, locale }: {
   source: string; target: string;
   onSourceChange: (v: string) => void; onTargetChange: (v: string) => void;
   onSubmit: () => void; loading: boolean; result: ConnectionPath | null;
+  suggestions: { id: string; label: string }[]; error: string | null;
   onClose: () => void; locale: Locale;
 }) {
   return (
@@ -372,15 +373,24 @@ function ConnectPanel({ source, target, onSourceChange, onTargetChange, onSubmit
       <input
         value={source}
         onChange={(e) => onSourceChange(e.target.value)}
+        list="connection-source-people"
         placeholder={t("graph_source_suspect", locale)}
         className="w-full rounded-md border border-foreground/10 bg-background/50 px-2.5 py-1.5 font-mono text-[11px] outline-none focus:border-primary/50"
       />
+      <datalist id="connection-source-people">
+        {suggestions.map((person) => <option key={person.id} value={person.id}>{person.label}</option>)}
+      </datalist>
       <input
         value={target}
         onChange={(e) => onTargetChange(e.target.value)}
+        list="connection-target-people"
         placeholder={t("graph_target_suspect", locale)}
         className="w-full rounded-md border border-foreground/10 bg-background/50 px-2.5 py-1.5 font-mono text-[11px] outline-none focus:border-primary/50"
       />
+      <datalist id="connection-target-people">
+        {suggestions.map((person) => <option key={person.id} value={person.id}>{person.label}</option>)}
+      </datalist>
+      <p className="text-[10px] leading-relaxed text-muted-foreground">{t("graph_select_people_hint", locale)}</p>
       <button
         onClick={onSubmit}
         disabled={loading || !source.trim() || !target.trim()}
@@ -391,6 +401,7 @@ function ConnectPanel({ source, target, onSourceChange, onTargetChange, onSubmit
       {result && !result.connected && (
         <p className="text-[11px] text-muted-foreground">{t("graph_no_path", locale)}</p>
       )}
+      {error && <p className="text-[11px] text-amber-400">{error}</p>}
       {result?.connected && (
         <div className="space-y-2 border-t border-foreground/5 pt-2">
           {result.hops.map((h, i) => (
@@ -462,6 +473,12 @@ export function LinkGraph({ compact = false }: LinkGraphProps) {
   const [connectTarget, setConnectTarget] = useState("");
   const [connectResult, setConnectResult] = useState<ConnectionPath | null>(null);
   const [connectLoading, setConnectLoading] = useState(false);
+  const [connectError, setConnectError] = useState<string | null>(null);
+
+  const suspectSuggestions = useMemo(() => graphData.nodes
+    .filter((node) => node.type === "Suspect")
+    .map((node) => ({ id: node.id, label: node.label }))
+    .sort((left, right) => left.label.localeCompare(right.label)), [graphData.nodes]);
 
   // Measure container for responsive canvas size. The container div below is
   // now always mounted (loading only swaps its *contents*, not the node
@@ -513,15 +530,17 @@ export function LinkGraph({ compact = false }: LinkGraphProps) {
   const handleFindConnection = useCallback(async () => {
     if (!connectSource.trim() || !connectTarget.trim() || connectLoading) return;
     setConnectLoading(true);
+    setConnectError(null);
     try {
       const { data } = await fetchConnectionPath(connectSource.trim(), connectTarget.trim());
       setConnectResult(data);
     } catch {
-      setConnectResult({ connected: false, path: [], hops: [], path_length: null });
+      setConnectResult(null);
+      setConnectError(t("graph_connection_unavailable", locale));
     } finally {
       setConnectLoading(false);
     }
-  }, [connectSource, connectTarget, connectLoading]);
+  }, [connectSource, connectTarget, connectLoading, locale]);
 
   // Nodes/edges on the current "find connection" result, highlighted on canvas
   const pathNodeIds = useMemo(
@@ -532,6 +551,25 @@ export function LinkGraph({ compact = false }: LinkGraphProps) {
     () => new Set(connectResult?.connected ? connectResult.hops.map((h) => [h.from.id, h.to.id].sort().join("|")) : []),
     [connectResult]
   );
+  const displayedGraphData = useMemo(() => {
+    if (!connectResult?.connected) return graphData;
+    const knownNodeIds = new Set(graphData.nodes.map((node) => node.id));
+    const pathNodes: FGNode[] = connectResult.path
+      .filter((person) => !knownNodeIds.has(person.id))
+      .map((person) => ({ id: person.id, label: person.label, type: "Suspect", weight: 2 }));
+    const knownEdgeKeys = new Set(graphData.links.map((link) => {
+      const sourceId = typeof link.source === "string" ? link.source : link.source.id;
+      const targetId = typeof link.target === "string" ? link.target : link.target.id;
+      return [sourceId, targetId].sort().join("|");
+    }));
+    const pathLinks: FGLink[] = connectResult.hops
+      .filter((hop) => !knownEdgeKeys.has([hop.from.id, hop.to.id].sort().join("|")))
+      .map((hop) => ({ source: hop.from.id, target: hop.to.id, relation: "Recorded co-offender path" }));
+    return {
+      nodes: [...graphData.nodes, ...pathNodes],
+      links: [...graphData.links, ...pathLinks],
+    };
+  }, [connectResult, graphData]);
 
   const selectKingpin = useCallback((k: KingpinRow) => {
     const centrality = { degree: k.degree_centrality, betweenness: k.betweenness_centrality, eigenvector: k.eigenvector_centrality };
@@ -728,7 +766,7 @@ export function LinkGraph({ compact = false }: LinkGraphProps) {
           <>
             <ForceGraph2D
               ref={graphRef}
-              graphData={graphData}
+              graphData={displayedGraphData}
               width={dimensions.width}
               height={dimensions.height}
               backgroundColor="transparent"
@@ -788,6 +826,8 @@ export function LinkGraph({ compact = false }: LinkGraphProps) {
                 onSubmit={handleFindConnection}
                 loading={connectLoading}
                 result={connectResult}
+                suggestions={suspectSuggestions}
+                error={connectError}
                 onClose={() => setActiveTab("inspect")}
                 locale={locale}
               />

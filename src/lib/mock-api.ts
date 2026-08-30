@@ -18,6 +18,7 @@ import type {
   CaseSeverity,
   CaseWorkflowResult,
   CaseWorkflowUpdate,
+  CommandChangeSummary,
   CommunityRow,
   ConnectionPath,
   DistrictsResponse,
@@ -102,6 +103,43 @@ async function apiBlob(path: string): Promise<Blob> {
   });
   if (!res.ok) throw new Error(`API ${path} failed: ${res.status} ${res.statusText}`);
   return res.blob();
+}
+
+export interface VoiceTranscription {
+  text: string;
+  language: "en" | "kn" | "hi";
+  processing_time_ms: number | null;
+  source: "quickml_stt";
+}
+
+export async function transcribeVoice(audio: Blob, language: "en" | "kn"): Promise<VoiceTranscription> {
+  if (!USE_REAL_API) throw new Error("Voice transcription requires the backend");
+  const form = new FormData();
+  form.append("file", audio, "garuda-voice.wav");
+  return apiFetch<VoiceTranscription>(`/api/voice/transcribe?language=${language}`, {
+    method: "POST",
+    body: form,
+  });
+}
+
+export async function synthesizeVoice(text: string, language: "en" | "kn"): Promise<Blob> {
+  if (!USE_REAL_API) throw new Error("Speech synthesis requires the backend");
+  const token = getToken();
+  const response = await fetch(`${API_BASE}/api/voice/synthesize`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ text, language }),
+  });
+  if (response.status === 401) {
+    logout();
+    window.location.assign(`${import.meta.env.BASE_URL}login`);
+    throw new Error("Officer session expired. Please sign in again.");
+  }
+  if (!response.ok) throw new Error(`Speech synthesis failed: ${response.status}`);
+  return response.blob();
 }
 
 // ─── GET /api/districts ────────────────────────────────────────────────────────
@@ -392,6 +430,74 @@ export async function fetchKpiMetrics(params?: ScopeParams): Promise<ApiResponse
   return wrap(KPI_METRICS);
 }
 
+export async function fetchCommandChangeSummary(
+  windowDays: 7 | 30 | 90,
+  params?: ScopeParams,
+): Promise<ApiResponse<CommandChangeSummary>> {
+  if (USE_REAL_API) {
+    const scope = scopeQuery(params);
+    const data = await apiFetch<CommandChangeSummary>(`/api/command/change-summary?window_days=${windowDays}${scope}`);
+    return wrap(data);
+  }
+  await delay(200);
+  const periodValues = {
+    7: { cases: [469, 570], serious: [181, 199], arrest: [82.9, 81.9], spikes: [15, 22] },
+    30: { cases: [2391, 2245], serious: [882, 879], arrest: [82.4, 81.2], spikes: [31, 27] },
+    90: { cases: [6851, 6841], serious: [2583, 2585], arrest: [82.2, 81.6], spikes: [12, 8] },
+  }[windowDays];
+  const metric = (
+    id: CommandChangeSummary["metrics"][number]["id"],
+    values: number[],
+    unit: CommandChangeSummary["metrics"][number]["unit"],
+    upIsGood: boolean,
+  ): CommandChangeSummary["metrics"][number] => {
+    const absolute = Number((values[0] - values[1]).toFixed(1));
+    const percent = values[1] ? Number((absolute / values[1] * 100).toFixed(1)) : null;
+    const status = Math.abs(absolute) < 0.05 ? "stable" : ((absolute > 0) === upIsGood ? "improving" : "worsening");
+    return { id, current: values[0], previous: values[1], absolute_change: absolute, percent_change: percent, unit, status };
+  };
+  const asOf = new Date("2026-06-30T00:00:00Z");
+  const currentStart = new Date(asOf);
+  currentStart.setUTCDate(currentStart.getUTCDate() - windowDays + 1);
+  const previousEnd = new Date(currentStart);
+  previousEnd.setUTCDate(previousEnd.getUTCDate() - 1);
+  const previousStart = new Date(previousEnd);
+  previousStart.setUTCDate(previousStart.getUTCDate() - windowDays + 1);
+  const isoDate = (date: Date) => date.toISOString().slice(0, 10);
+  return wrap({
+    as_of: "2026-06-30",
+    window_days: windowDays,
+    scope: "Karnataka",
+    current_period: { start: isoDate(currentStart), end: isoDate(asOf) },
+    previous_period: { start: isoDate(previousStart), end: isoDate(previousEnd) },
+    metrics: [
+      metric("cases", periodValues.cases, "cases", false),
+      metric("serious_cases", periodValues.serious, "cases", false),
+      metric("arrest_rate", periodValues.arrest, "percent", true),
+      metric("station_spikes", periodValues.spikes, "stations", false),
+    ],
+    area_level: "district",
+    area_changes: [
+      { id: 8, name: "Dharwad", current: 92, previous: 71, absolute_change: 21, percent_change: 29.6 },
+      { id: 6, name: "Ballari", current: 87, previous: 74, absolute_change: 13, percent_change: 17.6 },
+      { id: 2, name: "Mysuru", current: 84, previous: 78, absolute_change: 6, percent_change: 7.7 },
+      { id: 1, name: "Bengaluru Urban", current: 1900, previous: 1980, absolute_change: -80, percent_change: -4 },
+    ],
+    crime_changes: [],
+    decision_queue: { needs_assignment: 3, overdue: 2, assigned: 8, in_progress: 4, completed: 12 },
+    resource_allocation: {
+      available_units: 15,
+      allocated_units: 4,
+      advisory: "human_review_required",
+      recommendations: [
+        { station_id: 1, station_name: "KR Market PS", priority_score: 91.2, predicted_count: 24.1, current_count: 27, baseline_count: 12.4, is_anomaly: true, z_score: 3.2, forecast_source: "quickml_pipeline", anomaly_source: "quickml_pipeline", recommended_units: 2 },
+        { station_id: 2, station_name: "Whitefield PS", priority_score: 72.4, predicted_count: 20.3, current_count: 19, baseline_count: 14.1, is_anomaly: false, z_score: 1.1, forecast_source: "quickml_pipeline", anomaly_source: "quickml_pipeline", recommended_units: 2 },
+      ],
+    },
+    provenance: "synthetic_prototype",
+  });
+}
+
 // ─── GET /api/simulator/variables ─────────────────────────────────────────────
 
 const SIMULATOR_VARIABLES: SimulatorVariable[] = [
@@ -585,6 +691,7 @@ export async function fetchCaseReports(params?: ScopeParams): Promise<ApiRespons
         total: data.length,
         limit: data.length,
         offset: 0,
+        summary: { active: data.filter((report) => report.status === "open" || report.status === "investigating").length, critical: data.filter((report) => report.severity === "critical").length, stations: new Set(data.map((report) => report.station)).size },
       });
     }
     return wrap(data);
@@ -595,6 +702,7 @@ export async function fetchCaseReports(params?: ScopeParams): Promise<ApiRespons
     total: CASE_REPORTS.length,
     limit: CASE_REPORTS.length,
     offset: 0,
+    summary: { active: CASE_REPORTS.filter((report) => report.status === "open" || report.status === "investigating").length, critical: CASE_REPORTS.filter((report) => report.severity === "critical").length, stations: new Set(CASE_REPORTS.map((report) => report.station)).size },
   });
 }
 
@@ -767,6 +875,7 @@ export async function fetchForecast(params?: ScopeParams): Promise<ApiResponse<F
       trend_pct: 8.4,
       horizon_days: 30,
       model: "mock-trend",
+      source: "mock",
     }))
   );
 }
@@ -775,13 +884,14 @@ export async function fetchForecast(params?: ScopeParams): Promise<ApiResponse<F
 
 const MOCK_BACKTEST: ForecastBacktest = {
   models: [
-    { model: "linear_trend", mae: 2.99, mape_percent: 29.4, pai: 1.31, pei: 0.79 },
+    { model: "quickml_gb_regression", mae: 3.00, mape_percent: 28.5, pai: 1.31, pei: 0.79 },
+    { model: "linear_trend", mae: 3.13, mape_percent: 29.7, pai: 1.30, pei: 0.78 },
     { model: "ewma", mae: 3.10, mape_percent: 30.1, pai: 1.33, pei: 0.80 },
     { model: "seasonal_naive", mae: 4.04, mape_percent: 38.0, pai: 1.35, pei: 0.82 },
     { model: "naive", mae: 4.11, mape_percent: 38.1, pai: 1.32, pei: 0.80 },
   ],
   test_months: 6, station_count: 9, k_stations: 2, k_fraction: 0.2,
-  best_model_by_mae: "linear_trend", deployed_model: "linear_trend",
+  best_model_by_mae: "quickml_gb_regression", deployed_model: "quickml_gb_regression",
   methodology: "Rolling-origin backtest against naive, seasonal-naive, and EWMA baselines.",
   feedback_loop_caution: "Predicted hotspots can influence patrol allocation, which can change where future crime is recorded. Treat predictions as one input for human review, not automated dispatch.",
 };
@@ -804,8 +914,8 @@ export async function fetchAnomalies(params?: ScopeParams): Promise<ApiResponse<
   }
   await delay(250);
   return wrap([
-    { station_id: 1, station_name: "KR Market PS", z_score: 3.4, current_count: 9, mean_count: 4.1, severity: "high" },
-    { station_id: 3, station_name: "Whitefield PS", z_score: 2.6, current_count: 7, mean_count: 3.8, severity: "high" },
+    { station_id: 1, station_name: "KR Market PS", z_score: 3.4, current_count: 9, mean_count: 4.1, severity: "high", source: "mock" },
+    { station_id: 3, station_name: "Whitefield PS", z_score: 2.6, current_count: 7, mean_count: 3.8, severity: "high", source: "mock" },
   ]);
 }
 

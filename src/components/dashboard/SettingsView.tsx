@@ -1,12 +1,11 @@
 'use client';
 
 import { useEffect, useState } from "react";
-import { Settings, Shield, Bell, Monitor, Globe2, Key, ChevronRight, Check, Sun, Moon } from "lucide-react";
+import { Settings, Shield, Bell, Monitor, Globe2, Key, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { useTheme } from "@/contexts/ThemeContext";
 import { t, type TranslationKey } from "@/lib/i18n";
 import { getSession, logout } from "@/lib/auth";
 import { fetchAnalyticsSummary } from "@/lib/mock-api";
@@ -144,46 +143,10 @@ function AlertsSection({ toggles, values, onChange }: { toggles: ToggleSetting[]
   );
 }
 
-function ThemeRow() {
-  const { theme, setTheme } = useTheme();
-  const { locale } = useLanguage();
-  return (
-    <div className="flex items-center justify-between py-3">
-      <div>
-        <div className="text-sm">{t("settings_theme_label", locale)}</div>
-        <div className="mt-0.5 text-[11px] text-muted-foreground">{t("settings_theme_desc", locale)}</div>
-      </div>
-      <div className="flex items-center gap-1 rounded-md border border-foreground/5 bg-background/40 p-0.5">
-        <button
-          onClick={() => setTheme("dark")}
-          className={cn(
-            "flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs transition",
-            theme === "dark" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground"
-          )}
-        >
-          <Moon className="h-3.5 w-3.5" /> {t("settings_theme_dark", locale)}
-        </button>
-        <button
-          onClick={() => setTheme("light")}
-          className={cn(
-            "flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs transition",
-            theme === "light" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground"
-          )}
-        >
-          <Sun className="h-3.5 w-3.5" /> {t("settings_theme_light", locale)}
-        </button>
-      </div>
-    </div>
-  );
-}
-
 function DisplaySection({ toggles, values, onChange }: { toggles: ToggleSetting[]; values: Record<string, boolean>; onChange: (id: string, v: boolean) => void }) {
   const { locale } = useLanguage();
   return (
     <div className="space-y-4">
-      <SectionCard title={t("settings_theme_label", locale)}>
-        <ThemeRow />
-      </SectionCard>
       <SectionCard title={t("settings_section_ui", locale)}>
         {toggles.map((s) => (
           <ToggleRow key={s.id} setting={s} value={values[s.id] ?? s.default} onChange={onChange} />
