@@ -691,6 +691,7 @@ export async function fetchCaseReports(params?: ScopeParams): Promise<ApiRespons
         total: data.length,
         limit: data.length,
         offset: 0,
+        summary: { active: data.filter((report) => report.status === "open" || report.status === "investigating").length, critical: data.filter((report) => report.severity === "critical").length, stations: new Set(data.map((report) => report.station)).size },
       });
     }
     return wrap(data);
@@ -701,6 +702,7 @@ export async function fetchCaseReports(params?: ScopeParams): Promise<ApiRespons
     total: CASE_REPORTS.length,
     limit: CASE_REPORTS.length,
     offset: 0,
+    summary: { active: CASE_REPORTS.filter((report) => report.status === "open" || report.status === "investigating").length, critical: CASE_REPORTS.filter((report) => report.severity === "critical").length, stations: new Set(CASE_REPORTS.map((report) => report.station)).size },
   });
 }
 

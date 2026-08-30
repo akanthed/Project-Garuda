@@ -429,7 +429,8 @@ export interface CaseReport {
   assigned_officer: string;
   crime_type: string;
   ipc_section: string;
-  suspects: number;
+  suspects: number | null;
+  detail_level?: "field" | "supervisor";
 }
 
 export interface CaseReportsPage {
@@ -437,6 +438,7 @@ export interface CaseReportsPage {
   total: number;
   limit: number;
   offset: number;
+  summary: { active: number; critical: number; stations: number };
 }
 
 export interface CaseWorkflowUpdate {

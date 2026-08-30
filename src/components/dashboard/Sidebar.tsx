@@ -39,8 +39,8 @@ export function Sidebar({ active, onChange, fieldMode = false }: SidebarProps) {
     >
       {/* Logo + collapse toggle */}
       <div className={cn("flex flex-col gap-5", collapsed ? "items-center" : "px-3")}>
-        <div className={cn("flex items-center", collapsed ? "justify-center" : "justify-between")}>
-          <GarudaLogo className="h-9 w-9 shrink-0 rounded-md shadow-sm ring-1 ring-primary/20" />
+        <div className={cn("flex items-center", collapsed ? "w-full flex-col justify-center gap-1.5" : "justify-between")}>
+          <GarudaLogo className={cn("shrink-0 rounded-md shadow-sm ring-1 ring-primary/20", collapsed ? "h-8 w-8" : "h-9 w-9")} />
           {!collapsed && (
             <div className="ml-2 flex-1 min-w-0">
               <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-primary truncate">

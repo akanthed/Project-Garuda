@@ -35,10 +35,10 @@ if the code changes.
 
 > Police teams routinely inspect separate tables, maps, and case records before deciding where
 > to focus patrols. Garuda collapses that into a single Catalyst-hosted workspace built on a
-> 124,000-case statewide Karnataka dataset spanning every district.
+> 124,000-case Karnataka dataset spanning nine synthetic districts.
 >
 > Four capabilities work together. A geospatial risk canvas shows historical and predicted
-> hotspot layers with station-level statistical anomaly flags. A criminal link-analysis graph
+> hotspot layers with QuickML station forecasts and anomaly flags. A criminal link-analysis graph
 > traverses accused-to-FIR relationships to surface connected activity, ranked offenders, and
 > detected communities. Ask Garuda answers natural-language questions in English or Kannada.
 > A what-if planner compares patrol, infrastructure, and response-time scenarios before
@@ -55,11 +55,17 @@ if the code changes.
 
 - **Geospatial risk canvas** — historical and predicted hotspot layers, hex density view, risk
   labels, patrol-unit overlay, statewide↔district drilldown.
-- **Station anomaly alerts** — z-score flags for stations with unusual recent incident volume.
+- **Station anomaly alerts** — QuickML Embedded XGBoost classification with current-count,
+  trailing-mean, and z-score evidence; local z-score detection remains the fallback.
+- **Patrol allocation recommendations** — combines QuickML forecast and anomaly signals into a
+  human-reviewed recommendation bounded by the available demo fleet.
+- **Senior Command views** — DGP statewide comparison and ACP district-locked comparison with
+  7/30/90-day changes, drilldowns, decision queue, and recommended allocations.
+- **Catalyst-native voice** — English/Kannada QuickML transcription, synthesis, and translation.
 - **Criminal link analysis** — suspect/FIR relationship graph with centrality-ranked "kingpins",
   community detection, shortest path between two entities, and link prediction.
-- **Ask Garuda** — natural-language querying across crime type, area, and time window, with
-  Kannada language detection and an 8-action planner.
+- **Ask Garuda** — English/Kannada natural-language planning across 14 operational tools plus
+  an explicit out-of-scope response, with a visible execution trace.
 - **Case-risk assessment** — multi-class low/medium/high classification per case with confidence
   scores and explainable feature signals.
 - **What-if planner** — adjustable patrol density, infrastructure health, and rapid-response
@@ -68,7 +74,7 @@ if the code changes.
   module access, and an agent audit trail persisted to Catalyst NoSQL.
 - **Incident intake & brief export** — record reviewed intelligence and generate a PDF brief.
 - **Bilingual UI** — full English/Kannada interface including district names.
-- **Light and dark themes** — both fully supported, persisted per user.
+- **Consistent dark interface** — one operational visual theme across desktop and mobile.
 
 ---
 
@@ -157,8 +163,8 @@ Cold start 6.84 s; server memory stayed between 232–274 MB RSS throughout.
 | Check | Result |
 | --- | --- |
 | `npx tsc --noEmit` | 0 errors |
-| `npx vitest run` | 73/73 passing |
-| `pytest test_agent.py test_operations.py test_risk_prediction.py` | 75/76 in the latest combined Windows run; the sole timing-threshold test passed when rerun alone |
+| `npx vitest run --reporter=dot` | 79/79 passing across 9 files |
+| Affected backend integration suites | 25/25 passing (Command, voice, forecast, anomaly, FIR, and role reporting) |
 | `npm run build` | Succeeds |
 
 ---
@@ -230,9 +236,9 @@ demonstrate role-based access control:
 | Badge | Password | Role | Clearance | Shows |
 | --- | --- | --- | --- | --- |
 | `KSP-DGP-0001` | `dgp2026` | DGP | CLR-7 | Full statewide access |
-| `KSP-BLR-7741` | `sentinel2026` | Circle Inspector | CLR-7 | Network + planner |
-| `KSP-BLR-4412` | `garuda2026` | Sub-Inspector | CLR-4 | Partial gating |
-| `KSP-BLR-1001` | `constable123` | Constable | CLR-1 | Most modules gated |
+| `KSP-ACP-0001` | `acp2026` | ACP | CLR-6 | Bengaluru district command |
+| `KSP-BLR-4412` | `garuda2026` | Sub-Inspector | CLR-4 | Station reports, FIR intake, workflow, and planning |
+| `KSP-BLR-1001` | `constable123` | Constable | CLR-1 | Station read-only reports and mobile Field Mode |
 
 These are deliberately fixed demo credentials so evaluators never need their own Zoho
 account. They are public sandbox credentials exposed by the login quick-fill controls;
@@ -254,8 +260,10 @@ $env:VITE_API_URL="http://localhost:8000"; npm run dev
 
 ## 13. Suggested 3-minute demo script
 
-1. **Log in as `KSP-BLR-1001`** (Constable) — show modules greyed out by clearance.
-2. **Log out, log in as `KSP-DGP-0001`** — the same screens now unlock. RBAC is real.
+1. **Log in as `KSP-BLR-1001`** (Constable) — show station-only redacted reports and Field Mode.
+2. **Log in as `KSP-BLR-4412`** (SI) — show station FIR intake and workflow controls.
+3. **Log in as `KSP-ACP-0001`** — show the server-locked Bengaluru district Command view.
+4. **Log in as `KSP-DGP-0001`** — show statewide Command and all modules. RBAC is server-enforced.
 3. **Map** — toggle historical → predicted, open a hotspot popup showing jurisdiction,
    nearest patrol, and the causal narrative.
 4. **Drill from statewide into one district** — every panel re-scopes together.

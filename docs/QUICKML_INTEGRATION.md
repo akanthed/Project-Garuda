@@ -26,7 +26,7 @@ backend\.venv-gen\Scripts\python.exe backend\generate_quickml_training.py
 
 The default output columns are `example_id`, `query`, `action`, `crime_type`, `area`, `time_window`, and `language`. For a QuickML classification pipeline, use `query` as the text input and `action` as the target. The other columns support evaluation and future entity-extraction experiments.
 
-This dataset is optional for the current Qwen LLM Serving adapter. LLM Serving uses the pre-trained model and does not train on this CSV.
+This dataset is optional for the current GLM-4.7-Flash LLM Serving adapter. LLM Serving uses the pre-trained model and does not train on this CSV.
 
 ### QuickML Case Risk Pipeline
 
@@ -59,6 +59,39 @@ Catalyst evaluation for V1: accuracy 94.53%, precision/recall/F1 91.81%, AUC 93.
 The backend uses `QUICKML_RISK_ENDPOINT_KEY` for the endpoint-specific key and the existing Catalyst Connection for OAuth and organization headers. The key is environment-only and must never be committed.
 
 This model estimates a synthetic case-priority class for supervisor review. It must be described as prototype decision support, not validated crime prediction or an automated enforcement decision.
+
+### QuickML Station Forecast Pipeline
+
+QuickML's native Forecasting pipeline expects one unique timestamp series, so it cannot preserve
+164 station identities in the panel dataset. Garuda therefore uses Prediction AutoML regression
+with station/district IDs, target month, lag-1/2/3/12 counts, and trailing 3/6-month means.
+
+1. Training dataset: `quickml_station_forecast_train` (`6441000000008041`), 5,740 rows through December 2025.
+2. AutoML pipeline: `Garuda Station Forecast AutoML v1` (`6441000000007101`).
+3. Model: Gradient Boosting Regression (`6441000000007104`).
+4. Published endpoint: `garuda-station-forecast-v1` (`6441000000007141`).
+5. Untouched holdout: 984 rows, January-June 2026, all 164 stations.
+
+Holdout results: MAE 2.998, MAPE 28.5%, PAI 1.313, PEI 0.791. The local linear-trend fallback
+scored MAE 3.129, MAPE 29.7%, PAI 1.297, PEI 0.782 on the same months. Runtime responses expose
+`source`, model name, and model ID.
+
+### QuickML Station Anomaly Pipeline
+
+The native Anomaly Detection wizard has the same grouped-series limitation. Garuda uses Prediction
+AutoML classification over station-month rolling features with a transparent proxy target:
+`anomaly_class=1` when current volume is at least two trailing-12-month standard deviations above
+the prior mean.
+
+1. Training dataset: `garuda_station_anomaly_train_v1` (`6441000000007147`), 1,268 balanced rows.
+2. AutoML pipeline: `Garuda Station Anomaly AutoML v1` (`6441000000007160`).
+3. Model: Embedded XGBoost Classification (`6441000000007163`).
+4. Published endpoint: `garuda-station-anomaly-v1` (`6441000000007190`).
+5. Natural-prevalence holdout: 984 rows with 45 anomalies, January-June 2026.
+
+Holdout results: 95.6% recall, 79.6% precision, 86.9% F1, and 98.8% specificity. The API retains
+current count, trailing mean, and z-score evidence and falls back to the transparent z-score rule
+when QuickML is unavailable.
 
 For reference, the deprecated compatibility file used these settings:
 
@@ -170,7 +203,7 @@ Only claim active QuickML generative AI after step 5 succeeds in the deployed ap
 
 ## Safety Boundary
 
-QuickML may choose one of eight allowlisted actions:
+QuickML may choose one of 14 operational actions or the explicit `out_of_scope` result:
 
 - `search_cases`
 - `show_hotspots`
@@ -180,6 +213,13 @@ QuickML may choose one of eight allowlisted actions:
 - `find_connection`
 - `rank_offenders`
 - `explain_correlations`
+- `case_brief`
+- `assess_case_risk`
+- `summarize_kpis`
+- `forecast_hotspots`
+- `operational_guidance`
+- `app_help`
+- `out_of_scope`
 
 Pydantic rejects other actions, malformed time windows, invalid languages, invalid `district_ids`
 (silently dropped by a `field_validator` rather than trusted), and confidence outside 0-1. The model
@@ -187,3 +227,10 @@ never receives credentials and cannot issue ZCQL. The backend applies filters to
 labels every response with its source. Every `/api/ask` call also returns a `trace` array (interpret →
 execute → observe → answer), so the plan the model chose and the tool that actually ran are both
 inspectable, not just the final answer.
+
+## Optional Local Provider Later
+
+Zoho QuickML LLM Serving is the submission provider. A local or OpenAI-compatible model is not
+enabled now. To add one later, implement an adapter that returns the same `AgentPlan` JSON and
+select it before `_run_agent()`. Keep Pydantic validation, backend-only tools, signed-session RBAC,
+and NoSQL audit logging unchanged; never let a provider call operational tools directly.

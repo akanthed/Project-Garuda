@@ -1,9 +1,14 @@
 # Frontend Risk Assessment Integration Guide
 
+> **Current platform note (2026-08-28):** Risk assessment is one of three deployed QuickML
+> prediction surfaces. Forecast and anomaly source/model metadata also appear in the map and
+> Command workflows. Reports are backend-scoped by role, and QuickML case-risk detail is visible
+> only to supervisor clearance (SI, ACP, DGP), not Constable.
+
 ## ✅ Completed Tasks
 
 ### 1. **Added i18n Translations** 
-- **File**: [src/lib/i18n.ts](src/lib/i18n.ts)
+- **File**: [src/lib/i18n.ts](../src/lib/i18n.ts)
 - **Status**: ✅ Complete
 - **Changes**:
   - Added 13 new translation keys for Risk Assessment component
@@ -24,7 +29,7 @@
     - `risk_unavailable`: "Risk assessment unavailable" / "ಅಪಾಯ ಮೌಲ್ಯಮಾಪನ ಲಭ್ಯವಿಲ್ಲ"
 
 ### 2. **Created Risk Assessment Component**
-- **File**: [src/components/dashboard/RiskAssessment.tsx](src/components/dashboard/RiskAssessment.tsx)
+- **File**: [src/components/dashboard/RiskAssessment.tsx](../src/components/dashboard/RiskAssessment.tsx)
 - **Status**: ✅ Complete
 - **Features**:
   - Fetches QuickML pipeline predictions from `/api/risk/{caseMasterId}`
@@ -34,20 +39,21 @@
     - 🔴 HIGH: Red indicator
   - Shows confidence percentage with progress bar
   - Lists contributing factors (gravity, repeat accused, arrest rate, etc.)
-  - Indicates data source (Zia AutoML vs local fallback)
+  - Indicates data source (QuickML pipeline vs local fallback)
   - Bilingual UI ready with `useLanguage()` hook
   - Handles loading and error states gracefully
-  - Transparent fallback when Zia is unavailable
+  - Transparent fallback when QuickML is unavailable
 
 ### 3. **Integrated RiskAssessment into ReportsView**
-- **File**: [src/components/dashboard/ReportsView.tsx](src/components/dashboard/ReportsView.tsx)
+- **File**: [src/components/dashboard/ReportsView.tsx](../src/components/dashboard/ReportsView.tsx)
 - **Status**: ✅ Complete
 - **Changes**:
   - Imported `RiskAssessment` component
   - Added Risk Assessment section to case detail drawer
   - Positioned between severity/status badges and workflow section
   - Passes `case_master_id` prop correctly
-  - Component displays for every case opened in the detail view
+  - Component displays for supervisor roles when a case is opened
+  - Constable receives station-scoped read-only reports with risk and suspect details withheld
 
 ### 4. **Fixed Import Path**
 - **Status**: ✅ Complete
@@ -285,15 +291,15 @@ CaseDetailDrawer (contains case details)
 
 ## 📚 Related Files & References
 
-- **Backend Integration**: [backend/main.py#L_risk_prediction](backend/main.py) - Risk endpoint implementation
-- **Backend Tests**: [backend/test_risk_prediction.py](backend/test_risk_prediction.py) - 19 passing tests
-- **Component Code**: [src/components/dashboard/RiskAssessment.tsx](src/components/dashboard/RiskAssessment.tsx)
-- **Integration**: [src/components/dashboard/ReportsView.tsx](src/components/dashboard/ReportsView.tsx)
-- **Translations**: [src/lib/i18n.ts](src/lib/i18n.ts)
-- **Type Definitions**: [src/lib/types.ts](src/lib/types.ts)
+- **Backend Integration**: [backend/main.py#L_risk_prediction](../backend/main.py) - Risk endpoint implementation
+- **Backend Tests**: [backend/test_risk_prediction.py](../backend/test_risk_prediction.py) - 19 passing tests
+- **Component Code**: [src/components/dashboard/RiskAssessment.tsx](../src/components/dashboard/RiskAssessment.tsx)
+- **Integration**: [src/components/dashboard/ReportsView.tsx](../src/components/dashboard/ReportsView.tsx)
+- **Translations**: [src/lib/i18n.ts](../src/lib/i18n.ts)
+- **Type Definitions**: [src/lib/types.ts](../src/lib/types.ts)
 
 ---
 
 **Last Updated**: 2026-07-20  
 **Version**: 1.0 - Frontend Integration Complete  
-**Status**: 🟢 Ready for Production Deployment
+**Status**: 🟢 Deployed to Catalyst Development

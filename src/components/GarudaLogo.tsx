@@ -9,6 +9,8 @@ export function GarudaLogo({ className }: GarudaLogoProps) {
       alt=""
       aria-hidden="true"
       className={className}
+      data-logo-variant="wing"
+      data-testid="garuda-logo"
     />
   );
 }

@@ -1,5 +1,5 @@
 Badge,PasswordHash,Name,Designation,Station,Clearance,Node
-KSP-BLR-7741,b3d463a52cc1213e9eb8ca0d88a7e07c481a4f7e4af71c6ed52f5f29d2c26209,Cpt. R. Vance,CI,Bengaluru City Police HQ,CLR-7,BLR-A1
 KSP-BLR-4412,d16593718644bcff67a3f5995a21bda2f097ede92b3c48d9fece9748ef588f8d,SI A. Kumar,SI,KR Market PS,CLR-4,BLR-B3
 KSP-BLR-1001,8fb17834d222fb1668efab64196fc73d42e549b26246d73219426cc06b11f9de,Const. B. Naidu,Constable,Koramangala PS,CLR-1,BLR-C7
 KSP-DGP-0001,a3af2f757025651f7a4e0a8b9f55209c6f5418aa9c1c993b0ed4172558e672d3,DGP S. Rao,DGP,KSP State HQ,CLR-7,KSP-HQ
+KSP-ACP-0001,f2c1982cb78eaf9bb8ed56d0f326f4b4a1879b6d1fdae833676d8c5cbcabc0ba,ACP M. Iyer,ACP,Bengaluru City Police HQ,CLR-6,BLR-ACP

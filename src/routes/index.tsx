@@ -156,7 +156,7 @@ function Dashboard() {
 
   return (
     <SimulatorProvider>
-      <div className="flex min-h-screen bg-background text-foreground">
+      <div className="flex min-h-screen overflow-x-hidden bg-background text-foreground">
         <Toaster theme={theme} position="bottom-right" />
         <Sidebar active={view} onChange={setView} fieldMode={officer.designation === "Constable"} />
         <div className="flex min-w-0 flex-1 flex-col">
@@ -271,7 +271,7 @@ function Dashboard() {
               }} /> : <RbacBlock labelKey="rbac_locked_simulator" minRoleKey="rbac_requires_si" />
             )}
 
-            {view === "reports" && <ReportsView />}
+            {view === "reports" && <ReportsView officer={officer} />}
             {view === "settings" && <SettingsView />}
 
             <footer className="flex items-center justify-between pt-2 font-mono text-[10px] text-muted-foreground">

@@ -54,7 +54,10 @@ Garuda combines spatial intelligence, relationship analysis, and scenario planni
 ## Slide 5 - Key Features
 
 - **Geospatial risk canvas:** historical and predicted hotspot layers, density view, risk labels, and patrol-unit overlay.
-- **Station anomaly alerts:** z-score based flags for stations with unusual recent incident volumes.
+- **Station anomaly alerts:** QuickML Embedded XGBoost flags with observed-count, trailing-mean,
+    and z-score evidence for human review.
+- **Recommended patrol allocation:** QuickML forecast and anomaly signals ranked into a bounded
+    proposal that cannot exceed the available 15-unit demo fleet.
 - **Criminal link analysis:** visual graph of accused and FIR relationships to surface repeat and connected entities.
 - **Ask Garuda search:** natural-language-style filtering for crime type, area, and time window, returning matching cases.
 - **Zia AutoML case-risk assessment:** structured multi-class risk classification (low/medium/high) for each case, with confidence scores and explainable feature signals.

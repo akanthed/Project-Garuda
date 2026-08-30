@@ -353,22 +353,18 @@ def hash_password(password: str, salt: str) -> str:
 # Management. Passwords are hashed with PBKDF2 before comparison.
 
 _OFFICER_SALT = "garuda-static-salt-v1"  # demo only — use a per-user random salt in production
+_DISABLED_DEMO_BADGES = {"KSP-BLR-7741"}
 
 _OFFICER_REGISTRY: dict[str, dict] = {
-    "KSP-BLR-7741": {
-        "password_hash": hash_password("sentinel2026", _OFFICER_SALT),
-        "name": "Cpt. R. Vance", "designation": "CI",
-        "station": "Bengaluru City Police HQ", "clearance": "CLR-7", "node": "BLR-A1",
-    },
     "KSP-BLR-4412": {
         "password_hash": hash_password("garuda2026", _OFFICER_SALT),
         "name": "SI A. Kumar", "designation": "SI",
-        "station": "KR Market PS", "clearance": "CLR-4", "node": "BLR-B3",
+        "station": "KR Market PS", "clearance": "CLR-4", "node": "BLR-B3", "station_id": 1,
     },
     "KSP-BLR-1001": {
         "password_hash": hash_password("constable123", _OFFICER_SALT),
         "name": "Const. B. Naidu", "designation": "Constable",
-        "station": "Koramangala PS", "clearance": "CLR-1", "node": "BLR-C7",
+        "station": "Koramangala PS", "clearance": "CLR-1", "node": "BLR-C7", "station_id": 4,
     },
     "KSP-DGP-0001": {
         "password_hash": hash_password("dgp2026", _OFFICER_SALT),
@@ -1352,6 +1348,15 @@ class TranslateRequest(BaseModel):
     texts:           list[str]
     target_language: str = "kn"
 
+FIR_NUMBER_REGEX = os.environ.get(
+    "FIR_NUMBER_REGEX",
+    r"^[A-Z]{2,5}/[A-Z0-9]{2,10}/\d{3,10}$",
+)
+FIR_NUMBER_PATTERN = re.compile(FIR_NUMBER_REGEX)
+
+def _normalize_fir_number(value: str) -> str:
+    return re.sub(r"[/-]+", "/", value.strip().upper())
+
 class IncidentIntakeRequest(BaseModel):
     """Operational intelligence intake, not a substitute for legal FIR registration."""
     crime_no: str = Field(min_length=3, max_length=80)
@@ -1363,6 +1368,14 @@ class IncidentIntakeRequest(BaseModel):
     longitude: float = Field(ge=74.0, le=80.0)
     brief_facts: str = Field(min_length=10, max_length=1000)
     accused_names: list[str] = Field(default_factory=list, max_length=10)
+
+    @field_validator("crime_no")
+    @classmethod
+    def validate_crime_no(cls, value: str) -> str:
+        normalized = _normalize_fir_number(value)
+        if not FIR_NUMBER_PATTERN.fullmatch(normalized):
+            raise ValueError("crime_no does not match the configured FIR number format")
+        return normalized
 
 class CaseWorkflowUpdate(BaseModel):
     status: Literal["open", "investigating", "resolved", "closed"]
@@ -1932,6 +1945,8 @@ async def auth_login(body: LoginRequest, request: Request):
     table first (when deployed on Catalyst), then the local registry.
     """
     badge = body.badge.strip().upper()
+    if badge in _DISABLED_DEMO_BADGES:
+        raise HTTPException(401, "Invalid credentials")
     capp = _try_catalyst_app(request)
     officer = _lookup_officer(capp, badge)
     if not officer:
@@ -1941,7 +1956,10 @@ async def auth_login(body: LoginRequest, request: Request):
     if not expected_hash or not hmac.compare_digest(hash_password(body.password, _OFFICER_SALT), expected_hash):
         raise HTTPException(401, "Invalid credentials")
 
+    registry_defaults = _OFFICER_REGISTRY.get(badge, {})
     clearance = officer.get("clearance") or officer.get("Clearance", "CLR-1")
+    district_id = officer.get("district_id") or officer.get("DistrictID") or registry_defaults.get("district_id")
+    station_id = officer.get("station_id") or officer.get("StationID") or registry_defaults.get("station_id")
     profile = {
         "badge":       badge,
         "name":        officer.get("name") or officer.get("Name"),
@@ -1949,7 +1967,8 @@ async def auth_login(body: LoginRequest, request: Request):
         "station":     officer.get("station") or officer.get("Station"),
         "clearance":   clearance,
         "node":        officer.get("node") or officer.get("Node"),
-        "district_id": int(officer.get("district_id") or officer.get("DistrictID")) if (officer.get("district_id") or officer.get("DistrictID")) else None,
+        "district_id": int(district_id) if district_id else None,
+        "station_id": int(station_id) if station_id else None,
         **_permissions_for(clearance),
     }
     token = sign_session({
@@ -1957,6 +1976,7 @@ async def auth_login(body: LoginRequest, request: Request):
         "clearance": clearance,
         "designation": profile["designation"],
         "district_id": profile["district_id"],
+        "station_id": profile["station_id"],
     })
     return {"officer": profile, "token": token}
 
@@ -2808,7 +2828,7 @@ This plan is advisory and will be validated before any tool runs."""
     # Request/response shape confirmed empirically against the live Console's
     # "Sample Request and Response" panel for the deployed LLM Serving model
     # (an OpenAI-style chat-completion contract, NOT the flat "prompt" field
-    # an earlier version of this integration assumed) — see QUICKML_INTEGRATION.md.
+    # an earlier version of this integration assumed) — see docs/QUICKML_INTEGRATION.md.
     body = {
         "model": QUICKML_MODEL,
         "messages": [
@@ -3950,7 +3970,9 @@ def _extract_accused_names(text: str, capp) -> tuple[list[str], bool]:
 async def scan_incident_document(request: Request, file: UploadFile = File(...)):
     """Runs Zia OCR + heuristic extraction over an uploaded FIR photo/scan and
     returns a DRAFT for the officer to review — it does not create a case."""
-    require_session(request)
+    officer = require_session(request)
+    if int(officer["clearance"].replace("CLR-", "")) < 4:
+        raise HTTPException(403, "FIR scan requires supervisor clearance")
     if file.content_type not in ("image/jpeg", "image/png", "image/webp", "application/pdf"):
         raise HTTPException(400, "Upload a JPEG/PNG/WebP photo or a PDF scan")
 
@@ -4017,11 +4039,14 @@ async def create_incident(body: IncidentIntakeRequest, request: Request):
     local development retains them only for the running API session.
     """
     officer = require_session(request)
+    if int(officer["clearance"].replace("CLR-", "")) < 4:
+        raise HTTPException(403, "Incident intake requires supervisor clearance")
     if not ensure_data_loaded(request):
         raise HTTPException(503, "Data not loaded")
     if DB.crime_heads.empty or body.crime_major_head_id not in set(DB.crime_heads["CrimeHeadID"].astype(int)):
         raise HTTPException(400, "Unknown crime category")
-    if DB.cases["CrimeNo"].astype(str).eq(body.crime_no.strip()).any():
+    normalized_existing = DB.cases["CrimeNo"].astype(str).map(_normalize_fir_number)
+    if normalized_existing.eq(body.crime_no).any():
         raise HTTPException(409, "An incident with this FIR / crime number already exists")
 
     registered_at = pd.to_datetime(body.registered_date, errors="coerce")
@@ -4031,7 +4056,7 @@ async def create_incident(body: IncidentIntakeRequest, request: Request):
     case_id = int(pd.to_numeric(DB.cases["CaseMasterID"], errors="coerce").max()) + 1
     case_row = {
         "CaseMasterID": case_id,
-        "CrimeNo": body.crime_no.strip(),
+        "CrimeNo": body.crime_no,
         "CrimeRegisteredDate": registered_at.strftime("%Y-%m-%d"),
         "PoliceStationID": body.police_station_id,
         "CrimeMajorHeadID": body.crime_major_head_id,
@@ -4273,14 +4298,16 @@ async def get_connection_path(request: Request, source: str = Query(...), target
     if not ensure_data_loaded(request):
         raise HTTPException(503, "Data not loaded")
     _require_network_analytics_ready(request)
-    if source not in DB.co_graph or target not in DB.co_graph:
-        raise HTTPException(404, "Unknown suspect id(s) — use ids returned by /api/network or /api/network/kingpins")
+    source_id = source if source in DB.co_graph else _resolve_suspect_by_name(source)
+    target_id = target if target in DB.co_graph else _resolve_suspect_by_name(target)
+    if source_id not in DB.co_graph or target_id not in DB.co_graph:
+        raise HTTPException(404, "Unknown person — select a person shown by the network")
 
-    if source == target:
-        return {"connected": True, "path": [{"id": source, "label": DB.graph.nodes[source].get("label", source)}],
+    if source_id == target_id:
+        return {"connected": True, "path": [{"id": source_id, "label": DB.graph.nodes[source_id].get("label", source_id)}],
                 "hops": [], "path_length": 0}
     try:
-        node_path = nx.shortest_path(DB.co_graph, source, target)
+        node_path = nx.shortest_path(DB.co_graph, source_id, target_id)
     except nx.NetworkXNoPath:
         return {"connected": False, "path": [], "hops": [], "path_length": None}
 
@@ -4519,10 +4546,28 @@ async def get_reports(
     district_id: Optional[int] = Query(None),
     station_id: Optional[int] = Query(None),
 ):
+    officer = require_session(request)
     if not ensure_data_loaded(request):
         raise HTTPException(503, "Data not loaded")
+    designation = officer.get("designation")
+    if designation == "ACP":
+        district_id = int(officer["district_id"])
+        station_id = None
+    elif designation in {"SI", "Constable"}:
+        station_id = int(officer["station_id"])
+        district_id = None
     scoped = _scope_filter(DB.cases_by_date, district_id, station_id)
     total = len(scoped)
+    scoped_ids = set(scoped["CaseMasterID"].astype(int))
+    closed_ids = {
+        case_id for case_id, workflow in _LOCAL_CASE_WORKFLOWS.items()
+        if case_id in scoped_ids and workflow.get("status") in {"resolved", "closed"}
+    }
+    summary = {
+        "active": total - len(closed_ids),
+        "critical": int((scoped["GravityOffenceID"].astype(int) == 5).sum()),
+        "stations": int(scoped["PoliceStationID"].nunique()),
+    }
     df = scoped.iloc[offset : offset + limit].copy()
     if not DB.crime_heads.empty:
         df = df.merge(DB.crime_heads[["CrimeHeadID", "CrimeGroupName"]],
@@ -4551,9 +4596,10 @@ async def get_reports(
             "assigned_officer": workflow.get("assigned_officer", "Unassigned"),
             "crime_type":     str(row.get("CrimeGroupName", "Unknown")),
             "ipc_section":    f"IPC {int(row['CrimeMajorHeadID']) * 100 + 79}",
-            "suspects":       int(accused_counts.get(case_id, 0)),
+            "suspects":       None if designation == "Constable" else int(accused_counts.get(case_id, 0)),
+            "detail_level":   "field" if designation == "Constable" else "supervisor",
         })
-    return {"items": results, "total": total, "limit": limit, "offset": offset}
+    return {"items": results, "total": total, "limit": limit, "offset": offset, "summary": summary}
 
 # ─── GET /api/interop/cctns/{case_master_id} (Phase 6, Tier 2) ───────────────
 # Demonstrates the schema-mapping adapter (backend/cctns_adapter.py) on a real
@@ -4590,7 +4636,9 @@ async def export_case_cctns(case_master_id: int, request: Request):
 
 @app.get("/api/risk/{case_master_id}")
 async def predict_case_risk(case_master_id: int, request: Request):
-    require_session(request)
+    officer = require_session(request)
+    if int(officer["clearance"].replace("CLR-", "")) < 4:
+        raise HTTPException(403, "Case risk detail requires supervisor clearance")
     if not ensure_data_loaded(request):
         raise HTTPException(503, "Data not loaded")
     try:
@@ -4619,6 +4667,8 @@ async def predict_case_risk(case_master_id: int, request: Request):
 @app.patch("/api/reports/{case_master_id}/workflow")
 async def update_case_workflow(case_master_id: int, body: CaseWorkflowUpdate, request: Request):
     officer = require_session(request)
+    if int(officer["clearance"].replace("CLR-", "")) < 4:
+        raise HTTPException(403, "Workflow updates require supervisor clearance")
     if not ensure_data_loaded(request):
         raise HTTPException(503, "Data not loaded")
     if not DB.cases["CaseMasterID"].astype(int).eq(case_master_id).any():

@@ -6,6 +6,7 @@ import { createIncident, fetchCaseReports, scanIncidentDocument, updateCaseWorkf
 import { translateTexts } from "@/lib/translate";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useScope } from "@/contexts/ScopeContext";
+import type { Officer } from "@/lib/auth";
 import { t, districtName, type TranslationKey } from "@/lib/i18n";
 import type { CaseReport, CaseSeverity, CaseStatus, IncidentIntake, IncidentScanResult } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -86,7 +87,7 @@ function StatusBadge({ status }: { status: CaseStatus }) {
 
 // ─── Case detail drawer ────────────────────────────────────────────────────────
 
-function CaseDetailDrawer({ report, onClose, onWorkflowUpdated }: { report: CaseReport; onClose: () => void; onWorkflowUpdated: (report: CaseReport) => void }) {
+function CaseDetailDrawer({ report, canManage, onClose, onWorkflowUpdated }: { report: CaseReport; canManage: boolean; onClose: () => void; onWorkflowUpdated: (report: CaseReport) => void }) {
   const { locale } = useLanguage();
   const [translated, setTranslated] = useState<string | null>(null);
   const [translating, setTranslating] = useState(false);
@@ -163,7 +164,7 @@ function CaseDetailDrawer({ report, onClose, onWorkflowUpdated }: { report: Case
           { label: t("reports_detail_type", locale), value: localizedCrimeType(report.crime_type, locale) },
           { label: t("reports_detail_filed", locale), value: new Date(report.date).toLocaleDateString(locale === "kn" ? "kn-IN" : "en-IN", { day: "numeric", month: "short", year: "numeric" }) },
           { label: t("reports_detail_officer", locale), value: report.assigned_officer === "Unassigned" ? t("reports_unassigned", locale) : report.assigned_officer },
-          { label: t("reports_detail_suspects", locale), value: String(report.suspects) },
+          ...(canManage && report.suspects != null ? [{ label: t("reports_detail_suspects", locale), value: String(report.suspects) }] : []),
         ].map(({ label, value }) => (
           <div key={label}>
             <div className="text-[10px] uppercase tracking-widest text-muted-foreground">{label}</div>
@@ -178,11 +179,9 @@ function CaseDetailDrawer({ report, onClose, onWorkflowUpdated }: { report: Case
       </div>
 
       {/* Risk Assessment */}
-      <div className="mt-4 border-t border-foreground/5 pt-4">
-        <RiskAssessment caseMasterId={report.case_master_id} />
-      </div>
+      {canManage && <div className="mt-4 border-t border-foreground/5 pt-4"><RiskAssessment caseMasterId={report.case_master_id} /></div>}
 
-      <div className="mt-4 grid gap-3 border-t border-foreground/5 pt-4 md:grid-cols-[1fr_180px_auto]">
+      {canManage && <div className="mt-4 grid gap-3 border-t border-foreground/5 pt-4 md:grid-cols-[1fr_180px_auto]">
         <input
           value={assignedOfficer}
           onChange={(event) => setAssignedOfficer(event.target.value)}
@@ -195,7 +194,7 @@ function CaseDetailDrawer({ report, onClose, onWorkflowUpdated }: { report: Case
         <button onClick={handleWorkflowUpdate} disabled={!assignedOfficer.trim() || savingWorkflow} className="rounded-md bg-primary/15 px-4 py-2 text-xs font-medium text-primary transition hover:bg-primary/25 disabled:opacity-50">
           {savingWorkflow ? t("reports_workflow_saving", locale) : t("reports_update_workflow", locale)}
         </button>
-      </div>
+      </div>}
     </div>
   );
 }
@@ -284,7 +283,7 @@ function IncidentIntakeForm({ onClose, onSubmitted, initialDraft, scanMeta }: { 
       )}
 
       <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <label className="text-xs text-muted-foreground">{t("reports_fir_number", locale)}<input required value={intake.crime_no} onChange={(event) => update("crime_no", event.target.value)} placeholder="KSP/2026/0001" className="mt-1.5 w-full rounded-md border border-foreground/10 bg-background/50 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50" /></label>
+        <label className="text-xs text-muted-foreground">{t("reports_fir_number", locale)}<input required title={t("reports_fir_format", locale)} value={intake.crime_no} onChange={(event) => update("crime_no", event.target.value)} onBlur={(event) => update("crime_no", event.target.value.trim().toUpperCase().replace(/[/-]+/g, "/"))} placeholder="KSP/2026/0001" className="mt-1.5 w-full rounded-md border border-foreground/10 bg-background/50 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50" /><span className="mt-1 block text-[10px] text-muted-foreground/70">{t("reports_fir_format", locale)}</span></label>
         <label className="text-xs text-muted-foreground">{t("reports_registration_date", locale)}<input required type="date" value={intake.registered_date} onChange={(event) => update("registered_date", event.target.value)} className="mt-1.5 w-full rounded-md border border-foreground/10 bg-background/50 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50" /></label>
         <label className="text-xs text-muted-foreground">{t("reports_station_id", locale)}<input required min="1" max="1100" type="number" value={intake.police_station_id} onChange={(event) => update("police_station_id", Number(event.target.value))} className="mt-1.5 w-full rounded-md border border-foreground/10 bg-background/50 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50" /></label>
         <label className="text-xs text-muted-foreground">{t("reports_gravity", locale)}<select value={intake.gravity_offence_id} onChange={(event) => update("gravity_offence_id", Number(event.target.value))} className="mt-1.5 w-full rounded-md border border-foreground/10 bg-background/50 px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50">{[1, 2, 3, 4, 5].map((value) => <option key={value} value={value}>{t("reports_gravity_value", locale)} {value}</option>)}</select></label>
@@ -306,11 +305,12 @@ function IncidentIntakeForm({ onClose, onSubmitted, initialDraft, scanMeta }: { 
   );
 }
 
-export function ReportsView() {
+export function ReportsView({ officer }: { officer: Officer }) {
   const { locale } = useLanguage();
   const { districtId, activeDistrict } = useScope();
   const [reports, setReports] = useState<CaseReport[]>([]);
   const [totalReports, setTotalReports] = useState(0);
+  const [reportSummary, setReportSummary] = useState({ active: 0, critical: 0, stations: 0 });
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filterSeverity, setFilterSeverity] = useState<CaseSeverity | "all">("all");
@@ -321,12 +321,19 @@ export function ReportsView() {
   const [scanDraft, setScanDraft] = useState<IncidentScanResult | undefined>(undefined);
   const [scanning, setScanning] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const canManage = Number(officer.clearance.replace("CLR-", "")) >= 4;
+  const reportScope = officer.designation === "SI" || officer.designation === "Constable"
+    ? officer.station
+    : activeDistrict
+      ? districtName(activeDistrict, locale)
+      : t("topbar_scope_statewide", locale);
 
   const load = () => {
     setLoading(true);
     fetchCaseReports({ districtId }).then(({ data }) => {
       setReports(data.items);
       setTotalReports(data.total);
+      setReportSummary(data.summary);
       setLoading(false);
     });
   };
@@ -338,6 +345,7 @@ export function ReportsView() {
     fetchCaseReports({ districtId }).then(({ data }) => {
       setReports(data.items);
       setTotalReports(data.total);
+      setReportSummary(data.summary);
       setRefreshing(false);
     });
   };
@@ -349,9 +357,6 @@ export function ReportsView() {
       const q = search.toLowerCase();
       return !q || r.title.toLowerCase().includes(q) || r.id.toLowerCase().includes(q) || r.district.toLowerCase().includes(q);
     });
-
-  const criticalCount = reports.filter((r) => r.severity === "critical").length;
-  const openCount = reports.filter((r) => r.status === "open" || r.status === "investigating").length;
 
   const handleScanFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -379,18 +384,16 @@ export function ReportsView() {
           <div>
             <div className="text-base font-medium">{t("reports_title", locale)}</div>
             <div className="font-mono text-[11px] text-muted-foreground">
-              {t("reports_subtitle", locale)} — {activeDistrict ? districtName(activeDistrict, locale) : t("topbar_scope_statewide", locale)}
+              {t("reports_subtitle", locale)} — {reportScope}
             </div>
             <div className="font-mono text-[11px] text-muted-foreground">
-              {t("reports_workflow_hint", locale)}
+              {t(canManage ? "reports_workflow_hint" : "reports_readonly_hint", locale)}
             </div>
           </div>
           <SectionHelp title={t("help_reports_title", locale)} description={t("help_reports_desc", locale)} />
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp,application/pdf" capture="environment" className="hidden" onChange={handleScanFile} />
-          <button onClick={() => fileInputRef.current?.click()} disabled={scanning} className="flex items-center gap-2 rounded-md border border-primary/20 bg-primary/[0.06] px-3 py-1.5 text-xs text-primary transition hover:bg-primary/15 disabled:opacity-60">{scanning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ScanLine className="h-3.5 w-3.5" />}{scanning ? t("reports_scanning", locale) : t("reports_scan_fir", locale)}</button>
-          <button onClick={() => { setScanDraft(undefined); setIntakeOpen((open) => !open); }} className="flex items-center gap-2 rounded-md bg-primary/15 px-3 py-1.5 text-xs text-primary transition hover:bg-primary/25"><Plus className="h-3.5 w-3.5" />{t("reports_add_incident", locale)}</button>
+          {canManage && <><input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp,application/pdf" capture="environment" className="hidden" onChange={handleScanFile} /><button onClick={() => fileInputRef.current?.click()} disabled={scanning} className="flex items-center gap-2 rounded-md border border-primary/20 bg-primary/[0.06] px-3 py-1.5 text-xs text-primary transition hover:bg-primary/15 disabled:opacity-60">{scanning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ScanLine className="h-3.5 w-3.5" />}{scanning ? t("reports_scanning", locale) : t("reports_scan_fir", locale)}</button><button onClick={() => { setScanDraft(undefined); setIntakeOpen((open) => !open); }} className="flex items-center gap-2 rounded-md bg-primary/15 px-3 py-1.5 text-xs text-primary transition hover:bg-primary/25"><Plus className="h-3.5 w-3.5" />{t("reports_add_incident", locale)}</button></>}
           <button onClick={refresh} disabled={refreshing} className="flex items-center gap-2 rounded-md border border-foreground/5 bg-foreground/[0.02] px-3 py-1.5 text-xs text-muted-foreground transition hover:border-foreground/15 hover:text-foreground disabled:opacity-50"><RefreshCw className={cn("h-3 w-3", refreshing && "animate-spin")} />{t("reports_refresh", locale)}</button>
         </div>
       </div>
@@ -406,10 +409,10 @@ export function ReportsView() {
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatCard label={t("reports_total", locale)} value={totalReports} sub={t("reports_all_districts", locale)} />
-        <StatCard label={t("reports_active", locale)} value={openCount} sub={t("reports_attention", locale)} />
-        <StatCard label={t("reports_critical", locale)} value={criticalCount} sub={t("reports_immediate", locale)} />
-        <StatCard label={t("reports_stations", locale)} value="1,100+" sub={t("reports_network", locale)} />
+        <StatCard label={t("reports_total", locale)} value={totalReports} sub={reportScope} />
+        <StatCard label={t("reports_active", locale)} value={reportSummary.active} sub={t("reports_attention", locale)} />
+        <StatCard label={t("reports_critical", locale)} value={reportSummary.critical} sub={t("reports_immediate", locale)} />
+        <StatCard label={t("reports_stations", locale)} value={reportSummary.stations} sub={reportScope} />
       </div>
 
       {/* Filters */}
@@ -457,6 +460,7 @@ export function ReportsView() {
         <CaseDetailDrawer
           key={selected.id}
           report={selected}
+          canManage={canManage}
           onClose={() => setSelected(null)}
           onWorkflowUpdated={(updated) => {
             setReports((current) => current.map((report) => report.case_master_id === updated.case_master_id ? updated : report));
@@ -473,7 +477,34 @@ export function ReportsView() {
             <span className="font-mono text-sm text-muted-foreground">{t("reports_loading", locale)}</span>
           </div>
         ) : (
-          <table className="w-full text-sm">
+          <>
+          <div className="divide-y divide-foreground/5 sm:hidden">
+            {filtered.length === 0 ? (
+              <div className="py-12 text-center font-mono text-sm text-muted-foreground">{t("reports_no_match", locale)}</div>
+            ) : filtered.map((report) => (
+              <button
+                key={report.id}
+                type="button"
+                onClick={() => setSelected(selected?.id === report.id ? null : report)}
+                className={cn("w-full px-4 py-4 text-left transition-colors", selected?.id === report.id ? "bg-foreground/[0.04]" : "hover:bg-foreground/[0.02]")}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-mono text-[10px] text-muted-foreground">{report.id}</div>
+                    <div className="mt-1 line-clamp-2 text-sm font-medium leading-snug">{report.title}</div>
+                  </div>
+                  <ExternalLink className="mt-1 h-4 w-4 shrink-0 text-muted-foreground/50" />
+                </div>
+                <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[10px] text-muted-foreground">
+                  <span>{report.station}</span>
+                  <span>{localizedCrimeType(report.crime_type, locale)}</span>
+                  <span>{new Date(report.date).toLocaleDateString(locale === "kn" ? "kn-IN" : "en-IN", { day: "numeric", month: "short" })}</span>
+                </div>
+                <div className="mt-3 flex items-center gap-2"><SeverityBadge severity={report.severity} /><StatusBadge status={report.status} /></div>
+              </button>
+            ))}
+          </div>
+          <table className="hidden w-full text-sm sm:table">
             <thead>
               <tr className="border-b border-foreground/5 text-left">
                 {[
@@ -535,6 +566,7 @@ export function ReportsView() {
               )}
             </tbody>
           </table>
+          </>
         )}
         {!loading && filtered.length > 0 && (
           <div className="flex items-center justify-between border-t border-foreground/5 px-4 py-2.5 font-mono text-[10px] text-muted-foreground">

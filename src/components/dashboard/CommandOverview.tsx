@@ -69,7 +69,7 @@ export function CommandOverview({ onNavigate }: { onNavigate: (view: ViewKey) =>
       <section className="flex flex-wrap items-end justify-between gap-4 border-b border-foreground/10 pb-4">
         <div>
           <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">{t("command_eyebrow", locale)}</p>
-          <h1 className="mt-1 text-xl font-semibold">{t("command_title", locale)}: {scopeName}</h1>
+          <h1 className="mt-1 text-xl font-semibold">{t(districtId == null ? "command_title" : "command_title_district", locale)}: {scopeName}</h1>
           <p className="mt-1 text-xs text-muted-foreground">
             {summary.current_period.start} – {summary.current_period.end} {t("command_vs", locale)} {summary.previous_period.start} – {summary.previous_period.end}
           </p>

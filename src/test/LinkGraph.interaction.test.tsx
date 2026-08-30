@@ -1,5 +1,6 @@
 import React, { act } from "react";
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const graphHarness = vi.hoisted(() => ({
@@ -69,6 +70,19 @@ describe("LinkGraph production interactions", () => {
 
     act(() => graphHarness.props?.onNodeHover(null));
     expect(container.style.cursor).toBe("grab");
+  });
+
+  it("opens Find Connection with selectable people", async () => {
+    const user = userEvent.setup();
+    render(<LinkGraph />);
+
+    await user.click(await screen.findByRole("button", { name: "Find Connection" }));
+
+    expect(screen.getByPlaceholderText("First suspect")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Second suspect")).toBeInTheDocument();
+    const suggestion = document.querySelector<HTMLDataListElement>("#connection-source-people")?.options[0];
+    expect(suggestion?.value).toBe("S-1");
+    expect(suggestion?.textContent).toBe("Suspect Alice");
   });
 
   it("provides an enlarged pointer paint area for custom node sizes", async () => {

@@ -30,7 +30,7 @@ $env:SEED_TOKEN = "<AppSail SEED_TOKEN>"
 python upload_data.py --base-url https://garuda-api-<id>.catalystappsail.com
 ```
 
-The uploader preserves and skips the existing seeded prefix recorded in `data/scale_manifest.json`. See the root `DEPLOY.md` and `QUICKML_INTEGRATION.md` for deployment and AI configuration.
+The uploader preserves and skips the existing seeded prefix recorded in `data/scale_manifest.json`. See `../docs/DEPLOY.md` and `../docs/QUICKML_INTEGRATION.md` for deployment and AI configuration.
 
 ## Zoho Catalyst AppSail Deployment
 

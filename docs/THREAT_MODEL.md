@@ -95,7 +95,7 @@ beyond what each endpoint already returns.
   invite** through which the user sets their own password — there is no admin-settable
   fixed username/password pair. This is incompatible with the evaluation model this
   project needs: judges must be able to log in instantly with a pre-set badge/password
-  (e.g. `KSP-BLR-7741` / `sentinel2026`), with no email round-trip. Migrating would have
+  (e.g. `KSP-DGP-0001` / `dgp2026`), with no email round-trip. Migrating would have
   either required evaluators to receive and act on a real email, or fabricating email
   addresses we don't control inboxes for — neither is viable for live judging. The
   hand-rolled system (HMAC sessions, PBKDF2-hashed passwords, `Officers` Data Store

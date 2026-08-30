@@ -408,12 +408,12 @@ Risk Assessment component adapts to screen size:
 **For Officers**:
 - Instant risk assessment on case selection
 - Clear understanding of risk drivers
-- Confidence in data source (Zia or local)
+- Confidence in data source (QuickML pipeline or local fallback)
 - Support for bilingual workflow
 - No extra steps or navigation
 
 ---
 
-**Status**: 🟢 Ready for production deployment
+**Status**: 🟢 Deployed to Catalyst Development
 
 See [FRONTEND_INTEGRATION_GUIDE.md](FRONTEND_INTEGRATION_GUIDE.md) for technical details.

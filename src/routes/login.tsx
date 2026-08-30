@@ -2,11 +2,10 @@
 
 import { useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { LogIn, Eye, EyeOff, AlertCircle, Loader2, Sun, Moon } from "lucide-react";
+import { LogIn, Eye, EyeOff, AlertCircle, Loader2 } from "lucide-react";
 import { GarudaLogo } from "@/components/GarudaLogo";
 import { login } from "@/lib/auth";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { useTheme } from "@/contexts/ThemeContext";
 import { t } from "@/lib/i18n";
 
 export const Route = createFileRoute("/login")({
@@ -16,7 +15,6 @@ export const Route = createFileRoute("/login")({
 function LoginPage() {
   const navigate = useNavigate();
   const { locale, toggle } = useLanguage();
-  const { theme, toggle: toggleTheme } = useTheme();
   const [badge, setBadge] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -63,16 +61,8 @@ function LoginPage() {
       </div>
 
       <div className="w-full max-w-md px-6">
-        {/* Theme + language toggle — top right */}
+        {/* Language toggle — top right */}
         <div className="mb-4 flex justify-end gap-2">
-          <button
-            onClick={toggleTheme}
-            title={t(theme === "dark" ? "topbar_theme_dark" : "topbar_theme_light", locale)}
-            aria-label={t(theme === "dark" ? "topbar_theme_dark" : "topbar_theme_light", locale)}
-            className="flex h-8 w-8 items-center justify-center rounded-md border border-foreground/5 bg-foreground/[0.02] text-primary transition hover:border-primary/30 hover:bg-primary/5"
-          >
-            {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-          </button>
           <button
             onClick={toggle}
             className="rounded-md border border-foreground/5 bg-foreground/[0.02] px-3 py-1.5 font-mono text-[11px] text-primary transition hover:border-primary/30 hover:bg-primary/5"
@@ -180,7 +170,6 @@ function LoginPage() {
             {([
               { badge: "KSP-DGP-0001", pass: "dgp2026",       role: "DGP",        access: "login_access_full" },
               { badge: "KSP-ACP-0001", pass: "acp2026",       role: "ACP",        access: "login_access_district" },
-              { badge: "KSP-BLR-7741", pass: "sentinel2026",  role: "CI",         access: "login_access_full" },
               { badge: "KSP-BLR-4412", pass: "garuda2026",    role: "SI",         access: "login_access_simulate" },
               { badge: "KSP-BLR-1001", pass: "constable123",  role: "Constable",  access: "login_access_map" },
             ] as const).map(({ badge: b, pass, role, access }) => (

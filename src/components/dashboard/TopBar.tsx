@@ -1,10 +1,9 @@
 ﻿import { useEffect, useRef, useState } from "react";
-import { Bot, LogOut, FileDown, Loader2, ArrowRight, Mic, Moon, Square, Sun, Send, Sparkles, ShieldCheck, Volume2, X } from "lucide-react";
+import { Bot, LogOut, FileDown, Loader2, ArrowRight, Mic, Square, Send, Sparkles, ShieldCheck, Volume2, X } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "@tanstack/react-router";
 import { logout, type Officer } from "@/lib/auth";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { useTheme } from "@/contexts/ThemeContext";
 import { useScope } from "@/contexts/ScopeContext";
 import { useSimulator } from "@/contexts/SimulatorContext";
 import { t, districtName, type TranslationKey } from "@/lib/i18n";
@@ -20,6 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import type { AskResponse, KpiMetric } from "@/lib/types";
 import type { ViewKey } from "@/components/dashboard/Sidebar";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface TopBarProps {
   officer: Officer;
@@ -75,7 +75,6 @@ export function speechChunks(text: string, maxLength = 40): string[] {
 export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
   const navigate = useNavigate();
   const { locale, toggle } = useLanguage();
-  const { theme, toggle: toggleTheme } = useTheme();
   const { districtId, districts, setDistrictId } = useScope();
   const { lastImpactPercent } = useSimulator();
   const [q, setQ] = useState("");
@@ -255,21 +254,23 @@ export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
           {t("topbar_intel", locale)}
         </div>
         {officer.designation !== "Constable" && districts.length > 0 && (
-          <select
-            value={districtId ?? ""}
-            onChange={(e) => setDistrictId(e.target.value ? Number(e.target.value) : null)}
+          <Select
+            value={districtId == null ? "statewide" : String(districtId)}
+            onValueChange={(value) => setDistrictId(value === "statewide" ? null : Number(value))}
             disabled={officer.designation === "ACP"}
-            aria-label={t("topbar_scope_label", locale)}
-            title={t("topbar_scope_label", locale)}
-            className="h-9 min-w-0 max-w-[65vw] rounded-md border border-border bg-background/60 px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40 sm:h-7 sm:max-w-none sm:shrink-0"
           >
-            {officer.designation !== "ACP" && <option value="">{t("topbar_scope_statewide", locale)}</option>}
-            {districts.map((d) => (
-              <option key={d.district_id} value={d.district_id}>
-                {districtName(d, locale)}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger aria-label={t("topbar_scope_label", locale)} title={t("topbar_scope_label", locale)} className="h-9 min-w-[195px] max-w-[65vw] border-border bg-background/60 px-3 text-xs text-foreground sm:h-9 sm:max-w-none">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent align="start" className="max-h-80">
+              {officer.designation !== "ACP" && <SelectItem value="statewide">{t("topbar_scope_statewide", locale)}</SelectItem>}
+              {districts.map((district) => (
+                <SelectItem key={district.district_id} value={String(district.district_id)}>
+                  {districtName(district, locale)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         )}
       </div>
 
@@ -498,14 +499,6 @@ export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
           <span className="font-mono text-[11px] text-primary">
             {locale === "en" ? "ಕನ್ನಡ" : "EN"}
           </span>
-        </button>
-
-        <button
-          onClick={toggleTheme}
-          title={t(theme === "dark" ? "topbar_theme_dark" : "topbar_theme_light", locale)}
-          className="flex h-11 w-11 items-center justify-center rounded-md border border-foreground/5 text-muted-foreground transition hover:border-primary/30 hover:bg-primary/5 hover:text-primary sm:h-8 sm:w-8"
-        >
-          {theme === "dark" ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
         </button>
 
         {/* Logout */}

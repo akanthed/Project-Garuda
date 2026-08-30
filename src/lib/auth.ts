@@ -21,6 +21,7 @@ export interface Officer {
   clearance:   ClearanceLevel;
   node:        string;
   district_id?: number | null;
+  station_id?: number | null;
   /** Derived from clearance — controls which features are visible */
   canExport:   boolean;
   canSimulate: boolean;
@@ -59,20 +60,12 @@ function permissionsFor(clearance: ClearanceLevel): Pick<Officer, "canExport" | 
 // production bundle, not just conditionally skipped at runtime.
 
 const DEV_FALLBACK_REGISTRY: Record<string, { password: string; profile: Omit<Officer, "canExport" | "canSimulate" | "canViewNetwork"> }> = import.meta.env.DEV ? {
-  "KSP-BLR-7741": {
-    password: "sentinel2026",
-    profile: {
-      badge: "KSP-BLR-7741", name: "Cpt. R. Vance",
-      designation: "CI", station: "Bengaluru City Police HQ",
-      clearance: "CLR-7", node: "BLR-A1",
-    },
-  },
   "KSP-BLR-4412": {
     password: "garuda2026",
     profile: {
       badge: "KSP-BLR-4412", name: "SI A. Kumar",
       designation: "SI", station: "KR Market PS",
-      clearance: "CLR-4", node: "BLR-B3",
+      clearance: "CLR-4", node: "BLR-B3", station_id: 1,
     },
   },
   "KSP-BLR-1001": {
@@ -80,7 +73,7 @@ const DEV_FALLBACK_REGISTRY: Record<string, { password: string; profile: Omit<Of
     profile: {
       badge: "KSP-BLR-1001", name: "Const. B. Naidu",
       designation: "Constable", station: "Koramangala PS",
-      clearance: "CLR-1", node: "BLR-C7",
+      clearance: "CLR-1", node: "BLR-C7", station_id: 4,
     },
   },
   "KSP-DGP-0001": {
