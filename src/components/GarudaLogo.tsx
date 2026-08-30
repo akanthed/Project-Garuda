@@ -5,7 +5,7 @@ interface GarudaLogoProps {
 export function GarudaLogo({ className }: GarudaLogoProps) {
   return (
     <img
-      src={`${import.meta.env.BASE_URL}favicon.svg`}
+      src={`${import.meta.env.BASE_URL}favicon.svg?v=golden-wings`}
       alt=""
       aria-hidden="true"
       className={className}

@@ -14,7 +14,7 @@ describe("GarudaLogo", () => {
     expect(screen.getAllByTestId("garuda-logo")).toHaveLength(2);
     screen.getAllByTestId("garuda-logo").forEach((logo) => {
       expect(logo).toHaveAttribute("data-logo-variant", "wing");
-      expect(logo.getAttribute("src")).toMatch(/\/favicon\.svg$/);
+      expect(logo.getAttribute("src")).toMatch(/\/favicon\.svg\?v=golden-wings$/);
     });
   });
 });
