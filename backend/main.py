@@ -364,7 +364,7 @@ _OFFICER_REGISTRY: dict[str, dict] = {
     "KSP-BLR-1001": {
         "password_hash": hash_password("constable123", _OFFICER_SALT),
         "name": "Const. B. Naidu", "designation": "Constable",
-        "station": "Koramangala PS", "clearance": "CLR-1", "node": "BLR-C7", "station_id": 4,
+        "station": "Koramangala PS (Zone 3)", "clearance": "CLR-1", "node": "BLR-C7", "station_id": 44,
     },
     "KSP-DGP-0001": {
         "password_hash": hash_password("dgp2026", _OFFICER_SALT),
@@ -1554,10 +1554,28 @@ def _emit_operation_audit_event(plan: dict, actor: str, action: str, capp=None) 
         except Exception:
             log.debug("Operation audit NoSQL write failed", exc_info=True)
 
+def _can_access_response_plan(plan: dict, officer: dict) -> bool:
+    if _permissions_for(officer.get("clearance", "CLR-1"))["canSimulate"]:
+        return True
+    if plan["assigned_to"] != officer.get("badge"):
+        return False
+    station_id = officer.get("station_id")
+    return station_id is None or int(plan["station_id"]) == int(station_id)
+
 def _create_response_plan(body: ResponsePlanCreate, officer: dict, capp=None) -> dict:
     assigned_to = body.assigned_to.strip().upper()
-    if not _lookup_officer(capp, assigned_to):
+    assigned_officer = _lookup_officer(capp, assigned_to)
+    if not assigned_officer:
         raise HTTPException(422, "Assigned officer was not found")
+    registry_defaults = _OFFICER_REGISTRY.get(assigned_to, {})
+    assigned_clearance = assigned_officer.get("clearance") or assigned_officer.get("Clearance") or registry_defaults.get("clearance", "CLR-1")
+    assigned_station_id = assigned_officer.get("station_id") or assigned_officer.get("StationID") or registry_defaults.get("station_id")
+    if (
+        not _permissions_for(str(assigned_clearance))["canSimulate"]
+        and assigned_station_id is not None
+        and int(assigned_station_id) != body.station_id
+    ):
+        raise HTTPException(422, "Assigned field officer must belong to the response station")
 
     now = pd.Timestamp.now(tz="UTC").isoformat()
     plan = {
@@ -1600,8 +1618,7 @@ def _update_response_plan(operation_id: str, body: ResponsePlanUpdate, officer: 
         if plan is None:
             raise HTTPException(404, "Response plan not found")
 
-        can_manage = _permissions_for(officer.get("clearance", "CLR-1"))["canSimulate"]
-        if not can_manage and plan["assigned_to"] != officer.get("badge"):
+        if not _can_access_response_plan(plan, officer):
             raise HTTPException(403, "This response plan is assigned to another officer")
 
         allowed_next = {
@@ -1640,8 +1657,7 @@ def _require_operation_access(operation_id: str, officer: dict, capp=None) -> di
     plan = _LOCAL_RESPONSE_PLANS.get(operation_id)
     if plan is None:
         raise HTTPException(404, "Response plan not found")
-    can_manage = _permissions_for(officer.get("clearance", "CLR-1"))["canSimulate"]
-    if not can_manage and plan["assigned_to"] != officer.get("badge"):
+    if not _can_access_response_plan(plan, officer):
         raise HTTPException(403, "This response plan is assigned to another officer")
     return plan
 
@@ -1826,7 +1842,12 @@ async def root(request: Request):
             "cases": len(DB.cases)}
 
 @app.get("/health")
-async def health():
+async def health(request: Request):
+    if not DB.network_analytics_ready:
+        try:
+            _require_network_analytics_ready(request)
+        except HTTPException:
+            pass
     ready = len(DB.cases) > 0
     return {
         "status": "ok" if ready else "degraded",
@@ -2558,7 +2579,8 @@ QUICKML_ACCESS_TOKEN = os.environ.get("QUICKML_ACCESS_TOKEN", "").strip()
 QUICKML_ORG_ID = os.environ.get("QUICKML_ORG_ID", "").strip()
 QUICKML_MODEL = os.environ.get("QUICKML_MODEL", "").strip()
 QUICKML_TIMEOUT_SECONDS = float(os.environ.get("QUICKML_TIMEOUT_SECONDS", "30"))
-QUICKML_MAX_TOKENS = int(os.environ.get("QUICKML_MAX_TOKENS", "1600"))
+QUICKML_PLANNER_TIMEOUT_SECONDS = float(os.environ.get("QUICKML_PLANNER_TIMEOUT_SECONDS", "45"))
+QUICKML_MAX_TOKENS = int(os.environ.get("QUICKML_MAX_TOKENS", "400"))
 # Catalyst Connections manages this OAuth relationship server-side (auto-refreshed,
 # no static token to expire) — preferred over QUICKML_ACCESS_TOKEN below, which is
 # kept only as a fallback for local/non-Catalyst dev where Connections isn't reachable.
@@ -2782,10 +2804,10 @@ def _extract_quickml_text(payload) -> str:
 
 def _parse_plan_json(text: str) -> AgentPlan:
     fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL | re.IGNORECASE)
-    candidate = fenced.group(1) if fenced else text[text.find("{"):text.rfind("}") + 1]
+    candidate = fenced.group(1) if fenced else text[text.find("{"):]
     if not candidate:
         raise ValueError("QuickML response did not contain a JSON object")
-    plan_data = json.loads(candidate)
+    plan_data, _ = json.JSONDecoder().raw_decode(candidate)
     for field in ("horizon_days", "time_window", "language", "confidence"):
         if plan_data.get(field) is None:
             plan_data.pop(field, None)
@@ -2854,7 +2876,7 @@ This plan is advisory and will be validated before any tool runs."""
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=QUICKML_TIMEOUT_SECONDS) as response:
+        with urllib.request.urlopen(request, timeout=QUICKML_PLANNER_TIMEOUT_SECONDS) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")[:500]
@@ -2885,7 +2907,14 @@ def _quickml_rag_sync(query: str, capp=None) -> dict:
     answer = str(payload.get("response") or "").strip()
     if not answer:
         raise RuntimeError("QuickML RAG returned no answer")
-    return {"answer": answer, "retrieved_nodes": payload.get("retrieved_nodes") or []}
+    # The RAG API has used several key names for retrieved chunks; accept any of them.
+    nodes = []
+    for key in ("retrieved_nodes", "source_nodes", "nodes", "sources", "citations", "context"):
+        value = payload.get(key)
+        if isinstance(value, list) and value:
+            nodes = value
+            break
+    return {"answer": answer, "retrieved_nodes": nodes}
 
 def _local_playbook_guidance(query: str) -> dict:
     text = _OPERATIONAL_PLAYBOOK_PATH.read_text(encoding="utf-8")
@@ -2998,7 +3027,10 @@ def _rule_plan(query: str) -> AgentPlan:
         action = "find_connection"
     elif len(district_ids) >= 2 and any(term in q for term in ("compare", "vs", "versus", "ಹೋಲಿಸಿ")):
         action = "compare_districts"
-    elif any(term in q for term in ("kingpin", "top offender", "most connected", "rank", "ಪ್ರಮುಖ ಅಪರಾಧಿ", "ಟಾಪ್")):
+    elif any(term in q for term in (
+        "kingpin", "offender", "offenders", "most connected", "rank",
+        "ಪ್ರಮುಖ ಅಪರಾಧಿ", "ಟಾಪ್",
+    )):
         action = "rank_offenders"
     elif any(term in q for term in ("why", "cause", "correlat", "ಏಕೆ", "ಕಾರಣ")):
         action = "explain_correlations"
@@ -3264,10 +3296,18 @@ def _agent_operational_guidance(query: str, plan: AgentPlan, trace: list[dict], 
             raise RuntimeError("QuickML RAG did not return a Kannada answer")
         knowledge_source = "quickml_rag"
         for node in rag["retrieved_nodes"][:3]:
-            content = str(node.get("content") or "")
+            content = str(node.get("content") or node.get("text") or "") if isinstance(node, dict) else str(node)
             source_match = re.search(r"SOURCE:\s*([^|\]]+)", content)
             citations.append({
                 "source_id": source_match.group(1).strip() if source_match else "GP",
+                "title": "Garuda Operational Playbook",
+                "document_id": QUICKML_RAG_DOCUMENT_IDS[0],
+            })
+        if not citations:
+            # The answer still came from the indexed playbook document, so attribute it at document level.
+            answer_match = re.search(r"\bGP-\d+\b", answer)
+            citations.append({
+                "source_id": answer_match.group(0) if answer_match else "GP",
                 "title": "Garuda Operational Playbook",
                 "document_id": QUICKML_RAG_DOCUMENT_IDS[0],
             })
@@ -4720,7 +4760,7 @@ async def list_operations(
     with _RESPONSE_PLAN_LOCK:
         plans = list(_LOCAL_RESPONSE_PLANS.values())
     if not can_manage:
-        plans = [plan for plan in plans if plan["assigned_to"] == officer.get("badge")]
+        plans = [plan for plan in plans if _can_access_response_plan(plan, officer)]
     if status is not None:
         plans = [plan for plan in plans if plan["status"] == status]
     plans.sort(key=lambda plan: plan["created_at"], reverse=True)
