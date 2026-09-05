@@ -1,6 +1,8 @@
 """Focused tests for the ActionLoop response-plan lifecycle."""
 
-from unittest.mock import Mock
+import asyncio
+
+from unittest.mock import Mock, patch
 
 import pytest
 from fastapi import HTTPException
@@ -22,7 +24,7 @@ def clear_operations():
 def create_body(assigned_to: str = "KSP-BLR-1001") -> main.ResponsePlanCreate:
     return main.ResponsePlanCreate(
         alert_id="ANOM-1",
-        station_id=1,
+        station_id=44,
         current_count=9,
         usual_count=4.1,
         z_score=2.4,
@@ -51,6 +53,52 @@ def test_create_response_plan_rejects_unknown_officer():
         )
 
     assert exc.value.status_code == 422
+
+
+def test_create_response_plan_rejects_cross_station_constable_assignment():
+    body = create_body()
+    body.station_id = 1
+
+    with pytest.raises(HTTPException) as exc:
+        main._create_response_plan(
+            body,
+            {"badge": "KSP-DGP-0001", "clearance": "CLR-7"},
+        )
+
+    assert exc.value.status_code == 422
+
+
+def test_constable_access_is_limited_to_assignee_and_station():
+    officer = {"badge": "KSP-BLR-1001", "clearance": "CLR-1", "station_id": 44}
+    matching = {"assigned_to": "KSP-BLR-1001", "station_id": 44}
+    wrong_station = {"assigned_to": "KSP-BLR-1001", "station_id": 1}
+
+    assert main._can_access_response_plan(matching, officer) is True
+    assert main._can_access_response_plan(wrong_station, officer) is False
+
+
+def test_constable_operation_list_hides_cross_station_tasks():
+    matching = main._create_response_plan(
+        create_body(), {"badge": "KSP-DGP-0001", "clearance": "CLR-7"}
+    )
+    cross_station = {
+        **main._LOCAL_RESPONSE_PLANS[matching["operation_id"]],
+        "operation_id": "cross-station-task",
+        "station_id": 55,
+        "station_name": "Rajajinagar PS (Zone 3)",
+    }
+    main._LOCAL_RESPONSE_PLANS[cross_station["operation_id"]] = cross_station
+    request = Mock()
+    officer = {"badge": "KSP-BLR-1001", "clearance": "CLR-1", "station_id": 44}
+
+    with (
+        patch.object(main, "require_session", return_value=officer),
+        patch.object(main, "_try_catalyst_app", return_value=None),
+    ):
+        result = asyncio.run(main.list_operations(request, status=None))
+
+    assert result["total"] == 1
+    assert result["items"][0]["station_id"] == 44
 
 
 def test_assignee_can_progress_response_plan():

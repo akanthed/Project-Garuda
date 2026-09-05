@@ -1,5 +1,5 @@
 import { useState, useEffect, lazy, Suspense } from "react";
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { Network, MapPin, TrendingDown, ShieldCheck, type LucideIcon } from "lucide-react";
 import { Toaster } from "@/components/ui/sonner";
 import { Sidebar, type ViewKey } from "@/components/dashboard/Sidebar";
@@ -77,8 +77,19 @@ export const Route = createFileRoute("/")({
       throw redirect({ to: "/login" });
     }
   },
-  component: Dashboard,
+  component: DashboardRoute,
 });
+
+function DashboardRoute() {
+  const navigate = useNavigate();
+  const officer = getSession();
+
+  useEffect(() => {
+    if (!officer) void navigate({ to: "/login", replace: true });
+  }, [navigate, officer]);
+
+  return officer ? <Dashboard officer={officer} /> : null;
+}
 
 function RbacBlock({ labelKey, minRoleKey }: { labelKey: TranslationKey; minRoleKey: TranslationKey }) {
   const { locale } = useLanguage();
@@ -112,9 +123,7 @@ function Placeholder({ title, subtitle }: { title: string; subtitle: string }) {
   );
 }
 
-function Dashboard() {
-  // Session is guaranteed by beforeLoad — no null check needed
-  const officer = getSession() as Officer;
+function Dashboard({ officer }: { officer: Officer }) {
   const [view, setView] = useState<ViewKey>("dashboard");
   const { locale } = useLanguage();
   const { theme } = useTheme();

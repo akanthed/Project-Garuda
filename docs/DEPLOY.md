@@ -63,11 +63,11 @@ Invoke-RestMethod "https://garuda-api-<id>.catalystappsail.com/health"
 
 ## 3.5 Optional Catalyst services
 
-`POST /api/translate` currently returns supplied narrative text unchanged. The Catalyst Zia Python SDK does not provide a Translate API, so the application should not describe this endpoint as machine translation. Static English/Kannada interface labels are hand-curated in the client.
+`POST /api/translate` uses the QuickML Text Translation endpoint through Catalyst Connections and falls back without crashing when the service is unavailable. Static English/Kannada interface labels remain hand-curated in the client.
 
 `POST /api/export_brief` attempts Catalyst SmartBrowz PDF generation through `capp.smart_browz().convert_to_pdf(html)` when available. A local `fpdf2` fallback keeps intelligence brief export usable during local development and if SmartBrowz is unavailable.
 
-QuickML LLM Serving is the generative AI path for Ask Garuda and is available in the IN data center. Follow `QUICKML_INTEGRATION.md` to obtain the endpoint URL, endpoint key, OAuth token, organization ID, and model name. Zia AutoML is not the chosen path because Zoho documents it as unavailable in the IN data center.
+QuickML LLM Serving is the generative AI path for Ask Garuda. Published QuickML Prediction endpoints provide case-risk, station-forecast, and anomaly models. Catalyst Connections supplies OAuth and organization headers; the three prediction endpoints additionally require their own endpoint keys.
 
 ---
 
@@ -169,14 +169,16 @@ SEED_TOKEN
 QUICKML_RISK_ENDPOINT_KEY
 QUICKML_FORECAST_ENDPOINT_KEY
 QUICKML_ANOMALY_ENDPOINT_KEY
+JOB_SCHEDULER_TOKEN
+SIGNALS_WEBHOOK_TOKEN
 ```
 
 For every AppSail deploy, use a local guarded script that:
 
 1. Reads and retains the original `backend/app-config.json` bytes.
-2. Prompts for all three 96-character endpoint keys with `Read-Host -AsSecureString`.
+2. Prompts for all three endpoint keys plus the existing Job Scheduling and Signals tokens with `Read-Host -AsSecureString`.
 3. Generates fresh `SESSION_SECRET` and `SEED_TOKEN` values.
-4. Injects those five values only while `catalyst deploy --only appsail` packages the app.
+4. Injects those seven values only while `catalyst deploy --only appsail` packages the app.
 5. Restores the original bytes in a `finally` block and deletes itself.
 
 This invalidates existing browser sessions because `SESSION_SECRET` rotates. Re-login after each

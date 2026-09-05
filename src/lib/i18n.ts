@@ -545,8 +545,6 @@ export const translations = {
   settings_value_active: { en: "Active", kn: "ಸಕ್ರಿಯ" },
   settings_value_browser_session: { en: "Browser session", kn: "ಬ್ರೌಸರ್ ಸೆಷನ್" },
   settings_value_server_managed: { en: "Server-managed", kn: "ಸರ್ವರ್ ನಿರ್ವಹಿತ" },
-  settings_2fa_status:        { en: "2FA Status",           kn: "2FA ಸ್ಥಿತಿ" },
-  settings_2fa_enabled:       { en: "Enabled",              kn: "ಸಕ್ರಿಯಗೊಳಿಸಲಾಗಿದೆ" },
   settings_alert_critical:    { en: "Serious Incident Alerts", kn: "ಗಂಭೀರ ಘಟನೆ ಎಚ್ಚರಿಕೆಗಳು" },
   settings_alert_critical_desc: { en: "Notify me right away for high-danger events.", kn: "ಹೆಚ್ಚಿನ ಅಪಾಯದ ಘಟನೆಗಳಿಗೆ ತಕ್ಷಣ ತಿಳಿಸಿ." },
   settings_alert_hotspot:     { en: "Danger Area Changes",  kn: "ಅಪಾಯದ ಪ್ರದೇಶ ಬದಲಾವಣೆಗಳು" },
@@ -568,9 +566,9 @@ export const translations = {
   settings_connected:         { en: "connected",           kn: "ಸಂಪರ್ಕಗೊಂಡಿದೆ" },
   settings_pending:           { en: "pending",             kn: "ಬಾಕಿಯಿದೆ" },
   settings_service_datastore: { en: "Stores all case records", kn: "ಎಲ್ಲಾ ಪ್ರಕರಣ ದಾಖಲೆಗಳನ್ನು ಸಂಗ್ರಹಿಸುತ್ತದೆ" },
-  settings_service_zia:       { en: "Translation service unavailable in this deployment", kn: "ಈ ನಿಯೋಜನೆಯಲ್ಲಿ ಅನುವಾದ ಸೇವೆ ಲಭ್ಯವಿಲ್ಲ" },
+  settings_service_zia:       { en: "Powers AI planning, predictions, speech, and translation", kn: "AI ಯೋಜನೆ, ಮುನ್ಸೂಚನೆ, ಧ್ವನಿ ಮತ್ತು ಅನುವಾದವನ್ನು ನಡೆಸುತ್ತದೆ" },
   settings_service_appsail:   { en: "Runs the crime analysis", kn: "ಅಪರಾಧ ವಿಶ್ಲೇಷಣೆಯನ್ನು ನಡೆಸುತ್ತದೆ" },
-  settings_service_map:       { en: "Powers the city map", kn: "ನಗರ ನಕ್ಷೆಯನ್ನು ಚಾಲಿತಗೊಳಿಸುತ್ತದೆ" },
+  settings_service_map:       { en: "Powers the statewide operational map", kn: "ರಾಜ್ಯವ್ಯಾಪಿ ಕಾರ್ಯಾಚರಣೆಯ ನಕ್ಷೆಯನ್ನು ನಡೆಸುತ್ತದೆ" },
 
   // ─── Login ─────────────────────────────────────────────────────────────────
   login_org:         { en: "Karnataka State Police",   kn: "ಕರ್ನಾಟಕ ರಾಜ್ಯ ಪೊಲೀಸ್" },

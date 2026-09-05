@@ -33,7 +33,6 @@ const SESSION_KEY = "ksp_session";
 const TOKEN_KEY = "ksp_token";
 
 if (import.meta.env.PROD && !API_BASE) {
-  // eslint-disable-next-line no-console
   console.error(
     "VITE_API_URL is not set in this production build — officer credentials cannot be " +
     "verified server-side. The local demo-credential registry is dev-only and is not " +

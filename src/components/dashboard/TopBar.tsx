@@ -326,9 +326,9 @@ export function TopBar({ officer, kpis, onNavigate }: TopBarProps) {
                   <div key={message.id} className={message.role === "user" ? "ml-10 rounded-md bg-primary px-3 py-2.5 text-xs leading-5 text-primary-foreground" : "mr-2 rounded-md border border-border bg-muted/60 px-3 py-3 text-xs text-foreground"}>
                     {message.result && (
                       <div className="mb-2.5 flex items-center justify-between gap-2 border-b border-border pb-2">
-                        <span className={`inline-flex items-center gap-1 rounded px-1.5 py-1 text-[9px] font-semibold uppercase ${message.result.knowledge_source === "quickml_rag" || message.result.source === "quickml" ? "bg-emerald-500/10 text-emerald-500" : "bg-amber-500/10 text-amber-500"}`}>
-                          {(message.result.knowledge_source === "quickml_rag" || message.result.source === "quickml") && <Sparkles className="h-2.5 w-2.5" />}
-                          {t(message.result.knowledge_source === "quickml_rag" ? "ask_quickml_rag" : message.result.source === "quickml" ? "ask_quickml" : "ask_fallback", locale)}
+                        <span className={`inline-flex items-center gap-1 rounded px-1.5 py-1 text-[9px] font-semibold uppercase ${message.result.knowledge_source === "quickml_rag" || message.result.source === "quickml" || message.result.compute_source === "quickml_pipeline" ? "bg-emerald-500/10 text-emerald-500" : "bg-amber-500/10 text-amber-500"}`}>
+                          {(message.result.knowledge_source === "quickml_rag" || message.result.source === "quickml" || message.result.compute_source === "quickml_pipeline") && <Sparkles className="h-2.5 w-2.5" />}
+                          {t(message.result.knowledge_source === "quickml_rag" ? "ask_quickml_rag" : message.result.source === "quickml" || message.result.compute_source === "quickml_pipeline" ? "ask_quickml" : "ask_fallback", locale)}
                         </span>
                         <span className="font-mono text-[9px] text-muted-foreground">
                           {t("ask_intent_confidence", locale)} {Math.round(message.result.confidence * 100)}%

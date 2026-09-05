@@ -3379,7 +3379,7 @@ def _agent_case_brief(query: str, plan: AgentPlan, trace: list[dict]) -> dict:
         "tool_calls": [{"tool": "case_brief", "status": "completed", "result_count": 1}],
     }
 
-def _agent_assess_case_risk(query: str, plan: AgentPlan, trace: list[dict]) -> dict:
+def _agent_assess_case_risk(query: str, plan: AgentPlan, trace: list[dict], capp=None) -> dict:
     case = _case_row(plan.case_id, plan.case_reference)
     resolved_case_id = int(case["CaseMasterID"]) if case is not None else None
     trace.append({"step": "execute", "tool": "assess_case_risk", "parameters": {"case_id": resolved_case_id, "case_reference": plan.case_reference}})
@@ -3391,16 +3391,24 @@ def _agent_assess_case_risk(query: str, plan: AgentPlan, trace: list[dict]) -> d
             "tool_calls": [{"tool": "assess_case_risk", "status": "unresolved", "result_count": 0}],
         }
     features = _risk_features(resolved_case_id)
-    prediction = _local_risk_prediction(features)
+    compute_source = "quickml_pipeline"
+    try:
+        prediction = _quickml_risk_prediction(capp, features)
+    except Exception as exc:
+        log.info("Ask Garuda QuickML risk unavailable; using local fallback: %s", exc)
+        prediction = _local_risk_prediction(features)
+        compute_source = "local_fallback"
     answer = (
-        f"Case {resolved_case_id} is {prediction['risk_class']} risk under Garuda's transparent local prototype model "
+        f"Case {resolved_case_id} is {prediction['risk_class']} risk under Garuda's advisory prototype model "
         f"(gravity {features['gravity_level']}/5, {features['repeat_accused_count']} repeat accused, "
         f"{features['arrest_rate_percent']}% arrest coverage). This is advisory and requires supervisor review."
     )
-    trace.append({"step": "observe", "risk_class": prediction["risk_class"], "features": features})
+    trace.append({"step": "observe", "risk_class": prediction["risk_class"], "features": features, "compute_source": compute_source})
     trace.append({"step": "answer", "detail": answer})
     return {
         "answer": answer, "matched_cases": [], "suggested_view": "reports",
+        "compute_source": compute_source,
+        "model_id": QUICKML_RISK_MODEL_ID if compute_source == "quickml_pipeline" else None,
         "tool_calls": [{"tool": "assess_case_risk", "status": "completed", "result_count": 1}],
     }
 
@@ -3427,16 +3435,30 @@ def _agent_summarize_kpis(query: str, plan: AgentPlan, trace: list[dict]) -> dic
         "tool_calls": [{"tool": "summarize_kpis", "status": "completed", "result_count": total}],
     }
 
-def _agent_forecast_hotspots(query: str, plan: AgentPlan, trace: list[dict]) -> dict:
+def _agent_forecast_hotspots(query: str, plan: AgentPlan, trace: list[dict], capp=None) -> dict:
     district_id = (plan.district_ids or [None])[0]
     cases = _scope_filter(DB.cases, district_id=district_id) if district_id else DB.cases
     monthly = _monthly_counts_by_station(cases)
     model_fn = FORECAST_MODELS.get(DEPLOYED_FORECAST_MODEL, _forecast_linear_trend)
+    station_features = []
+    for station_id, series in monthly.items():
+        try:
+            station_features.append((station_id, _quickml_forecast_features(station_id, series)))
+        except ValueError:
+            continue
+    compute_source = "quickml_pipeline"
+    try:
+        quickml_predictions = _quickml_forecast_predictions(capp, station_features)
+    except Exception as exc:
+        log.info("Ask Garuda QuickML forecast unavailable; using local fallback: %s", exc)
+        quickml_predictions = {}
+        compute_source = "local_fallback"
+
     forecasts = []
     for station_id, series in monthly.items():
         if len(series) < 3:
             continue
-        predicted = model_fn(series.values.astype(float))
+        predicted = quickml_predictions.get(station_id, model_fn(series.values.astype(float)))
         baseline = float(series.values[-3:].mean()) or 1.0
         forecasts.append({
             "station": station_name(station_id), "predicted": round(predicted, 1),
@@ -3456,10 +3478,12 @@ def _agent_forecast_hotspots(query: str, plan: AgentPlan, trace: list[dict]) -> 
     else:
         answer = f"There is not enough history to forecast stations for {scope}."
     trace.append({"step": "execute", "tool": "forecast_hotspots", "parameters": {"district_id": district_id, "horizon_days": plan.horizon_days}})
-    trace.append({"step": "observe", "stations_forecast": len(forecasts), "model": DEPLOYED_FORECAST_MODEL})
+    trace.append({"step": "observe", "stations_forecast": len(forecasts), "model": DEPLOYED_FORECAST_MODEL, "compute_source": compute_source})
     trace.append({"step": "answer", "detail": answer})
     return {
         "answer": answer, "matched_cases": [], "suggested_view": "geospatial",
+        "compute_source": compute_source,
+        "model_id": QUICKML_FORECAST_MODEL_ID if compute_source == "quickml_pipeline" else None,
         "tool_calls": [{"tool": "forecast_hotspots", "status": "completed", "result_count": len(forecasts)}],
     }
 
@@ -3703,7 +3727,8 @@ def _run_agent(
                 "language": plan.language, "confidence": plan.confidence, "tool_calls": [], "trace": trace}
 
     handler = _AGENT_DISPATCH.get(plan.action, _agent_search_cases)
-    result = handler(query, plan, trace, capp) if plan.action == "operational_guidance" else handler(query, plan, trace)
+    catalyst_actions = {"assess_case_risk", "forecast_hotspots", "operational_guidance"}
+    result = handler(query, plan, trace, capp) if plan.action in catalyst_actions else handler(query, plan, trace)
     result["source"] = source
     result["language"] = plan.language
     result["confidence"] = round(plan.confidence, 2)

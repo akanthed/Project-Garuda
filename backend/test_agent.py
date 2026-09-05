@@ -81,6 +81,11 @@ class TestMalformedQuickMLOutput:
         plan = main._parse_plan_json(text)
         assert plan.action == "show_hotspots"
 
+    def test_unfenced_json_with_trailing_text_parses(self):
+        text = '{"action":"investigate_network","confidence":0.9}\nThis plan uses approved tools.'
+        plan = main._parse_plan_json(text)
+        assert plan.action == "investigate_network"
+
     def test_empty_string_raises(self):
         with pytest.raises(Exception):
             main._parse_plan_json("")
@@ -174,6 +179,7 @@ class TestGroundedAnswers:
         ("Which stations are forecast to rise?", "forecast_hotspots"),
         ("Brief me on case 1", "case_brief"),
         ("What is the risk score for case 1?", "assess_case_risk"),
+        ("What are the offenders?", "rank_offenders"),
         ("Scan FIR", "app_help"),
         ("Export intelligence brief", "app_help"),
         ("Show patrol units", "app_help"),
@@ -249,6 +255,39 @@ class TestGroundedAnswers:
         assert result["tool_calls"][0]["tool"] == "assess_case_risk"
         assert str(case_id) in result["answer"]
         assert "prototype" in result["answer"].lower()
+
+    def test_case_risk_uses_quickml_when_catalyst_is_available(self, setup_test_data, monkeypatch):
+        case_id = int(main.DB.cases.iloc[0]["CaseMasterID"])
+        monkeypatch.setattr(main, "_quickml_risk_prediction", lambda capp, features: {
+            "risk_class": "medium", "confidence": 0.91,
+        })
+
+        result = main._run_agent(
+            f"What is the risk score for case {case_id}?",
+            main.AgentPlan(action="assess_case_risk", case_id=case_id),
+            "rules",
+            capp=object(),
+        )
+
+        assert result["compute_source"] == "quickml_pipeline"
+        assert result["model_id"] == main.QUICKML_RISK_MODEL_ID
+
+    def test_forecast_uses_quickml_when_catalyst_is_available(self, setup_test_data, monkeypatch):
+        monkeypatch.setattr(
+            main,
+            "_quickml_forecast_predictions",
+            lambda capp, station_features: {station_id: 10.0 for station_id, _ in station_features},
+        )
+
+        result = main._run_agent(
+            "Which stations are forecast to rise?",
+            main.AgentPlan(action="forecast_hotspots"),
+            "rules",
+            capp=object(),
+        )
+
+        assert result["compute_source"] == "quickml_pipeline"
+        assert result["model_id"] == main.QUICKML_FORECAST_MODEL_ID
 
     def test_case_brief_accepts_the_displayed_fir_number(self, setup_test_data):
         crime_no = str(main.DB.cases.iloc[0]["CrimeNo"])

@@ -218,9 +218,9 @@ function IntegrationsSection() {
   const { locale } = useLanguage();
   const integrations: { id: string; name: string; status: "connected" | "pending"; descriptionKey: TranslationKey }[] = [
     { id: "zoho-ds", name: "Zoho Catalyst Data Store", status: "connected", descriptionKey: "settings_service_datastore" },
-    { id: "zia", name: "Catalyst Zia Services", status: "pending", descriptionKey: "settings_service_zia" },
-    { id: "appsail", name: "AppSail Backend", status: "pending", descriptionKey: "settings_service_appsail" },
-    { id: "mapbox", name: "Mapbox GL (3D Map)", status: "pending", descriptionKey: "settings_service_map" },
+    { id: "quickml", name: "Catalyst QuickML Services", status: "connected", descriptionKey: "settings_service_zia" },
+    { id: "appsail", name: "AppSail Backend", status: "connected", descriptionKey: "settings_service_appsail" },
+    { id: "maplibre", name: "MapLibre GL", status: "connected", descriptionKey: "settings_service_map" },
   ];
 
   return (
@@ -253,7 +253,6 @@ function SecuritySection() {
     { labelKey: "settings_session_token", value: t("settings_value_active", locale) },
     { labelKey: "settings_ip_address", value: t("settings_value_browser_session", locale) },
     { labelKey: "settings_session_expires", value: t("settings_value_server_managed", locale) },
-    { labelKey: "settings_2fa_status", value: t("settings_2fa_enabled", locale) },
   ];
   return (
     <div className="space-y-4">

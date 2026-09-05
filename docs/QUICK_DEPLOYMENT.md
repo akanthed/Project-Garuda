@@ -58,8 +58,8 @@ Do not use an undocumented `npm run deploy` or `catalyst hosting push` command.
 
 `catalyst deploy --only appsail` replaces the complete AppSail environment with
 `backend/app-config.json`. The tracked file intentionally excludes `SESSION_SECRET`, `SEED_TOKEN`,
-and all three QuickML endpoint keys. Use the guarded prompt/inject/deploy/restore process described
-in [DEPLOY.md](DEPLOY.md); never commit those values.
+all three QuickML endpoint keys, `JOB_SCHEDULER_TOKEN`, and `SIGNALS_WEBHOOK_TOKEN`. Use the guarded
+prompt/inject/deploy/restore process described in [DEPLOY.md](DEPLOY.md); never commit those values.
 
 ---
 

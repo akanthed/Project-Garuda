@@ -328,6 +328,19 @@ export function ReportsView({ officer }: { officer: Officer }) {
       ? districtName(activeDistrict, locale)
       : t("topbar_scope_statewide", locale);
 
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetchCaseReports({ districtId }).then(({ data }) => {
+      if (cancelled) return;
+      setReports(data.items);
+      setTotalReports(data.total);
+      setReportSummary(data.summary);
+      setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [districtId]);
+
   const load = () => {
     setLoading(true);
     fetchCaseReports({ districtId }).then(({ data }) => {
@@ -337,8 +350,6 @@ export function ReportsView({ officer }: { officer: Officer }) {
       setLoading(false);
     });
   };
-
-  useEffect(() => { load(); }, [districtId]);
 
   const refresh = () => {
     setRefreshing(true);

@@ -18,6 +18,10 @@ export default defineConfig(({ command, mode }) => {
 
   return {
     base: "/app/",
+    build: {
+      // MapLibre is route-lazy and ~1 MB minified; keep warnings for larger regressions.
+      chunkSizeWarningLimit: 1100,
+    },
     server: {
       watch: {
         ignored: ["**/backend/*.zip"],

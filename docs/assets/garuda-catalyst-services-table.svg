@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1200" viewBox="0 0 1600 1200" role="img" aria-labelledby="title desc">
+  <title id="title">Catalyst Services Used by Garuda</title>
+  <desc id="desc">A two-column table listing Catalyst services and why they are used in Garuda.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#071310"/>
+      <stop offset="1" stop-color="#111b22"/>
+    </linearGradient>
+    <pattern id="grid" width="44" height="44" patternUnits="userSpaceOnUse">
+      <path d="M44 0H0V44" fill="none" stroke="#d8eee7" stroke-opacity="0.035"/>
+    </pattern>
+    <style>
+      .display { font-family: Bahnschrift, 'Arial Narrow', sans-serif; letter-spacing: 0; }
+      .body { font-family: 'Segoe UI', sans-serif; letter-spacing: 0; }
+      .service { font: 700 18px 'Segoe UI', sans-serif; fill: #f5faf8; letter-spacing: 0; }
+      .reason { font: 400 16px 'Segoe UI', sans-serif; fill: #c2d1cc; letter-spacing: 0; }
+      .number { font: 700 13px Bahnschrift, sans-serif; fill: #071310; text-anchor: middle; dominant-baseline: middle; letter-spacing: 0; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="1200" fill="url(#bg)"/>
+  <rect width="1600" height="1200" fill="url(#grid)"/>
+
+  <g transform="translate(64 42)">
+    <rect width="48" height="48" rx="8" fill="#f4a62a"/>
+    <text x="24" y="27" class="display" font-size="25" font-weight="800" text-anchor="middle" dominant-baseline="middle" fill="#071310">G</text>
+    <text x="66" y="21" class="display" font-size="30" font-weight="800" fill="#f5faf8">GARUDA</text>
+    <text x="66" y="45" class="body" font-size="14" fill="#9bb6ae">Karnataka Police Intelligence &amp; ActionLoop</text>
+  </g>
+  <text x="1536" y="61" class="display" font-size="16" font-weight="700" text-anchor="end" fill="#f4b942">BUILT ON ZOHO CATALYST</text>
+
+  <text x="64" y="132" class="display" font-size="35" font-weight="800" fill="#f5faf8">Catalyst Services Used in the Solution</text>
+  <text x="64" y="161" class="body" font-size="16" fill="#9bb6ae">Each service has a specific operational role in the deployed Garuda platform.</text>
+
+  <!-- Table header -->
+  <rect x="64" y="195" width="1472" height="60" rx="8" fill="#f4a62a"/>
+  <text x="92" y="233" class="display" font-size="18" font-weight="800" fill="#071310">CATALYST SERVICE</text>
+  <text x="475" y="233" class="display" font-size="18" font-weight="800" fill="#071310">WHY GARUDA USES IT</text>
+  <line x1="447" y1="195" x2="447" y2="255" stroke="#071310" stroke-opacity="0.3"/>
+
+  <!-- Row backgrounds -->
+  <g>
+    <rect x="64" y="263" width="1472" height="52" rx="5" fill="#14231f" stroke="#294139"/>
+    <rect x="64" y="323" width="1472" height="52" rx="5" fill="#101e1b" stroke="#294139"/>
+    <rect x="64" y="383" width="1472" height="52" rx="5" fill="#14231f" stroke="#294139"/>
+    <rect x="64" y="443" width="1472" height="52" rx="5" fill="#101e1b" stroke="#294139"/>
+    <rect x="64" y="503" width="1472" height="52" rx="5" fill="#14231f" stroke="#294139"/>
+    <rect x="64" y="563" width="1472" height="52" rx="5" fill="#101e1b" stroke="#294139"/>
+    <rect x="64" y="623" width="1472" height="52" rx="5" fill="#14231f" stroke="#294139"/>
+    <rect x="64" y="683" width="1472" height="52" rx="5" fill="#101e1b" stroke="#294139"/>
+    <rect x="64" y="743" width="1472" height="52" rx="5" fill="#14231f" stroke="#294139"/>
+    <rect x="64" y="803" width="1472" height="52" rx="5" fill="#101e1b" stroke="#294139"/>
+    <rect x="64" y="863" width="1472" height="52" rx="5" fill="#14231f" stroke="#294139"/>
+    <rect x="64" y="923" width="1472" height="52" rx="5" fill="#101e1b" stroke="#294139"/>
+    <rect x="64" y="983" width="1472" height="52" rx="5" fill="#14231f" stroke="#294139"/>
+    <rect x="64" y="1043" width="1472" height="52" rx="5" fill="#101e1b" stroke="#294139"/>
+  </g>
+  <line x1="447" y1="263" x2="447" y2="1095" stroke="#355047"/>
+
+  <!-- Row numbers -->
+  <g>
+    <circle cx="91" cy="289" r="15" fill="#50c7a5"/><text x="91" y="290" class="number">1</text>
+    <circle cx="91" cy="349" r="15" fill="#f4b942"/><text x="91" y="350" class="number">2</text>
+    <circle cx="91" cy="409" r="15" fill="#6eb5e7"/><text x="91" y="410" class="number">3</text>
+    <circle cx="91" cy="469" r="15" fill="#b7d66b"/><text x="91" y="470" class="number">4</text>
+    <circle cx="91" cy="529" r="15" fill="#ef8b73"/><text x="91" y="530" class="number">5</text>
+    <circle cx="91" cy="589" r="15" fill="#c6a6e8"/><text x="91" y="590" class="number">6</text>
+    <circle cx="91" cy="649" r="15" fill="#f4b942"/><text x="91" y="650" class="number">7</text>
+    <circle cx="91" cy="709" r="15" fill="#50c7a5"/><text x="91" y="710" class="number">8</text>
+    <circle cx="91" cy="769" r="15" fill="#6eb5e7"/><text x="91" y="770" class="number">9</text>
+    <circle cx="91" cy="829" r="15" fill="#b7d66b"/><text x="91" y="830" class="number">10</text>
+    <circle cx="91" cy="889" r="15" fill="#ef8b73"/><text x="91" y="890" class="number">11</text>
+    <circle cx="91" cy="949" r="15" fill="#c6a6e8"/><text x="91" y="950" class="number">12</text>
+    <circle cx="91" cy="1009" r="15" fill="#f4b942"/><text x="91" y="1010" class="number">13</text>
+    <circle cx="91" cy="1069" r="15" fill="#50c7a5"/><text x="91" y="1070" class="number">14</text>
+  </g>
+
+  <!-- Service and purpose text -->
+  <g>
+    <text x="122" y="295" class="service">Web Client Hosting</text>
+    <text x="475" y="295" class="reason">Hosts the React/Vite role-aware web application.</text>
+
+    <text x="122" y="355" class="service">AppSail</text>
+    <text x="475" y="355" class="reason">Runs the Python FastAPI and NetworkX backend.</text>
+
+    <text x="122" y="415" class="service">Data Store + ZCQL</text>
+    <text x="475" y="415" class="reason">Stores and queries crime, officer, workflow and operation records.</text>
+
+    <text x="122" y="475" class="service">NoSQL</text>
+    <text x="475" y="475" class="reason">Keeps append-only agent, operation, visit and delivery audit events.</text>
+
+    <text x="122" y="535" class="service">Cache</text>
+    <text x="475" y="535" class="reason">Retains expensive network-analysis results across backend restarts.</text>
+
+    <text x="122" y="595" class="service">Connections</text>
+    <text x="475" y="595" class="reason">Provides managed, renewable OAuth credentials for QuickML services.</text>
+
+    <text x="122" y="655" class="service">QuickML Prediction</text>
+    <text x="475" y="655" class="reason">Powers case-risk classification, station forecasts and anomaly detection.</text>
+
+    <text x="122" y="715" class="service">QuickML LLM Serving</text>
+    <text x="475" y="715" class="reason">Plans Ask Garuda queries before controlled backend tool execution.</text>
+
+    <text x="122" y="775" class="service">QuickML RAG + Knowledge Base</text>
+    <text x="475" y="775" class="reason">Grounds operational guidance in the police playbook with source references.</text>
+
+    <text x="122" y="835" class="service">QuickML Trained NLP</text>
+    <text x="475" y="835" class="reason">Provides English/Kannada speech recognition, voice output and translation.</text>
+
+    <text x="122" y="895" class="service">Zia OCR + Text Analytics</text>
+    <text x="475" y="895" class="reason">Turns scanned FIRs into reviewed drafts and extracts accused names.</text>
+
+    <text x="122" y="955" class="service">SmartBrowz</text>
+    <text x="475" y="955" class="reason">Generates intelligence briefs and operation debrief PDFs.</text>
+
+    <text x="122" y="1015" class="service">Stratus</text>
+    <text x="475" y="1015" class="reason">Stores encrypted, versioned field evidence and attachments.</text>
+
+    <text x="122" y="1075" class="service">Job Scheduling + Signals</text>
+    <text x="475" y="1075" class="reason">Runs daily assessments and reacts to operational Data Store events.</text>
+  </g>
+
+  <rect x="64" y="1125" width="1472" height="42" rx="6" fill="#10201c" stroke="#294139"/>
+  <text x="92" y="1152" class="body" font-size="14" font-weight="600" fill="#f4b942">Outcome:</text>
+  <text x="168" y="1152" class="body" font-size="14" fill="#c2d1cc">A governed loop from risk detection to field action, evidence capture and measurable assessment.</text>
+</svg>

@@ -102,6 +102,8 @@ where to focus patrols. Garuda collapses that into one Catalyst-hosted workspace
 
 ## Architecture
 
+![Garuda architecture and Zoho Catalyst services](docs/assets/garuda-catalyst-services.svg)
+
 ```mermaid
 flowchart TD
     U["Officer browser<br/>role-aware mobile/desktop UI"] -->|HTTPS| WC["Catalyst Web Client Hosting<br/>React + Vite SPA"]
@@ -113,7 +115,7 @@ flowchart TD
     AS --> CA["Cache<br/>network analytics"]
     AS --> CN["Connections"] --> QM["QuickML<br/>GLM-4.7-Flash"]
     AS --> RAG["QuickML RAG<br/>cited operational guidance"] --> KB["Knowledge Base<br/>Garuda Operational Playbook"]
-    AS --> ZA["Zia AutoML<br/>case risk"]
+    AS --> ZA["QuickML Prediction<br/>risk, forecast, anomaly"]
     AS --> SB["SmartBrowz<br/>PDF brief"]
     JS["Job Scheduling<br/>daily 02:00 IST cron"] -->|X-Job-Token| AS
     OP --> SG["Signals<br/>ResponsePlans row insert"] -->|X-Signals-Token| AS
@@ -139,7 +141,7 @@ and is exercised by the test suite.
 | **Connections** | Auto-refreshed OAuth for QuickML, replacing a manual 1-hour token |
 | **QuickML (LLM Serving)** | GLM-4.7-Flash powers the Ask Garuda natural-language planner |
 | **QuickML RAG / Knowledge Base** | Retrieves source-tagged bilingual operational safeguards for Ask Garuda; every answer is labeled prototype guidance and cites the playbook |
-| **Zia AutoML** | Structured case-risk classification |
+| **QuickML Prediction AutoML** | Structured case-risk, station forecast, and anomaly models |
 | **Zia OCR** | Scanned/photographed FIR → draft incident form (never auto-submits) |
 | **SmartBrowz** | PDF intelligence-brief generation |
 | **Stratus** | Encrypted, versioned `garuda-operations` evidence bucket plus import staging |
@@ -225,9 +227,10 @@ current count, trailing mean, and z-score evidence.
 | Check | Result |
 | --- | --- |
 | `npx tsc --noEmit` | 0 errors |
+| `npm run lint` | 0 errors and 0 warnings |
 | `npx vitest run --reporter=dot` | 81/81 passing across 10 files |
-| Affected backend integration suites | 44/44 passing (Command, voice, forecast, anomaly, FIR, role reporting, and risk prediction) |
-| `npm run build` | Succeeds |
+| Complete repository-owned backend suite | 107/107 passing |
+| `npm run build` | Succeeds; map engine remains isolated in route-lazy chunks |
 
 Full methodology and regeneration commands: [HACKATHON_SUBMISSION.md](docs/HACKATHON_SUBMISSION.md).
 
@@ -299,8 +302,9 @@ Key gotchas (full detail in [DEPLOY.md](docs/DEPLOY.md)):
    handler**, never once at startup.
 4. `catalyst deploy --only appsail` **replaces** live AppSail env vars with exactly what's
   in `app-config.json`. Do not run it until every Console-only secret, including
-  `SESSION_SECRET`, `SEED_TOKEN`, `JOB_SCHEDULER_TOKEN`, and
-  `SIGNALS_WEBHOOK_TOKEN`, is preserved through an untracked release configuration.
+  `SESSION_SECRET`, `SEED_TOKEN`, all three `QUICKML_*_ENDPOINT_KEY` values,
+  `JOB_SCHEDULER_TOKEN`, and `SIGNALS_WEBHOOK_TOKEN`, is preserved through an
+  untracked release configuration.
   Never commit those values. Re-check the complete environment in Console → AppSail →
   Configuration immediately after deployment and verify `/health` before proceeding.
 
@@ -339,5 +343,5 @@ MapLibre GL (`react-map-gl`) + deck.gl + `react-force-graph-2d`
 **Testing:** Vitest + Testing Library (frontend), pytest (backend)
 
 **Infrastructure:** Zoho Catalyst — AppSail, Web Client Hosting, Data Store, NoSQL, Cache,
-Connections, QuickML LLM Serving and RAG/Knowledge Base, Zia AutoML/OCR, SmartBrowz,
+Connections, QuickML LLM Serving, Prediction AutoML and RAG/Knowledge Base, Zia OCR, SmartBrowz,
 Stratus, Job Scheduling, and Signals

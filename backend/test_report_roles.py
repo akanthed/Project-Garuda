@@ -46,7 +46,7 @@ def test_constable_reports_are_station_scoped_and_redacted():
     request = request_for("KSP-BLR-1001", "constable123")
     result = asyncio.run(main.get_reports(request, 20, 0, None, None))
     assert result["items"]
-    assert {item["station"] for item in result["items"]} == {"Koramangala PS"}
+    assert {item["station"] for item in result["items"]} == {"Koramangala PS (Zone 3)"}
     assert all(item["suspects"] is None and item["detail_level"] == "field" for item in result["items"])
 
 

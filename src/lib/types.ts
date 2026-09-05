@@ -204,6 +204,8 @@ export interface AskResponse {
   matched_cases: AskMatchedCase[];
   suggested_view: "dashboard" | "geospatial" | "network" | "reports" | "settings";
   source: "quickml" | "rules";
+  compute_source?: "quickml_pipeline" | "local_fallback";
+  model_id?: string | null;
   language: "en" | "kn";
   confidence: number;
   tool_calls: Array<{
